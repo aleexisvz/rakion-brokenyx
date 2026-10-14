@@ -41,6 +41,91 @@ public enum RakionOpcode : ushort
     /// </summary>
     LoginAlt4 = 0x4000,
 
+    // --- World Server / Character Management Opcodes ---
+    /// <summary>
+    /// World server session authentication and character list handshake.
+    /// Evidence: Observed in RakionWorldServ switch jump table (0x004299B8) and OnRecvLogin in rakion.bin.
+    /// </summary>
+    WorldLogin = 0x0002,
+
+    /// <summary>
+    /// Direct WorldLogin opcode variant used by IScavengerWorldNet::SendLogin(ticket, user).
+    /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z.
+    /// </summary>
+    WorldLoginAlt = 0x000C,
+
+    /// <summary>
+    /// Client heartbeat / ping packet.
+    /// Evidence: Observed in engine.dll ?SendAlive@IScavengerWorldNet@@UAEXXZ (0x000F).
+    /// </summary>
+    KeepAlive = 0x000F,
+
+    /// <summary>
+    /// GameGuard authentication check from client.
+    /// Evidence: Observed in engine.dll ?SendGameGuard@IScavengerWorldNet@@UAEXPAE@Z (0x0010).
+    /// </summary>
+    GameGuard = 0x0010,
+
+    /// <summary>
+    /// Server confirmation response to GameGuard verification.
+    /// Evidence: Observed in RakionWorldServ opcode 16 stub response (0x001B).
+    /// </summary>
+    GameGuardResponse = 0x001B,
+
+    /// <summary>
+    /// Character creation request.
+    /// Evidence: Observed in engine.dll ?SendCharacterCreate@IScavengerWorldNet@@UAEXPADEE@Z (0x0012).
+    /// </summary>
+    CharacterCreate = 0x0012,
+
+    /// <summary>
+    /// Character deletion request.
+    /// Evidence: Observed in engine.dll ?SendCharacterDelete@IScavengerWorldNet@@UAEXKPAD@Z (0x0013).
+    /// </summary>
+    CharacterDelete = 0x0013,
+
+    /// <summary>
+    /// Character selection request to enter lobby.
+    /// Evidence: Observed in engine.dll ?SendCharacterSelect@IScavengerWorldNet@@UAEXK@Z (0x0014).
+    /// </summary>
+    CharacterSelect = 0x0014,
+
+    /// <summary>
+    /// Whisper / private chat between characters.
+    /// Evidence: Observed in engine.dll ?SendCharacterWhisper@IScavengerWorldNet@@UAEXPAD0@Z (0x0016).
+    /// </summary>
+    CharacterWhisper = 0x0016,
+
+    /// <summary>
+    /// Tutorial completion notification.
+    /// Evidence: Observed in engine.dll ?SendCharacterTutorialClear@IScavengerWorldNet@@UAEXXZ (0x001A).
+    /// </summary>
+    CharacterTutorialClear = 0x001A,
+
+    /// <summary>
+    /// Stat point allocation reset.
+    /// Evidence: Observed in engine.dll ?SendCharacterStateClear@IScavengerWorldNet@@UAEXEG@Z (0x001B).
+    /// </summary>
+    CharacterStateClear = 0x001B,
+
+    /// <summary>
+    /// Character rename with scroll.
+    /// Evidence: Observed in engine.dll ?SendCharacterChangeCharName@IScavengerWorldNet@@UAEXPADEG@Z (0x001C).
+    /// </summary>
+    CharacterChangeCharName = 0x001C,
+
+    /// <summary>
+    /// Character deletion confirmation response.
+    /// Evidence: Observed in RakionWorldServ opcode 19 handler (0x002D).
+    /// </summary>
+    CharacterDeleteResponse = 0x002D,
+
+    /// <summary>
+    /// Character selection confirmation response.
+    /// Evidence: Observed in RakionWorldServ opcode 20 handler (0x002E).
+    /// </summary>
+    CharacterSelectResponse = 0x002E,
+
     // --- Channel / Lobby Opcodes ---
     /// <summary>
     /// Requests or returns the active field / room list in the channel.
