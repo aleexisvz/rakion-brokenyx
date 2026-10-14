@@ -1,0 +1,218 @@
+using System.Net;
+using System.Net.Sockets;
+using Dapper;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Rakion.Broker.Configuration;
+using Rakion.Broker.Handlers;
+using Rakion.Broker.Hosting;
+using Rakion.Broker.Services;
+using Rakion.Core.Enums;
+using Rakion.Core.Packets;
+using Rakion.Core.Protocol;
+using Rakion.Database.Entities;
+using Rakion.Database.Repositories;
+using Rakion.Database.Security;
+using Rakion.Database.Tests.TestUtilities;
+
+namespace Rakion.Broker.Tests;
+
+[TestClass]
+public sealed class LoginIntegrationTests
+{
+    private SqliteTestConnectionFactory _dbFactory = null!;
+    private UserRepository _userRepository = null!;
+    private PasswordHasher _hasher = null!;
+    private SessionTicketService _ticketService = null!;
+    private IOptions<BrokerOptions> _options = null!;
+    private BrokerServer _server = null!;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _dbFactory = new SqliteTestConnectionFactory($"Data Source=broker_login_test_{Guid.NewGuid():N};Mode=Memory;Cache=Shared");
+        _userRepository = new UserRepository(_dbFactory);
+        _hasher = new PasswordHasher();
+        _ticketService = new SessionTicketService();
+
+        _options = Options.Create(new BrokerOptions
+        {
+            ListenIp = "127.0.0.1",
+            Port = 0
+        });
+
+        var handler = new BrokerPacketHandler(_options, _userRepository, _hasher, _ticketService, NullLogger<BrokerPacketHandler>.Instance);
+        _server = new BrokerServer(_options, handler, NullLogger<BrokerServer>.Instance);
+        _server.Start();
+    }
+
+    [TestCleanup]
+    public async Task Cleanup()
+    {
+        await _server.StopAsync();
+        _dbFactory.Dispose();
+    }
+
+    [TestMethod]
+    public async Task Login_ValidCredentials_ReturnsSuccessAndIssuesSessionTicket()
+    {
+        // Arrange
+        string passwordHash = _hasher.HashPassword("secret123");
+        var user = new UserEntity
+        {
+            Username = "Warrior01",
+            PasswordHash = passwordHash,
+            Email = "warrior@rakion.test",
+            Authority = 0
+        };
+        await _userRepository.CreateUserAsync(user);
+
+        // Act
+        var response = await SendLoginPacketAsync("Warrior01", "secret123", (ushort)RakionOpcode.Login);
+
+        // Assert
+        Assert.AreEqual(LoginResultCode.Success, response.Result);
+        Assert.AreEqual((ushort)0xCBEB, response.HeaderOpcode);
+        Assert.AreEqual((ushort)0x1312, response.SubOpcode);
+
+        // Verify session ticket exists
+        bool found = _ticketService.TryGetTicketByUsername("Warrior01", out var ticketInfo);
+        Assert.IsTrue(found, "A valid session ticket should have been issued for the user.");
+        Assert.IsGreaterThan(0u, ticketInfo.Ticket);
+    }
+
+    [TestMethod]
+    public async Task Login_LegacyMd5Password_AuthenticatesAndUpgradesHashToBCrypt()
+    {
+        // Arrange: MD5 hash of "legacy_pass" is 29b32c31167c0b53479b3675bf27be70
+        const string md5Hash = "29b32c31167c0b53479b3675bf27be70";
+        var user = new UserEntity
+        {
+            Username = "OldPlayer",
+            PasswordHash = md5Hash,
+            Email = "old@rakion.test"
+        };
+        int userId = await _userRepository.CreateUserAsync(user);
+
+        // Act
+        var response = await SendLoginPacketAsync("OldPlayer", "legacy_pass", (ushort)RakionOpcode.Login);
+
+        // Assert
+        Assert.AreEqual(LoginResultCode.Success, response.Result);
+
+        // Verify password hash in database was automatically upgraded to modern BCrypt
+        var updatedUser = await _userRepository.GetByIdAsync(userId);
+        Assert.IsNotNull(updatedUser);
+        Assert.IsTrue(updatedUser.PasswordHash.StartsWith("$2", StringComparison.Ordinal), "Legacy hash should be upgraded to BCrypt ($2*).");
+    }
+
+    [TestMethod]
+    public async Task Login_InvalidPassword_ReturnsInvalidCredentials()
+    {
+        // Arrange
+        string hash = _hasher.HashPassword("correct_password");
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "TargetUser", PasswordHash = hash });
+
+        // Act
+        var response = await SendLoginPacketAsync("TargetUser", "WRONG_PASSWORD", (ushort)RakionOpcode.Login);
+
+        // Assert
+        Assert.AreEqual(LoginResultCode.InvalidCredentials, response.Result);
+    }
+
+    [TestMethod]
+    public async Task Login_NonExistentUser_ReturnsInvalidCredentials()
+    {
+        var response = await SendLoginPacketAsync("DoesNotExist", "any_password", (ushort)RakionOpcode.Login);
+        Assert.AreEqual(LoginResultCode.InvalidCredentials, response.Result);
+    }
+
+    [TestMethod]
+    public async Task Login_BannedUser_ReturnsAccountBanned()
+    {
+        // Arrange
+        string hash = _hasher.HashPassword("valid_pass");
+        int userId = await _userRepository.CreateUserAsync(new UserEntity { Username = "Cheater99", PasswordHash = hash });
+
+        // Mark account banned in user_game_info
+        using var conn = await _dbFactory.CreateConnectionAsync();
+        await conn.ExecuteAsync(
+            "UPDATE user_game_info SET is_banned = 1, ban_date = @BanDate, ban_reason = 'Win-trading detected' WHERE user_id = @UserId",
+            new { BanDate = DateTime.UtcNow.AddDays(7), UserId = userId });
+
+        // Act
+        var response = await SendLoginPacketAsync("Cheater99", "valid_pass", (ushort)RakionOpcode.Login);
+
+        // Assert
+        Assert.AreEqual(LoginResultCode.AccountBanned, response.Result);
+    }
+
+    [TestMethod]
+    public async Task Login_AlternativeOpcode3000_ReturnsExpectedResponseStructure()
+    {
+        string hash = _hasher.HashPassword("alt_pass");
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "AltUser", PasswordHash = hash });
+
+        var response = await SendLoginPacketAsync("AltUser", "alt_pass", (ushort)RakionOpcode.LoginAlt2);
+
+        Assert.AreEqual(LoginResultCode.Success, response.Result);
+        Assert.AreEqual((ushort)0xEBD3, response.HeaderOpcode);
+        Assert.AreEqual((ushort)0x3001, response.SubOpcode);
+    }
+
+    [TestMethod]
+    public async Task Login_AlternativeOpcode4000_ReturnsExtendedTicketResponse()
+    {
+        string hash = _hasher.HashPassword("alt4_pass");
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "Alt4User", PasswordHash = hash });
+
+        var response = await SendLoginPacketAsync("Alt4User", "alt4_pass", (ushort)RakionOpcode.LoginAlt4);
+
+        Assert.AreEqual(LoginResultCode.Success, response.Result);
+        Assert.AreEqual((ushort)0x1BAF, response.HeaderOpcode);
+        Assert.AreEqual((ushort)0x4001, response.SubOpcode);
+        Assert.IsNotNull(response.SessionTicket);
+    }
+
+    private async Task<LoginResponsePacket> SendLoginPacketAsync(string username, string password, ushort opcode)
+    {
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        var loginPacket = new LoginRequestPacket(username, password, SubOpcode: opcode);
+        using var writer = new PacketWriter(loginPacket.Opcode);
+        loginPacket.Serialize(writer);
+        byte[] bytes = writer.Build();
+
+        await stream.WriteAsync(bytes);
+        await stream.FlushAsync();
+
+        // Read response header
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+
+        // Read payload
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+        return responsePacket;
+    }
+
+    private static async Task ReadExactAsync(NetworkStream stream, byte[] buffer)
+    {
+        int totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            int read = await stream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead));
+            if (read == 0)
+            {
+                throw new EndOfStreamException("Socket reached end of stream.");
+            }
+            totalRead += read;
+        }
+    }
+}
