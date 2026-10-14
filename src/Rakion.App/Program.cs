@@ -7,12 +7,22 @@ using Rakion.Broker.Configuration;
 using Rakion.Broker.Handlers;
 using Rakion.Broker.Hosting;
 using Rakion.Broker.Services;
+using Rakion.Core.Utilities;
 using Rakion.Database.Connection;
 using Rakion.Database.Repositories;
 using Rakion.Database.Security;
 using Rakion.World.Configuration;
 using Rakion.World.Handlers;
 using Rakion.World.Hosting;
+
+if (args.Contains("--generate-xfs"))
+{
+    string targetPath = args.FirstOrDefault(a => a.EndsWith(".xfs", StringComparison.OrdinalIgnoreCase)) ?? "NyxLauncherEnc.xfs";
+    byte[] encBytes = XfsPacker.CreateNyxLauncherEnc("127.0.0.1", 40706, "http://127.0.0.1:8080/fetch/fetch.php");
+    File.WriteAllBytes(targetPath, encBytes);
+    Console.WriteLine($"[+] NyxLauncherEnc.xfs generated successfully at '{targetPath}' ({encBytes.Length} bytes).");
+    return;
+}
 
 Console.WriteLine("""
 ======================================================================
