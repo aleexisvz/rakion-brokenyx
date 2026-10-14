@@ -142,11 +142,29 @@ public sealed class AutoFetchServer : IDisposable, IAsyncDisposable
                 if (path.EndsWith("fetch.php", StringComparison.OrdinalIgnoreCase))
                 {
                     var opts = _options.Value.AutoFetch;
+                    int targetVersion = opts.TargetVersion;
+
+                    // Parse query string, e.g. "?11001&258" or "?400&1026"
+                    if (queryIdx >= 0 && queryIdx < urlPath.Length - 1)
+                    {
+                        string query = urlPath[(queryIdx + 1)..];
+                        string[] queryParts = query.Split('&');
+                        if (queryParts.Length >= 2 && int.TryParse(queryParts[1], out int clientVer))
+                        {
+                            targetVersion = clientVer;
+                        }
+                        else if (queryParts.Length >= 1)
+                        {
+                            if (queryParts[0] == "11001") targetVersion = 258;
+                            else if (queryParts[0] == "400") targetVersion = 1026;
+                        }
+                    }
+
                     // Softnyx flat format:
                     //   +<NoticeUrl>
                     //   =<PatchUrl>
                     //   ~<Count>;<TotalSize>;<VerLimit>
-                    string responseBody = $"+{opts.NoticeUrl}\r\n={opts.PatchUrl}\r\n~0;0;{opts.TargetVersion}\r\n";
+                    string responseBody = $"+{opts.NoticeUrl}\r\n={opts.PatchUrl}\r\n~0;0;{targetVersion}\r\n";
                     byte[] bodyBytes = Encoding.UTF8.GetBytes(responseBody);
 
                     string header = $"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n";
