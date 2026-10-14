@@ -3,7 +3,7 @@
 Clean-room C# (.NET 10) server emulator for the **Rakion: Chaos Force v258**
 client. No binary patches, no legacy DLLs — the protocol implemented natively.
 
-> **Status:** Phase 0 (Core & Network Foundation) Completed.
+> **Status:** Phase 0 & Phase 1 Completed (Core, Network & Persistence Layer).
 
 ## Documentation
 
@@ -18,6 +18,7 @@ client. No binary patches, no legacy DLLs — the protocol implemented natively.
 | :--- | :--- | :--- |
 | **`Rakion.Core`** | Opcodes, domain enums, 4-byte `PacketHeader`, `PacketReader`/`PacketWriter` (Little-Endian, zero-allocation), and IPC cryptography (BCRC/XOR). | [Rakion.Core/README.md](src/Rakion.Core/README.md) |
 | **`Rakion.Network`** | High-performance asynchronous TCP/UDP socket listeners, connection framing with `System.IO.Pipelines`, and lifecycle management. | [Rakion.Network/README.md](src/Rakion.Network/README.md) |
+| **`Rakion.Database`** | Relational persistence with MySQL 8+/MariaDB, Dapper micro-ORM, InnoDB ACID transactions, and BCrypt password security with legacy migration. | [Rakion.Database/README.md](src/Rakion.Database/README.md) |
 
 ## Building & Testing
 

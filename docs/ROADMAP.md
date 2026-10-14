@@ -50,17 +50,22 @@ rakion-brokenyx/
 
 ### Fase 1: Capa de Persistencia y Modelado de Datos
 > **Objetivo:** Establecer la base de datos relacional limpia, sin los errores de diseño heredados del 2005.
+> **Estado:** Completada (100%).
 
-- [ ] **1.1 Modelo de Entidades:**
-  - Cuentas de usuario: `User` (ID, Password hash seguro como Argon2 o BCrypt con fallback para contraseñas heredadas, Email, País, Autoridad GM).
-  - Información de juego: `UserGameInfo` (Oro, Cash, Ranuras de personajes desbloqueadas, Bolsas de inventario, PowerUser, Baneo).
-  - Personajes: `CharacterInfo` (Nombre, Clase, Nivel, EXP, Puntos para repartir, Estadísticas `hit1`–`hit4`, `chit`, `hp`, `ap`, velocidad, CP).
-  - Inventario e Items: `ItemInfo` (Catálogo maestro de armas, armaduras y criaturas) y `UserItemInfo` (Instancias de objetos de los jugadores con refinamiento de herrería y nivel de células).
-  - Clanes y Amigos: `ClanInfo` y `BuddyList`.
-- [ ] **1.2 Migración de Base de Datos:**
-  - Crear migraciones compatibles con MySQL 8.0 / MariaDB modernas (reemplazando tipos de datos deprecados como `datetime default '0000-00-00 00:00:00'`).
-- [ ] **1.3 Carga Inicial de Datos (Seeds):**
-  - Desarrollar un script o semillero que importe automáticamente el catálogo de items (`iteminfo`), las estadísticas base de cada clase (`classinfo`) y los escenarios (`stageinfo`) desde `rakion_all.sql`.
+- [x] **1.1 Modelo de Entidades:**
+  - Cuentas de usuario: `UserEntity` (ID, Password hash seguro BCrypt con fallback para contraseñas heredadas MD5/plaintext, Email, País, Autoridad GM).
+  - Información de juego: `UserGameInfoEntity` y `CashEntity` (Oro, Cash, Ranuras de personajes desbloqueadas, Bolsas de inventario, PowerUser, Baneo).
+  - Personajes: `CharacterEntity` (Nombre, Clase, Nivel, EXP, Puntos para repartir, Estadísticas `hit1`–`hit4`, `chit`, `hp`, `ap`, velocidad, CP, `deleteKey`).
+  - Inventario e Items: `ItemEntity` (Catálogo maestro de armas, armaduras y criaturas) y `UserItemEntity` (Instancias de objetos de los jugadores con refinamiento de herrería y nivel de células).
+  - Clanes y Amigos: `ClanEntity` y `BuddyEntity`.
+- [x] **1.2 Migración de Base de Datos:**
+  - Esquema DDL en `src/Rakion.Database/Migrations/schema.sql` compatible con MySQL 8.0 / MariaDB modernas (motor InnoDB para transacciones ACID reales, reemplazando tipos de datos deprecados como `datetime default '0000-00-00 00:00:00'`).
+- [x] **1.3 Repositorios y Hasheo de Contraseñas:**
+  - `IPasswordHasher` / `PasswordHasher` con BCrypt y detección de rehash automático de hashes heredados MD5 y contraseñas legadas.
+  - Repositorios desacoplados con Dapper (`IUserRepository`, `ICharacterRepository`, `IInventoryRepository`).
+  - `IAccountBalanceRepository`: Operaciones transaccionales atómicas (`WHERE gold >= @Amount`) que erradican exploits de duplicación (*duping*) y condiciones de carrera.
+- [x] **1.4 Pruebas Automatizadas de Persistencia:**
+  - Pruebas unitarias de hasheo y 12 pruebas de integración en `tests/Rakion.Database.Tests` sobre SQLite en memoria validando transacciones de saldo, límites de slots, unicidad de personajes y CRUD de inventario.
 
 ---
 
