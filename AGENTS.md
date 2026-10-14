@@ -145,25 +145,31 @@ dotnet format --verify-no-changes
     - `feat(broker): answer 0xCDDF with server list packet 0x0101`
     - `docs(roadmap): mark phase 0.3 as done`
 
-### 6.4 Finishing a branch — push, PR, merge
+### 6.4 Finishing a branch — strictly gated by user approval
 
-Only when the change or fix is **complete** (builds, tests pass, docs and
-roadmap updated):
+Under NO circumstances should the agent push to GitHub, open a PR, or merge a PR without the maintainer's explicit prior approval.
 
-1. `git fetch origin && git rebase origin/main` (resolve conflicts locally).
-2. `dotnet build && dotnet test` one final time.
-3. `git push -u origin <branch>` — first and only push of the branch
-   (a follow-up push is allowed only to address review or rebase).
-4. Open a **Pull Request into `main`** on GitHub with a documented description:
-   - **Summary** — what changed and why.
-   - **Changes** — bullet list matching the commits.
-   - **Evidence** — protocol facts used and their confidence (observed/derived/inferred).
-   - **Validation** — commands run, tests added, manual client test performed (or "not verified with real client").
-   - **Roadmap** — item(s) completed.
-   - **Remaining work / known limitations.**
-5. **Merge the PR** into `main` using a merge commit (`--merge`) to preserve
-   the atomic commit history. PR title also follows Conventional Commits.
-6. Delete the branch (remote and local) and update local `main`.
+When the change or fix is **complete** (builds, tests pass, docs and roadmap updated):
+
+1. Commit all changes locally to the Git repository using atomic Conventional Commits.
+2. Run `dotnet build && dotnet test` to ensure zero errors and passing tests locally.
+3. Update module `README.md` files and `docs/ROADMAP.md` locally.
+4. **STOP and ask the maintainer for approval.** Inform the user that local commits and tests are complete, and explicitly ask if they want to review or test the code locally before pushing to GitHub.
+5. **Only upon receiving explicit approval from the maintainer**, execute:
+   a. `git fetch origin && git rebase origin/main` (resolve conflicts locally).
+   b. `dotnet build && dotnet test` one final time.
+   c. `git push -u origin <branch>` — first and only push of the branch
+      (a follow-up push is allowed only to address review or rebase).
+   d. Open a **Pull Request into `main`** on GitHub with a documented description:
+      - **Summary** — what changed and why.
+      - **Changes** — bullet list matching the commits.
+      - **Evidence** — protocol facts used and their confidence (observed/derived/inferred).
+      - **Validation** — commands run, tests added, manual client test performed (or "not verified with real client").
+      - **Roadmap** — item(s) completed.
+      - **Remaining work / known limitations.**
+   e. **Merge the PR** into `main` using a merge commit (`--merge`) to preserve
+      the atomic commit history. PR title also follows Conventional Commits.
+   f. Delete the branch (remote and local) and update local `main`.
 
 Never force-push to `main`. Never rewrite history of a branch after its PR is merged.
 
@@ -171,4 +177,5 @@ Never force-push to `main`. Never rewrite history of a branch after its PR is me
 
 - Do not start implementing roadmap phases unless the maintainer asked for it.
 - Do not install system software (gh, MySQL, Docker…) without asking first.
+- **NEVER push to GitHub, open a PR, or merge a PR without explicit prior approval from the maintainer.** Always finish the work, commit locally to Git, and ask the maintainer if they want to test the code locally first before uploading.
 - If a rule here conflicts with a request, state the conflict before acting.
