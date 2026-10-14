@@ -205,6 +205,23 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
             return;
         }
 
+        // NyxLauncher Start Game SV_AUTH_LOGIN_4 (0x4000) for "Rakion"
+        if (loginPacket.SubOpcode == (ushort)RakionOpcode.LoginAlt4 &&
+            (string.IsNullOrEmpty(loginPacket.Password) || loginPacket.Username.Equals("Rakion", StringComparison.OrdinalIgnoreCase)))
+        {
+            string startGameClientIp = connection.RemoteEndPoint?.ToString() ?? loginPacket.ClientIp;
+            uint startGameTicket = _ticketService.IssueTicket("admin", startGameClientIp);
+
+            _logger.LogInformation(
+                "[{ConnectionId}] NyxLauncher Start Game SV_AUTH_LOGIN_4 (0x4000) accepted for target '{Target}'. Issued session ticket: {Ticket}. Sending CL_AUTH_LOGIN_4 (0x4001).",
+                connection.ConnectionId,
+                loginPacket.Username,
+                startGameTicket);
+
+            await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.Success, startGameTicket, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var user = await _userRepository.GetByUsernameAsync(loginPacket.Username, cancellationToken).ConfigureAwait(false);
         if (user is null)
         {

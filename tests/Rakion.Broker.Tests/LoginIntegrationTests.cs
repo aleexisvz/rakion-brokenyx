@@ -268,6 +268,41 @@ public sealed class LoginIntegrationTests
         Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
         Assert.AreEqual((ushort)0x3001, responsePacket.SubOpcode);
     }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherStartGame_Opcode4000_ReturnsCL_AUTH_LOGIN_4_WithTicket()
+    {
+        // Real observed Start Game payload from NyxLauncher (46 bytes)
+        byte[] payload = Convert.FromHexString(
+            "00400652616B696F6E000000001450656E7469756D3F49492028302E323520B56D29580B0000FFFFFF7F0000FFFF");
+
+        byte[] packet = new byte[PacketHeader.HeaderSize + payload.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), (ushort)packet.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)RakionOpcode.None);
+        payload.CopyTo(packet.AsSpan(PacketHeader.HeaderSize));
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+        Assert.AreEqual((ushort)0x1BAF, responseHeader.Opcode);
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
+        Assert.AreEqual((ushort)0x4001, responsePacket.SubOpcode);
+        Assert.IsNotNull(responsePacket.SessionTicket);
+        Assert.IsGreaterThan(0u, responsePacket.SessionTicket.Value);
+    }
     private async Task<LoginResponsePacket> SendLoginPacketAsync(string username, string password, ushort opcode)
     {
         var endPoint = (IPEndPoint)_server.LocalEndPoint!;
