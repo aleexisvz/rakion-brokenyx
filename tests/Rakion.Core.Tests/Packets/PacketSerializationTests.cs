@@ -77,6 +77,22 @@ public sealed class PacketSerializationTests
     }
 
     [TestMethod]
+    public void LoginRequest_NyxLauncherFixedPacket_ParsesCorrectly()
+    {
+        // 70-byte packet: 4 bytes header (len=70, opcode=0), 66 bytes payload (sub-opcode 0x1310 + 8-byte pad + 20-byte user + 4-byte pad + 32-byte pass)
+        byte[] payload = new byte[66];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), 0x1310);
+        System.Text.Encoding.Latin1.GetBytes("admin").CopyTo(payload.AsSpan(10));
+
+        bool success = LoginRequestPacket.TryParse(payload, (ushort)RakionOpcode.None, out var parsed);
+
+        Assert.IsTrue(success);
+        Assert.AreEqual("admin", parsed.Username);
+        Assert.AreEqual((ushort)0x1310, parsed.SubOpcode);
+        Assert.IsTrue(parsed.IsLauncherHandshake);
+    }
+
+    [TestMethod]
     public void LoginResponse_GoldenTest_MatchesObservedBrokenServerBytes()
     {
         // 1. Standard 0x1310 response: 08-00-EB-CB-12-13-00-00

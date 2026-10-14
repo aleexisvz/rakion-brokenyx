@@ -13,7 +13,8 @@ public sealed record LoginRequestPacket(
     ushort ClientVersion = 1026,
     string ClientIp = "127.0.0.1",
     byte Flag = 0,
-    ushort SubOpcode = (ushort)RakionOpcode.Login) : IPacket
+    ushort SubOpcode = (ushort)RakionOpcode.Login,
+    bool IsLauncherHandshake = false) : IPacket
 {
     public ushort Opcode => SubOpcode;
 
@@ -52,6 +53,11 @@ public sealed record LoginRequestPacket(
         {
             var reader = new PacketReader(data);
             string username = reader.ReadNullTerminatedString();
+            if (string.IsNullOrWhiteSpace(username) && resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length >= 28)
+            {
+                throw new PacketParseException("Empty username in fixed launcher packet.");
+            }
+
             string password = reader.ReadNullTerminatedString();
 
             ushort clientVersion = reader.Remaining >= 2 ? reader.ReadUInt16() : (ushort)1026;
@@ -63,6 +69,27 @@ public sealed record LoginRequestPacket(
         }
         catch (PacketParseException)
         {
+            // Fallback for NyxLauncher fixed 70-byte packet structure
+            if (resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length >= 28)
+            {
+                int userOffset = (data[0] == 0 && data[8] != 0) ? 8 : 0;
+                ReadOnlySpan<byte> userSlice = data.Slice(userOffset, Math.Min(20, data.Length - userOffset));
+                int nullIdx = userSlice.IndexOf((byte)0);
+                string user = System.Text.Encoding.Latin1.GetString(nullIdx >= 0 ? userSlice[..nullIdx] : userSlice).Trim();
+
+                string pass = string.Empty;
+                int passOffset = userOffset + 24;
+                if (data.Length >= passOffset + 16)
+                {
+                    ReadOnlySpan<byte> passSlice = data.Slice(passOffset, Math.Min(32, data.Length - passOffset));
+                    int passNullIdx = passSlice.IndexOf((byte)0);
+                    pass = System.Text.Encoding.Latin1.GetString(passNullIdx >= 0 ? passSlice[..passNullIdx] : passSlice).Trim();
+                }
+
+                packet = new LoginRequestPacket(user, pass, 1026, "127.0.0.1", 0, resolvedSubOpcode, IsLauncherHandshake: true);
+                return true;
+            }
+
             packet = new LoginRequestPacket(string.Empty, string.Empty);
             return false;
         }
