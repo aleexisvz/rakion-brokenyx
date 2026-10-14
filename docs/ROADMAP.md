@@ -93,14 +93,14 @@ rakion-brokenyx/
 ### Fase 3: World Server (Gestión de Personajes, Canales y Lobby)
 > **Objetivo:** Lograr que el cliente entre al juego en el puerto 40708, cargue sus personajes, permita crear/borrar y acceda al canal de Lobby.
 
-- [ ] **3.1 Servidor TCP en Puerto 40708:** Listener principal de sesiones de juego.
-- [ ] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
-- [ ] **3.3 Bypass Orgánico de GameGuard:**
+- [x] **3.1 Servidor TCP en Puerto 40708:** Listener principal de sesiones de juego.
+- [x] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
+- [x] **3.3 Bypass Orgánico de GameGuard:**
   - Cuando el cliente envíe su paquete de verificación (`SendGameGuard`), el servidor responde con la confirmación de validación correcta de forma transparente. Esto elimina para siempre la necesidad de DLLs `ggauth*.dll` o parches en el cliente.
-- [ ] **3.4 Listado y Selección de Personajes (`SendCharacterList` y `SendCharacterSelect`):**
+- [x] **3.4 Listado y Selección de Personajes (`SendCharacterList` y `SendCharacterSelect`):**
   - Consultar personajes de la cuenta en `characterinfo` y serializar sus datos (Clase, Nivel, Modelo 3D, Estadísticas calculadas, Equipamiento visual actual).
   - Al seleccionar un personaje, colocarlo en estado activo de sesión.
-- [ ] **3.5 Creación y Borrado de Personajes:**
+- [x] **3.5 Creación y Borrado de Personajes:**
   - Implementar `SendCharacterCreate`: verificar que el nombre no esté en uso, crear fila con clase seleccionada (0 a 4) y otorgar el equipamiento básico inicial.
   - Implementar `SendCharacterDelete`: verificar la clave de borrado (`deletekey`) y retirar el personaje.
 - [ ] **3.6 Sistema de Canales de Lobby:**
