@@ -93,6 +93,21 @@ public sealed class PacketSerializationTests
     }
 
     [TestMethod]
+    public void LoginRequest_ObservedNyxLauncherEncryptedPacket_ParsesAsLauncherHandshake()
+    {
+        // Real observed bytes captured from NyxLauncher 1026 login attempt
+        byte[] payload = Convert.FromHexString(
+            "1013A41302F43298A2CC6E856CAC2F628061F7F7F4B7A4A1AFCCF8B0B3F24B75002A8287540DE9DF09084CC74B7DBB3DBDD4789BFD4FF2D467FF80CD2BF5D6BF8E61");
+
+        bool success = LoginRequestPacket.TryParse(payload, (ushort)RakionOpcode.None, out var parsed);
+
+        Assert.IsTrue(success);
+        Assert.AreEqual("admin", parsed.Username);
+        Assert.AreEqual((ushort)0x1310, parsed.SubOpcode);
+        Assert.IsTrue(parsed.IsLauncherHandshake);
+    }
+
+    [TestMethod]
     public void LoginResponse_GoldenTest_MatchesObservedBrokenServerBytes()
     {
         // 1. Standard 0x1310 response: 08-00-EB-CB-12-13-00-00
