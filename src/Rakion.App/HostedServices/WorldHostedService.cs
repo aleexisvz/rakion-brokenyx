@@ -33,3 +33,4 @@ public sealed class WorldHostedService : IHostedService
         await _worldServer.StopAsync().ConfigureAwait(false);
     }
 }
+

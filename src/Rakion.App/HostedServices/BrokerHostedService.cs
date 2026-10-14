@@ -39,3 +39,4 @@ public sealed class BrokerHostedService : IHostedService
         await _autoFetchServer.StopAsync().ConfigureAwait(false);
     }
 }
+

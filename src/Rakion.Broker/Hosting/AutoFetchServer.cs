@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -9,16 +11,18 @@ namespace Rakion.Broker.Hosting;
 /// <summary>
 /// Mini HTTP server emulating Softnyx AutoFetch (fetch.php) protocol for NyxLauncher.
 /// Responds to GET /fetch/fetch.php or /fetch.php with version and notice URLs.
+/// Uses standard TcpListener to bind cleanly to 0.0.0.0 or any IP without Windows HttpListener (HTTP.sys) ACL restrictions.
 /// </summary>
 public sealed class AutoFetchServer : IDisposable, IAsyncDisposable
 {
     private readonly IOptions<BrokerOptions> _options;
     private readonly ILogger<AutoFetchServer> _logger;
-    private HttpListener? _listener;
+    private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenerTask;
+    private int _isRunning;
 
-    public bool IsRunning => _listener?.IsListening ?? false;
+    public bool IsRunning => Volatile.Read(ref _isRunning) == 1;
 
     public AutoFetchServer(
         IOptions<BrokerOptions> options,
@@ -37,32 +41,35 @@ public sealed class AutoFetchServer : IDisposable, IAsyncDisposable
             return;
         }
 
-        if (_listener is not null)
+        if (Interlocked.CompareExchange(ref _isRunning, 1, 0) != 0)
         {
             return;
         }
 
-        _listener = new HttpListener();
-        string prefix = $"http://{autoFetchOpts.ListenIp}:{autoFetchOpts.Port}/";
-        _listener.Prefixes.Add(prefix);
+        IPAddress ip = IPAddress.TryParse(autoFetchOpts.ListenIp, out var parsedIp) ? parsedIp : IPAddress.Any;
+        _listener = new TcpListener(ip, autoFetchOpts.Port);
+        _listener.Start();
 
         _cts = new CancellationTokenSource();
-        _listener.Start();
-        _logger.LogInformation("AutoFetch HTTP server started on {Prefix}", prefix);
+        _logger.LogInformation("AutoFetch HTTP server started on {EndPoint}", _listener.LocalEndpoint);
 
         _listenerTask = Task.Run(() => ListenLoopAsync(_cts.Token));
     }
 
     private async Task ListenLoopAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && _listener?.IsListening == true)
+        while (!cancellationToken.IsCancellationRequested && _listener != null)
         {
             try
             {
-                HttpListenerContext context = await _listener.GetContextAsync().ConfigureAwait(false);
-                _ = Task.Run(() => ProcessRequestAsync(context), CancellationToken.None);
+                TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+                _ = Task.Run(() => ProcessClientAsync(client, cancellationToken), CancellationToken.None);
             }
-            catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode is SocketError.OperationAborted or SocketError.Interrupted)
             {
                 break;
             }
@@ -72,66 +79,108 @@ public sealed class AutoFetchServer : IDisposable, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing incoming HTTP AutoFetch request.");
+                _logger.LogError(ex, "Error accepting AutoFetch client connection.");
             }
         }
     }
 
-    private async Task ProcessRequestAsync(HttpListenerContext context)
+    private async Task ProcessClientAsync(TcpClient client, CancellationToken cancellationToken)
     {
-        HttpListenerRequest request = context.Request;
-        HttpListenerResponse response = context.Response;
-
-        try
+        using (client)
+        await using (NetworkStream stream = client.GetStream())
         {
-            string path = request.Url?.AbsolutePath.TrimEnd('/') ?? string.Empty;
-            _logger.LogInformation("AutoFetch HTTP {Method} {Path}?{Query}", request.HttpMethod, path, request.Url?.Query);
-
-            if (request.HttpMethod != "GET")
+            try
             {
-                response.StatusCode = (int)HttpStatusCode.MethodNotAllowed;
-                return;
-            }
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(2048);
+                int bytesRead;
+                try
+                {
+                    using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    bytesRead = await stream.ReadAsync(buffer.AsMemory(0, 2048), timeoutCts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // keep buffer for parsing
+                }
 
-            // Handle fetch.php endpoint (e.g. /fetch/fetch.php or /fetch.php)
-            if (path.EndsWith("fetch.php", StringComparison.OrdinalIgnoreCase))
-            {
-                var opts = _options.Value.AutoFetch;
-                // Softnyx flat format:
-                //   +<NoticeUrl>
-                //   =<FileUrl>
-                //   ~<Count>;<TotalSize>;<VerLimit>
-                string responseBody = $"+{opts.NoticeUrl}\r\n={opts.PatchUrl}\r\n~0;0;{opts.TargetVersion}\r\n";
-                byte[] bodyBytes = Encoding.UTF8.GetBytes(responseBody);
+                if (bytesRead <= 0)
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                    return;
+                }
 
-                response.StatusCode = (int)HttpStatusCode.OK;
-                response.ContentType = "text/plain; charset=utf-8";
-                response.ContentLength64 = bodyBytes.Length;
-                await response.OutputStream.WriteAsync(bodyBytes).ConfigureAwait(false);
+                string requestText = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                ArrayPool<byte>.Shared.Return(buffer);
+
+                // Parse HTTP request line, e.g. "GET /fetch/fetch.php?11001&258 HTTP/1.1"
+                int firstLineEnd = requestText.IndexOf("\r\n", StringComparison.Ordinal);
+                if (firstLineEnd < 0)
+                {
+                    firstLineEnd = requestText.IndexOf('\n');
+                }
+
+                string requestLine = firstLineEnd >= 0 ? requestText[..firstLineEnd] : requestText;
+                string[] parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+                string method = parts.Length > 0 ? parts[0] : "GET";
+                string urlPath = parts.Length > 1 ? parts[1] : "/";
+
+                // Strip query string if present
+                int queryIdx = urlPath.IndexOf('?');
+                string path = queryIdx >= 0 ? urlPath[..queryIdx] : urlPath;
+                path = path.TrimEnd('/');
+
+                _logger.LogInformation("AutoFetch HTTP {Method} {Url}", method, urlPath);
+
+                if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase))
+                {
+                    byte[] responseBytes = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"u8.ToArray();
+                    await stream.WriteAsync(responseBytes, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                if (path.EndsWith("fetch.php", StringComparison.OrdinalIgnoreCase))
+                {
+                    var opts = _options.Value.AutoFetch;
+                    // Softnyx flat format:
+                    //   +<NoticeUrl>
+                    //   =<PatchUrl>
+                    //   ~<Count>;<TotalSize>;<VerLimit>
+                    string responseBody = $"+{opts.NoticeUrl}\r\n={opts.PatchUrl}\r\n~0;0;{opts.TargetVersion}\r\n";
+                    byte[] bodyBytes = Encoding.UTF8.GetBytes(responseBody);
+
+                    string header = $"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n";
+                    byte[] headerBytes = Encoding.ASCII.GetBytes(header);
+
+                    await stream.WriteAsync(headerBytes, cancellationToken).ConfigureAwait(false);
+                    await stream.WriteAsync(bodyBytes, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    byte[] bodyBytes = "OK"u8.ToArray();
+                    string header = $"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {bodyBytes.Length}\r\nConnection: close\r\n\r\n";
+                    byte[] headerBytes = Encoding.ASCII.GetBytes(header);
+
+                    await stream.WriteAsync(headerBytes, cancellationToken).ConfigureAwait(false);
+                    await stream.WriteAsync(bodyBytes, cancellationToken).ConfigureAwait(false);
+                }
+
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
-            else
+            catch (Exception ex)
             {
-                // Health check or default 200 OK
-                byte[] okBytes = "OK"u8.ToArray();
-                response.StatusCode = (int)HttpStatusCode.OK;
-                response.ContentType = "text/plain";
-                response.ContentLength64 = okBytes.Length;
-                await response.OutputStream.WriteAsync(okBytes).ConfigureAwait(false);
+                _logger.LogDebug(ex, "Exception handling AutoFetch HTTP client.");
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send AutoFetch HTTP response.");
-            response.StatusCode = (int)HttpStatusCode.InternalServerError;
-        }
-        finally
-        {
-            response.Close();
         }
     }
 
     public async Task StopAsync()
     {
+        if (Interlocked.Exchange(ref _isRunning, 0) == 0)
+        {
+            return;
+        }
+
         if (_cts is not null)
         {
             await _cts.CancelAsync().ConfigureAwait(false);
@@ -142,7 +191,6 @@ public sealed class AutoFetchServer : IDisposable, IAsyncDisposable
             try
             {
                 _listener.Stop();
-                _listener.Close();
             }
             catch
             {
@@ -158,7 +206,7 @@ public sealed class AutoFetchServer : IDisposable, IAsyncDisposable
             {
                 await _listenerTask.ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is OperationCanceledException or HttpListenerException)
+            catch (Exception)
             {
                 // Expected cancellation
             }

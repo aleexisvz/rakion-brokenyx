@@ -67,3 +67,4 @@ builder.Services.AddHostedService<WorldHostedService>();
 
 IHost host = builder.Build();
 await host.RunAsync();
+
