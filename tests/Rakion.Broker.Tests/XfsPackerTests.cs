@@ -45,5 +45,18 @@ public sealed class XfsPackerTests
             Assert.AreEqual("XFS2", Encoding.ASCII.GetString(header, 0, 4));
             StringAssert.Contains(Encoding.ASCII.GetString(header), "The Xenesis2 file system version 2.0.0");
         }
+
+        // Verify Stream 3 decompresses to dual file entries
+        int s2Len = xfsBytes[stream2Offset - 1];
+        int s3Offset = stream2Offset + s2Len + 3; // skip 3-byte s3 length
+        using (var ms3 = new MemoryStream(xfsBytes, s3Offset, xfsBytes.Length - s3Offset))
+        using (var zs3 = new ZLibStream(ms3, CompressionMode.Decompress))
+        {
+            byte[] table = new byte[256];
+            int read = zs3.Read(table, 0, 256);
+            Assert.AreEqual(256, read);
+            StringAssert.StartsWith(Encoding.ASCII.GetString(table, 0, 32), "NyxLauncher.ini");
+            StringAssert.StartsWith(Encoding.ASCII.GetString(table, 128, 32), "__NyxLauncher.ini");
+        }
     }
 }
