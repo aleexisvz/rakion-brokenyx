@@ -37,13 +37,14 @@ public sealed class TcpConnection : IAsyncDisposable
     /// </summary>
     public async Task StartAsync()
     {
-        var pipe = new Pipe();
-        Task writingTask = FillPipeAsync(pipe.Writer, _cts.Token);
-        Task readingTask = ReadPipeAsync(pipe.Reader, _cts.Token);
-
         try
         {
             await _handler.OnConnectedAsync(this, _cts.Token).ConfigureAwait(false);
+
+            var pipe = new Pipe();
+            Task writingTask = FillPipeAsync(pipe.Writer, _cts.Token);
+            Task readingTask = ReadPipeAsync(pipe.Reader, _cts.Token);
+
             await Task.WhenAll(writingTask, readingTask).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is OperationCanceledException or SocketException)
