@@ -33,17 +33,18 @@ rakion-brokenyx/
 
 ### Fase 0: Cimientos de Red y Protocolo de Serialización
 > **Objetivo:** Disponer de las herramientas fundamentales de serialización binaria y comunicación por sockets de alto rendimiento.
+> **Estado:** Completada (100%).
 
-- [ ] **0.1 Estructura del Proyecto:** Crear la solución .NET 8/9 (`dotnet new sln`) con los proyectos modulares.
-- [ ] **0.2 Diccionario de Opcodes y Enums:**
+- [x] **0.1 Estructura del Proyecto:** Crear la solución .NET 10 (`dotnet new sln`) con los proyectos modulares (`Rakion.Core`, `Rakion.Network`, `Rakion.Core.Tests`, `Rakion.Network.Tests`).
+- [x] **0.2 Diccionario de Opcodes y Enums:**
   - Tipificar todos los Opcodes descubiertos (`0xCDDF`, `0x0101`, `0x1310`, `0x3000`, etc.) en un enum fuertemente tipado (`RakionOpcode`).
   - Crear enums para Clases (`CharacterClass`: 0=Swordman .. 4=Ninja), Modos de Juego (`GameMode`), Canales y Estados de Sala.
-- [ ] **0.3 Serializador Binario (`PacketReader` y `PacketWriter`):**
+- [x] **0.3 Serializador Binario (`PacketReader` y `PacketWriter`):**
   - Implementar serialización Little-Endian con soporte para `Span<byte>` y `Memory<byte>` de cero asignaciones innecesarias de memoria.
   - Implementar los operadores de lectura/escritura idénticos a `CNetMessage` del cliente: `uint8`, `uint16`, `uint32`, cadenas prefijadas o terminadas en `\0`, y vectores/bloques de datos.
-- [ ] **0.4 Motor de Conexiones TCP Asíncronas:**
-  - Crear una abstracción de listener TCP basada en `System.IO.Pipelines` o `SocketAsyncEventArgs` capaz de recibir múltiples conexiones de clientes simultáneas sin bloqueos.
-- [ ] **0.5 Pruebas Unitarias de Red:** Validar que los paquetes serializados en C# coincidan byte por byte con los que el cliente de Rakion espera.
+- [x] **0.4 Motor de Conexiones TCP Asíncronas:**
+  - Crear una abstracción de listener TCP basada en `System.IO.Pipelines` (`TcpServer`, `TcpConnection`, `ITcpPacketHandler`) capaz de recibir múltiples conexiones de clientes simultáneas sin bloqueos y con enmarcado continuo de paquetes.
+- [x] **0.5 Pruebas Unitarias de Red:** Validar que los paquetes serializados en C# coincidan byte por byte con los que el cliente de Rakion espera y validar enmarcado / fragmentación en TCP en tiempo de ejecución.
 
 ---
 
