@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -59,6 +60,21 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
         switch ((RakionOpcode)header.Opcode)
         {
             case RakionOpcode.ServerListRequest:
+                if (payload.Length >= 2)
+                {
+                    ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
+                    if (subOpcode == (ushort)RakionOpcode.LoginAlt2 || subOpcode == (ushort)RakionOpcode.LoginAlt3 || subOpcode == (ushort)RakionOpcode.LoginAlt4)
+                    {
+                        _logger.LogInformation(
+                            "[{ConnectionId}] NyxLauncher secondary login handshake (0x{SubOpcode:X4}) received via 0xCDDF. Sending CL_AUTH_LOGIN_2 success.",
+                            connection.ConnectionId,
+                            subOpcode);
+
+                        await SendLoginResponseAsync(connection, subOpcode, LoginResultCode.Success, null, cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+                }
+
                 await HandleServerListRequestAsync(connection, payload, cancellationToken).ConfigureAwait(false);
                 break;
 

@@ -238,6 +238,36 @@ public sealed class LoginIntegrationTests
 
         Assert.AreEqual(LoginResultCode.InvalidCredentials, responsePacket.Result);
     }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherSecondaryHandshake_OpcodeCDDFWith3000_ReturnsCL_AUTH_LOGIN_2_Success()
+    {
+        // 6-byte packet: TotalLength=6, Opcode=0xCDDF, Payload=0x3000
+        byte[] packet = new byte[6];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), 6);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)RakionOpcode.ServerListRequest); // 0xCDDF
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(4, 2), (ushort)RakionOpcode.LoginAlt2); // 0x3000
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+        Assert.AreEqual((ushort)0xEBD3, responseHeader.Opcode);
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
+        Assert.AreEqual((ushort)0x3001, responsePacket.SubOpcode);
+    }
     private async Task<LoginResponsePacket> SendLoginPacketAsync(string username, string password, ushort opcode)
     {
         var endPoint = (IPEndPoint)_server.LocalEndPoint!;
