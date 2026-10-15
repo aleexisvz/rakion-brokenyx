@@ -86,13 +86,29 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteUInt32(0);
         writer.WriteUInt32(0);
         writer.WriteByte(UnlockedSlots);
+        writer.WriteByte(0); // Extra byte al
 
         var list = Characters ?? [];
-        writer.WriteByte((byte)list.Count);
+        int totalSlots = Math.Min((int)UnlockedSlots, 4);
 
-        for (int i = 0; i < list.Count; i++)
+        for (int slot = 0; slot < totalSlots; slot++)
         {
-            var c = list[i];
+            CharacterSummary? c = null;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Slot == slot)
+                {
+                    c = list[i];
+                    break;
+                }
+            }
+
+            if (c is null || c.Id == 0)
+            {
+                writer.WriteUInt32(0); // Empty slot marker for client loop
+                continue;
+            }
+
             writer.WriteUInt32(c.Id);
             writer.WriteNullTerminatedString(c.Name);
             writer.WriteUInt32(c.Exp);
@@ -178,12 +194,18 @@ public sealed record WorldLoginResponsePacket(
                 r.ReadUInt32();
                 r.ReadUInt32();
                 byte slots = r.ReadByte();
-                byte charCount = r.ReadByte();
+                byte extraFlag = r.ReadByte();
+                int totalSlots = Math.Min((int)slots, 4);
 
-                var chars = new List<CharacterSummary>(charCount);
-                for (int i = 0; i < charCount; i++)
+                var chars = new List<CharacterSummary>(totalSlots);
+                for (int slot = 0; slot < totalSlots; slot++)
                 {
                     uint id = r.ReadUInt32();
+                    if (id == 0)
+                    {
+                        continue;
+                    }
+
                     string name = r.ReadNullTerminatedString();
                     uint exp = r.ReadUInt32();
                     uint win = r.ReadUInt32();
@@ -192,7 +214,7 @@ public sealed record WorldLoginResponsePacket(
                     uint levelPoint = r.ReadUInt32();
                     uint draw = r.ReadUInt32();
                     byte level = r.ReadByte();
-                    byte slot = r.ReadByte();
+                    byte charSlot = r.ReadByte();
                     byte flag = r.ReadByte();
                     uint rank = r.ReadUInt32();
                     ushort hit1 = r.ReadUInt16();
@@ -209,7 +231,7 @@ public sealed record WorldLoginResponsePacket(
                     r.Skip(0x26 + 0x13 + 0x4c * 3 + 0x64 + 0x190 + 1);
 
                     chars.Add(new CharacterSummary(
-                        id, name, slot, (CharacterClass)classId, level, exp, levelPoint,
+                        id, name, charSlot, (CharacterClass)classId, level, exp, levelPoint,
                         hit1, hit2, hit3, hit4, chit, hp, ap, attackSpeed, speed, maxCp,
                         win, lose, draw));
                 }

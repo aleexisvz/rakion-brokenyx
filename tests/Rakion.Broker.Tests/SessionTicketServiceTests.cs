@@ -37,3 +37,4 @@ public sealed class SessionTicketServiceTests
         Assert.AreEqual(ticket, info.Ticket);
     }
 }
+
