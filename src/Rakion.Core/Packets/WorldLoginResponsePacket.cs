@@ -77,7 +77,6 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteUInt32(0);
         writer.WriteUInt16(0);
-        writer.WriteUInt16(0);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteByte(0);
@@ -179,7 +178,6 @@ public sealed record WorldLoginResponsePacket(
                 r.ReadNullTerminatedString();
                 r.ReadNullTerminatedString();
                 r.ReadUInt32();
-                r.ReadUInt16();
                 r.ReadUInt16();
                 r.ReadNullTerminatedString();
                 r.ReadNullTerminatedString();
