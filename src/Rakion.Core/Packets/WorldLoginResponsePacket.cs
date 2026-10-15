@@ -135,9 +135,7 @@ public sealed record WorldLoginResponsePacket(
             writer.WriteZeroBytes(0x13);
             writer.WriteZeroBytes(0x4c);
             writer.WriteZeroBytes(0x4c);
-            writer.WriteZeroBytes(0x4c);
             writer.WriteZeroBytes(0x64);
-            writer.WriteZeroBytes(0x190);
             writer.WriteByte(0);
         }
     }
@@ -226,7 +224,7 @@ public sealed record WorldLoginResponsePacket(
                     ushort speed = r.ReadUInt16();
                     ushort maxCp = r.ReadUInt16();
                     r.ReadUInt16();
-                    r.Skip(0x26 + 0x13 + 0x4c * 3 + 0x64 + 0x190 + 1);
+                    r.Skip(0x26 + 0x13 + 0x4c * 2 + 0x64 + 1);
 
                     chars.Add(new CharacterSummary(
                         id, name, charSlot, (CharacterClass)classId, level, exp, levelPoint,

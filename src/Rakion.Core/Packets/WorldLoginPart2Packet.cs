@@ -75,9 +75,7 @@ public sealed record WorldLoginPart2Packet(
                 writer.WriteZeroBytes(0x13);
                 writer.WriteZeroBytes(0x4c);
                 writer.WriteZeroBytes(0x4c);
-                writer.WriteZeroBytes(0x4c);
                 writer.WriteZeroBytes(0x64);
-                writer.WriteZeroBytes(0x190);
                 writer.WriteByte(0);
             }
         }
