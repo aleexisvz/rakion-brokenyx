@@ -1,0 +1,33 @@
+# Rakion.Broker
+
+Servidor de Handshake, Autenticación y Lista de Servidores para el emulador `rakion-brokenyx` (Rakion v258).
+
+## Propósito y Rol
+
+`Rakion.Broker` reemplaza el antiguo `BrokenServer.exe` de la comunidad y la suite PHP externa (`fetch.php`), implementando de forma limpia, asíncrona y fuertemente tipada:
+
+1. **Listener TCP en puerto 40706:** Punto de entrada de red inicial cuando el cliente `rakion.bin` arranca.
+2. **Entrega de Lista de Servidores (Opcode `0xCDDF` -> `0x0101`):** Retorna la lista estructurada de mundos disponibles (`GameServers`), direcciones IP dinámicas, puertos (`40708`), salas en uso y límites de jugadores.
+3. **Autenticación Limpia de Usuarios (Opcode `0x1310` / `0x3000` / `0x4000`):**
+   - Desempaqueta las credenciales recibidas del cliente.
+   - Valida el hash seguro contra la base de datos MySQL/MariaDB (`user` / `BCrypt`).
+   - Comprueba el estado de baneo de la cuenta (`bandate`).
+   - Responde con el código de resultado correspondiente (`LoginResultCode.Success`, `InvalidCredentials`, `AccountBanned`).
+4. **Gestor de Tickets de Sesión (`ISessionTicketService`):**
+   - Genera tokens de sesión únicos en memoria con tiempo de vida limitado (TTL de 5 minutos).
+   - Estos tokens son consumidos posteriormente por `Rakion.World` en el puerto 40708 para asociar el socket al usuario autenticado sin reenviar contraseñas por la red.
+5. **Mini Servidor HTTP AutoFetch (Reemplazo de `fetch.php`):**
+   - Expone un endpoint HTTP interno compatible con el protocolo plano de Softnyx (`GET /fetch/fetch.php?11001&...`) para permitir que el lanzador oficial (`NyxLauncher.exe`) valide la versión del cliente e inicie el juego sin requerir un servidor web Apache/PHP independiente.
+
+## Opcodes Implementados
+
+| Opcode | Tipo | Nombre | Descripción |
+| :--- | :--- | :--- | :--- |
+| `0xCDDF` | Entrada | `ServerListRequest` | Petición de lista de servidores desde el cliente. |
+| `0x0101` | Salida | `ServerListResponse` | Envío de servidores activos con IP, puerto y cupos. |
+| `0x1310` | Entrada | `SV_AUTH_LOGIN` | Autenticación estándar v258. |
+| `0x3000` | Entrada | `SV_AUTH_LOGIN_2` | Variante alternativa de login. |
+| `0x4000` | Entrada | `SV_AUTH_LOGIN_4` | Variante de login con ticket extendido. |
+| `0xCBEB` | Salida | `SV_AUTH_LOGIN_RESP` | Respuesta de auth estándar (Sub-opcode `0x1312` + ResultCode). |
+| `0xEBD3` | Salida | `SV_AUTH_LOGIN_RESP_2` | Respuesta de auth variante 2 (Sub-opcode `0x3001` + ResultCode). |
+| `0x1BAF` | Salida | `SV_AUTH_LOGIN_RESP_4` | Respuesta de auth variante 4 (Sub-opcode `0x4001` + ResultCode + Ticket). |

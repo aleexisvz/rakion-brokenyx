@@ -71,21 +71,22 @@ rakion-brokenyx/
 
 ### Fase 2: El Broker Server (Autenticación y Lista de Mundos)
 > **Objetivo:** Lograr que el cliente de Rakion abra, se conecte al puerto 40706, muestre la lista de servidores y complete el inicio de sesión.
+> **Estado:** Completada (100%).
 
-- [ ] **2.1 Servidor TCP en Puerto 40706:** Escuchar conexiones iniciales del cliente.
-- [ ] **2.2 Manejador del Opcode `0xCDDF` (ServerList Request):**
-  - Responder con el paquete **`0x0101`** estructurado:
+- [x] **2.1 Servidor TCP en Puerto 40706:** Escuchar conexiones iniciales del cliente (`BrokerServer`, soporte multi-cliente concurrente con TCP asíncrono y framing de 4 bytes).
+- [x] **2.2 Manejador del Opcode `0xCDDF` (ServerList Request):**
+  - Responder con el paquete **`0x0101`** estructurado (`ServerListResponsePacket`):
     - Cantidad de mundos activos.
-    - Por cada mundo: ID, Nombre (`WorldServer 1`), IP pública/privada dinámica (tomada de `appsettings.json`), Puerto (40708), estado (`Normal/Lleno`), cupo máximo y jugadores en línea actuales.
+    - Por cada mundo: ID, Nombre (`WorldServer 1`), IP pública/privada dinámica (tomada de `appsettings.json`), Puerto en formato Big-Endian (40708), estado (`Normal/Lleno`), cupo máximo y jugadores en línea actuales.
   - **Resultado visual:** La pantalla de selección de servidores del cliente se dibuja correctamente con los servidores en verde.
-- [ ] **2.3 Manejador del Opcode `0x1310` / `0x3000` (SV_AUTH_LOGIN):**
-  - Desempaquetar `UserID`, `Password` y versión del cliente.
-  - Validar contra la base de datos.
-  - Comprobar estado de baneo (`bandate`).
-  - Responder con código de éxito (0) o error de credenciales/baneo.
-  - Generar un Ticket o Token de Sesión único en memoria para el jugador.
-- [ ] **2.4 Endpoint Opcional AutoFetch (Sustituto de `fetch.php`):**
-  - Si se utiliza lanzador oficial (`NyxLauncher.exe`), exponer un mini servidor HTTP interno que responda la versión actual sin necesidad de configurar Apache/PHP por separado.
+- [x] **2.3 Manejador del Opcode `0x1310` / `0x3000` / `0x4000` (SV_AUTH_LOGIN):**
+  - Desempaquetar `UserID`, `Password` y versión del cliente (`LoginRequestPacket`).
+  - Validar contra la base de datos (`IUserRepository`), con actualización automática transparente a BCrypt de contraseñas heredadas (MD5 / plaintext).
+  - Comprobar estado de baneo en `user_game_info` (`is_banned`, `ban_date`, `ban_reason`).
+  - Responder con código de éxito (`LoginResultCode.Success`) o error de credenciales/baneo (`LoginResponsePacket`).
+  - Generar un Ticket o Token de Sesión criptográfico único en memoria con TTL de 5 minutos (`ISessionTicketService` / `SessionTicketService`).
+- [x] **2.4 Endpoint Opcional AutoFetch (Sustituto de `fetch.php`):**
+  - Servidor HTTP ligero interno (`AutoFetchServer`) emulando el protocolo Softnyx AutoFetch para `NyxLauncher.exe` (`fetch.php`), sirviendo URLs de avisos, parches y versión objetivo sin depender de servidores web externos.
 
 ---
 
