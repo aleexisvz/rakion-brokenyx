@@ -60,6 +60,7 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
         switch ((RakionOpcode)header.Opcode)
         {
             case RakionOpcode.ServerListRequest:
+            case RakionOpcode.ServerListResponse:
                 if (payload.Length >= 2)
                 {
                     ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
