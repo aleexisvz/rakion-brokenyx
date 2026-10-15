@@ -190,7 +190,8 @@ public sealed class WorldServerIntegrationTests
         ushort seq2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(2, 2));
         Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, op2);
         Assert.AreEqual((ushort)77, seq2);
-        Assert.AreEqual(0, decBuffer2[4]); // ResultCode
+        Assert.AreEqual(0, decBuffer2[4]); // WordCount
+        Assert.IsTrue(WorldLoginPart2Packet.TryParse(decBuffer2.AsSpan(4, decLen2 - 4), out _));
     }
 
     [TestMethod]

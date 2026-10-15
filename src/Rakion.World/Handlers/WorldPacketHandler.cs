@@ -319,8 +319,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         if (session.IsEncrypted)
         {
-            // Send Part 2 packet (Opcode 0x0003) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
-            await SendPacketAsync(session, new WorldLoginPart2Packet(ResultCode: 0), cancellationToken).ConfigureAwait(false);
+            // Send Part 2 packet (Opcode 0x000D) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
+            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: (byte)(gameInfo?.SlotCount ?? 4), Characters: summaries), cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation("[{ConnectionId}] WorldLogin successful for '{Username}' with {Count} characters.", session.Connection.ConnectionId, user.Username, summaries.Count);

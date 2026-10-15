@@ -179,5 +179,26 @@ public sealed class WorldPacketTests
         Assert.AreEqual("admin", packet.Password);
         Assert.AreEqual("C:\\Program Files (x86)\\Softnyx\\Rakion\\Bin\\Rakion.bin", packet.ClientPath);
     }
+
+    [TestMethod]
+    public void WorldLoginPart2Packet_DefaultSlots_SerializesExact1326Bytes()
+    {
+        var packet = new WorldLoginPart2Packet();
+        using var writer = new PacketWriter(packet.Opcode);
+        packet.Serialize(writer);
+        byte[] bytes = writer.Build();
+
+        Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
+        Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, header.Opcode);
+
+        ReadOnlySpan<byte> payload = bytes.AsSpan(PacketHeader.HeaderSize);
+        Assert.AreEqual(WorldLoginPart2Packet.BasePayloadSize, payload.Length);
+        Assert.AreEqual((byte)0, payload[0]); // WordCount
+        Assert.AreEqual((byte)0, payload[1]); // Flag
+
+        bool parsed = WorldLoginPart2Packet.TryParse(payload, out var roundtrip);
+        Assert.IsTrue(parsed);
+        Assert.IsNotNull(roundtrip);
+    }
 }
 
