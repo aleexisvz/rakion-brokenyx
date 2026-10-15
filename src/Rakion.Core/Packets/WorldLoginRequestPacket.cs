@@ -45,15 +45,25 @@ public sealed record WorldLoginRequestPacket(
                     string clientPath = pathReader.ReadNullTerminatedString();
                     if (!string.IsNullOrEmpty(clientPath))
                     {
+                        // Skip any null bytes or alignment zeroes between clientPath and username
+                        while (pathReader.Remaining > 0 && pathReader.PeekByte() == 0)
+                        {
+                            pathReader.ReadByte();
+                        }
+
                         string user = pathReader.Remaining > 0 ? pathReader.ReadNullTerminatedString() : string.Empty;
+
+                        while (pathReader.Remaining > 0 && pathReader.PeekByte() == 0)
+                        {
+                            pathReader.ReadByte();
+                        }
+
                         string pass = pathReader.Remaining > 0 ? pathReader.ReadNullTerminatedString() : string.Empty;
                         ushort country = pathReader.Remaining >= 2 ? pathReader.ReadUInt16() : (ushort)0;
 
-                        if (!string.IsNullOrEmpty(user))
-                        {
-                            packet = new WorldLoginRequestPacket(0, user, pass, clientPath, country);
-                            return true;
-                        }
+                        // Emit packet so handler can use credentials or resolve via active Broker session ticket
+                        packet = new WorldLoginRequestPacket(0, user, pass, clientPath, country);
+                        return true;
                     }
                 }
                 catch

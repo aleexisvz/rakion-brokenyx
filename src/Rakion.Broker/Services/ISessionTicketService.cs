@@ -30,6 +30,11 @@ public interface ISessionTicketService
     bool TryGetTicketByUsername(string username, out SessionTicketInfo info);
 
     /// <summary>
+    /// Looks up the most recent active ticket information by client IP or loopback without invalidating it.
+    /// </summary>
+    bool TryGetTicketByClientIp(string clientIp, out SessionTicketInfo info);
+
+    /// <summary>
     /// Validates the ticket and consumes it (one-time use for World server handshake).
     /// </summary>
     bool ValidateAndConsumeTicket(uint ticket, out SessionTicketInfo info);

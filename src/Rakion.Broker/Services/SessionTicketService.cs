@@ -68,6 +68,41 @@ public sealed class SessionTicketService : ISessionTicketService
         return false;
     }
 
+    public bool TryGetTicketByClientIp(string clientIp, out SessionTicketInfo info)
+    {
+        DateTime now = DateTime.UtcNow;
+        SessionTicketInfo best = default;
+        bool found = false;
+
+        foreach (var (ticket, item) in _tickets)
+        {
+            bool matches = string.Equals(item.ClientIp, clientIp, StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(clientIp, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(clientIp, "::1", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(item.ClientIp, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(item.ClientIp, "::1", StringComparison.OrdinalIgnoreCase);
+
+            if (matches)
+            {
+                if (now - item.CreatedAtUtc <= TicketLifetime)
+                {
+                    if (!found || item.CreatedAtUtc > best.CreatedAtUtc)
+                    {
+                        best = item;
+                        found = true;
+                    }
+                }
+                else
+                {
+                    _tickets.TryRemove(ticket, out _);
+                }
+            }
+        }
+
+        info = best;
+        return found;
+    }
+
     public bool ValidateAndConsumeTicket(uint ticket, out SessionTicketInfo info)
     {
         if (_tickets.TryRemove(ticket, out info))

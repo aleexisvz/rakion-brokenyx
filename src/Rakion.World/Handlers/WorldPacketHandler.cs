@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rakion.Broker.Services;
@@ -174,6 +175,12 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ReadOnlyMemory<byte> payload,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "[{ConnectionId}] WorldLogin raw payload ({Len} bytes): {Hex}",
+            session.Connection.ConnectionId,
+            payload.Length,
+            Convert.ToHexString(payload.Span));
+
         if (!WorldLoginRequestPacket.TryParse(payload.Span, out var request))
         {
             _logger.LogWarning("[{ConnectionId}] Failed to parse WorldLogin request.", session.Connection.ConnectionId);
@@ -181,10 +188,42 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        string username = request.Username;
+        string clientIp = (session.Connection.RemoteEndPoint as IPEndPoint)?.Address.ToString() ?? "127.0.0.1";
+
+        // If username was empty or invalid, attempt resolution via active Broker session ticket
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            if (_ticketService.TryGetTicketByClientIp(clientIp, out var ipTicket))
+            {
+                username = ipTicket.Username;
+                _logger.LogInformation(
+                    "[{ConnectionId}] Resolved empty WorldLogin username to '{Username}' via active Broker ticket for client {Ip}.",
+                    session.Connection.ConnectionId,
+                    username,
+                    clientIp);
+            }
+        }
+        else
+        {
+            // If parsed username is not in database, check if Broker ticket exists for IP as fallback
+            var candidateUser = await _userRepository.GetByUsernameAsync(username, cancellationToken).ConfigureAwait(false);
+            if (candidateUser is null && _ticketService.TryGetTicketByClientIp(clientIp, out var ipTicket))
+            {
+                _logger.LogInformation(
+                    "[{ConnectionId}] Fallback from unrecognized '{OldUser}' to '{NewUser}' via active Broker ticket for client {Ip}.",
+                    session.Connection.ConnectionId,
+                    username,
+                    ipTicket.Username,
+                    clientIp);
+                username = ipTicket.Username;
+            }
+        }
+
         _logger.LogInformation(
             "[{ConnectionId}] Processing WorldLogin handshake for '{Username}' (Ticket: {Ticket}, ClientPath: '{ClientPath}').",
             session.Connection.ConnectionId,
-            request.Username,
+            username,
             request.SessionTicket,
             request.ClientPath);
 
@@ -197,7 +236,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             {
                 // Fallback for tests or direct loopback if username matches
                 if (_ticketService.TryGetTicket(request.SessionTicket, out ticketInfo) &&
-                    string.Equals(ticketInfo.Username, request.Username, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(ticketInfo.Username, username, StringComparison.OrdinalIgnoreCase))
                 {
                     ticketValid = true;
                 }
@@ -206,30 +245,30 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         else
         {
             // Retail client authenticating via username / active Broker ticket (SessionTicket == 0)
-            if (_ticketService.TryGetTicketByUsername(request.Username, out _))
+            if (_ticketService.TryGetTicketByUsername(username, out _))
             {
                 ticketValid = true;
-                _logger.LogInformation("[{ConnectionId}] Authenticated via active Broker ticket for '{Username}'.", session.Connection.ConnectionId, request.Username);
+                _logger.LogInformation("[{ConnectionId}] Authenticated via active Broker ticket for '{Username}'.", session.Connection.ConnectionId, username);
             }
             else
             {
                 // Fallback: user with valid account connecting from local client
                 ticketValid = true;
-                _logger.LogInformation("[{ConnectionId}] Authenticated user '{Username}' from database credentials.", session.Connection.ConnectionId, request.Username);
+                _logger.LogInformation("[{ConnectionId}] Authenticated user '{Username}' from database credentials.", session.Connection.ConnectionId, username);
             }
         }
 
         if (!ticketValid)
         {
-            _logger.LogWarning("[{ConnectionId}] Invalid session ticket {Ticket} for '{Username}'.", session.Connection.ConnectionId, request.SessionTicket, request.Username);
+            _logger.LogWarning("[{ConnectionId}] Invalid session ticket {Ticket} for '{Username}'.", session.Connection.ConnectionId, request.SessionTicket, username);
             await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        var user = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken).ConfigureAwait(false);
+        var user = await _userRepository.GetByUsernameAsync(username, cancellationToken).ConfigureAwait(false);
         if (user is null)
         {
-            _logger.LogWarning("[{ConnectionId}] WorldLogin user '{Username}' not found in database.", session.Connection.ConnectionId, request.Username);
+            _logger.LogWarning("[{ConnectionId}] WorldLogin user '{Username}' not found in database.", session.Connection.ConnectionId, username);
             await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
             return;
         }

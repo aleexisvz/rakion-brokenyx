@@ -43,6 +43,12 @@ public ref struct PacketReader
         return _buffer[_position++];
     }
 
+    public readonly byte PeekByte()
+    {
+        EnsureAvailable(sizeof(byte));
+        return _buffer[_position];
+    }
+
     public bool ReadBoolean() => ReadByte() != 0;
 
     public short ReadInt16()
