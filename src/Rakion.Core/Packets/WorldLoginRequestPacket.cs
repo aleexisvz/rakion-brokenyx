@@ -29,6 +29,20 @@ public sealed record WorldLoginRequestPacket(
 
         try
         {
+            // Retail v258 client layout: [0]=0, [1..5]=ticket, [5..17]=padding, [17..]=Username
+            if (payload.Length >= 18 && payload[0] == 0)
+            {
+                uint retailTicket = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(1, 4));
+                var retailReader = new PacketReader(payload.Slice(17));
+                string retailUsername = retailReader.ReadNullTerminatedString();
+                if (!string.IsNullOrEmpty(retailUsername))
+                {
+                    packet = new WorldLoginRequestPacket(retailTicket, retailUsername);
+                    return true;
+                }
+            }
+
+            // Fallback for direct unit tests or legacy client variant
             var reader = new PacketReader(payload);
             uint ticket = reader.ReadUInt32();
             string username = reader.Remaining > 0 ? reader.ReadNullTerminatedString() : string.Empty;

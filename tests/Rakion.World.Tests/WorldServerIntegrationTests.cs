@@ -1,8 +1,10 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Rakion.Broker.Services;
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
@@ -125,6 +127,70 @@ public sealed class WorldServerIntegrationTests
         Assert.AreEqual((ushort)RakionOpcode.WorldLogin, header.Opcode);
         Assert.IsTrue(WorldLoginResponsePacket.TryParse(payload, out var response));
         Assert.AreNotEqual(0, response.ResultCode);
+    }
+
+    [TestMethod]
+    public async Task WorldLogin_EncryptedHandshake_RespondsWithEncryptedLoginAndPart2Packets()
+    {
+        // Arrange
+        var user = await CreateUserAsync("CryptoPlayer");
+        await _balanceRepository.AddGoldAsync(user.Id, 50000);
+        await _characterRepository.CreateCharacterAsync(user.Id, "CryptoNinja", CharacterClass.Ninja, 0);
+
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        // Build raw plaintext login request: [0]=0, [1..5]=ticket, [5..17]=padding, [17..]=user
+        using var plainWriter = new PacketWriter();
+        plainWriter.WriteByte(0); // flag
+        plainWriter.WriteUInt32(ticket);
+        plainWriter.WriteZeroBytes(12); // padding
+        plainWriter.WriteNullTerminatedString(user.Username);
+
+        byte[] encryptedWire = RakionWorldCrypto.EncryptPacket(77, (ushort)RakionOpcode.WorldLogin, plainWriter.WrittenSpan);
+        await stream.WriteAsync(encryptedWire);
+        await stream.FlushAsync();
+
+        // Act: Read Packet 1 (Encrypted WorldLoginResponse)
+        byte[] lenBuffer = new byte[2];
+        await ReadExactAsync(stream, lenBuffer);
+        ushort wireLen1 = BinaryPrimitives.ReadUInt16LittleEndian(lenBuffer);
+        byte[] cipher1 = new byte[wireLen1 - 2];
+        await ReadExactAsync(stream, cipher1);
+
+        byte[] decBuffer1 = new byte[cipher1.Length];
+        bool ok1 = RakionWorldCrypto.TryDecrypt(cipher1, decBuffer1, out int decLen1);
+        Assert.IsTrue(ok1);
+        ushort seq1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(0, 2));
+        ushort op1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(2, 2));
+        Assert.AreEqual((ushort)77, seq1);
+        Assert.AreEqual((ushort)RakionOpcode.WorldLogin, op1);
+
+        bool parsed1 = WorldLoginResponsePacket.TryParse(decBuffer1.AsSpan(4, decLen1 - 4), out var resp1);
+        Assert.IsTrue(parsed1);
+        Assert.AreEqual(0, resp1.ResultCode);
+        Assert.AreEqual((uint)user.Id, resp1.UserId);
+        Assert.AreEqual(60000u, resp1.Gold);
+        Assert.IsNotNull(resp1.Characters);
+        Assert.HasCount(1, resp1.Characters);
+        Assert.AreEqual("CryptoNinja", resp1.Characters[0].Name);
+
+        // Act: Read Packet 2 (Encrypted WorldLoginPart2)
+        await ReadExactAsync(stream, lenBuffer);
+        ushort wireLen2 = BinaryPrimitives.ReadUInt16LittleEndian(lenBuffer);
+        byte[] cipher2 = new byte[wireLen2 - 2];
+        await ReadExactAsync(stream, cipher2);
+
+        byte[] decBuffer2 = new byte[cipher2.Length];
+        bool ok2 = RakionWorldCrypto.TryDecrypt(cipher2, decBuffer2, out int decLen2);
+        Assert.IsTrue(ok2);
+        ushort seq2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(0, 2));
+        ushort op2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(2, 2));
+        Assert.AreEqual((ushort)77, seq2);
+        Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, op2);
+        Assert.AreEqual(0, decBuffer2[4]); // ResultCode
     }
 
     [TestMethod]

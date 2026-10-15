@@ -16,6 +16,8 @@ public sealed class WorldSession
     public CharacterEntity? ActiveCharacter { get; set; }
     public bool IsAuthenticated => User is not null;
     public bool GameGuardVerified { get; set; }
+    public bool IsEncrypted { get; set; }
+    public ushort SequenceId { get; set; }
 
     public WorldSession(TcpConnection connection)
     {

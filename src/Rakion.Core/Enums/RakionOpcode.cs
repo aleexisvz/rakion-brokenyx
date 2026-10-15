@@ -49,6 +49,42 @@ public enum RakionOpcode : ushort
     WorldLogin = 0x0002,
 
     /// <summary>
+    /// World server login success/failure result response.
+    /// Evidence: Observed in RakionWorldServ 0x4286fd (0x001E).
+    /// </summary>
+    WorldLoginResponse = 0x001E,
+
+    /// <summary>
+    /// World server character roster, gold, cash, and unlocked slots.
+    /// Evidence: Observed in RakionWorldServ 0x428832 (0x001F).
+    /// </summary>
+    WorldCharacterList = 0x001F,
+
+    /// <summary>
+    /// World server login part 2 packet completing client handshake and enabling Character Select UI.
+    /// Evidence: Observed in RakionWorldServ 0x411ff0 and rakion.bin 0x47e6f0 (incrementing 0x4ff4ad to 2).
+    /// </summary>
+    WorldLoginPart2 = 0x0003,
+
+    /// <summary>
+    /// World server character creation request (retail WorldServer opcode).
+    /// Evidence: Observed in RakionWorldServ opcode 0x0007 handler (DBCommandCharacterCreate).
+    /// </summary>
+    CharacterCreateRetail = 0x0007,
+
+    /// <summary>
+    /// World server character deletion request (retail WorldServer opcode).
+    /// Evidence: Observed in RakionWorldServ opcode 0x0008 handler (DBCommandCharacterDelete).
+    /// </summary>
+    CharacterDeleteRetail = 0x0008,
+
+    /// <summary>
+    /// World server character selection request (retail WorldServer opcode).
+    /// Evidence: Observed in RakionWorldServ opcode 0x0009 handler (DBCommandCharacterSelect).
+    /// </summary>
+    CharacterSelectRetail = 0x0009,
+
+    /// <summary>
     /// Direct WorldLogin opcode variant used by IScavengerWorldNet::SendLogin(ticket, user).
     /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z.
     /// </summary>

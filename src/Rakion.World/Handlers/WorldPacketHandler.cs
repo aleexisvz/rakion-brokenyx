@@ -1,7 +1,10 @@
+using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rakion.Broker.Services;
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
@@ -65,15 +68,55 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
-        switch ((RakionOpcode)header.Opcode)
+        ushort opcode;
+        ReadOnlyMemory<byte> packetPayload;
+
+        int cipherLen = header.TotalLength - 2;
+        if (cipherLen > 0 && (cipherLen % RakionWorldCrypto.BlockSize) == 0)
+        {
+            byte[] cipherBuffer = ArrayPool<byte>.Shared.Rent(cipherLen);
+            byte[] plainBuffer = ArrayPool<byte>.Shared.Rent(cipherLen);
+            try
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(cipherBuffer.AsSpan(0, 2), header.Opcode);
+                payload.Span.CopyTo(cipherBuffer.AsSpan(2, payload.Length));
+
+                if (RakionWorldCrypto.TryDecrypt(cipherBuffer.AsSpan(0, cipherLen), plainBuffer, out int decryptedLen) && decryptedLen >= 4)
+                {
+                    session.IsEncrypted = true;
+                    session.SequenceId = BinaryPrimitives.ReadUInt16LittleEndian(plainBuffer.AsSpan(0, 2));
+                    opcode = BinaryPrimitives.ReadUInt16LittleEndian(plainBuffer.AsSpan(2, 2));
+                    packetPayload = plainBuffer.AsSpan(4, decryptedLen - 4).ToArray();
+                    _logger.LogDebug("[{ConnectionId}] Decrypted WorldServer packet: Opcode 0x{Opcode:X4}, Seq {Seq}, Payload {Len} bytes.",
+                        connection.ConnectionId, opcode, session.SequenceId, packetPayload.Length);
+                }
+                else
+                {
+                    opcode = header.Opcode;
+                    packetPayload = payload;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(cipherBuffer);
+                ArrayPool<byte>.Shared.Return(plainBuffer);
+            }
+        }
+        else
+        {
+            opcode = header.Opcode;
+            packetPayload = payload;
+        }
+
+        switch ((RakionOpcode)opcode)
         {
             case RakionOpcode.WorldLogin:
             case RakionOpcode.WorldLoginAlt:
-                await HandleWorldLoginAsync(session, payload, cancellationToken).ConfigureAwait(false);
+                await HandleWorldLoginAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
             case RakionOpcode.GameGuard:
-                await HandleGameGuardAsync(session, payload, cancellationToken).ConfigureAwait(false);
+                await HandleGameGuardAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
             case RakionOpcode.KeepAlive:
@@ -81,23 +124,26 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 break;
 
             case RakionOpcode.CharacterCreate:
-                await HandleCharacterCreateAsync(session, payload, cancellationToken).ConfigureAwait(false);
+            case RakionOpcode.CharacterCreateRetail:
+                await HandleCharacterCreateAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
             case RakionOpcode.CharacterDelete:
-                await HandleCharacterDeleteAsync(session, payload, cancellationToken).ConfigureAwait(false);
+            case RakionOpcode.CharacterDeleteRetail:
+                await HandleCharacterDeleteAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
             case RakionOpcode.CharacterSelect:
-                await HandleCharacterSelectAsync(session, payload, cancellationToken).ConfigureAwait(false);
+            case RakionOpcode.CharacterSelectRetail:
+                await HandleCharacterSelectAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
             default:
                 _logger.LogWarning(
                     "[{ConnectionId}] Unhandled WorldServer opcode: 0x{Opcode:X4} (Payload length: {Length} bytes).",
                     connection.ConnectionId,
-                    header.Opcode,
-                    payload.Length);
+                    opcode,
+                    packetPayload.Length);
                 break;
         }
     }
@@ -131,7 +177,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (!WorldLoginRequestPacket.TryParse(payload.Span, out var request))
         {
             _logger.LogWarning("[{ConnectionId}] Failed to parse WorldLogin request.", session.Connection.ConnectionId);
-            await SendPacketAsync(session.Connection, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -150,7 +196,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 !string.Equals(ticketInfo.Username, request.Username, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("[{ConnectionId}] Invalid session ticket {Ticket} for '{Username}'.", session.Connection.ConnectionId, request.SessionTicket, request.Username);
-                await SendPacketAsync(session.Connection, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
+                await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
                 return;
             }
         }
@@ -159,7 +205,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (user is null)
         {
             _logger.LogWarning("[{ConnectionId}] WorldLogin user '{Username}' not found in database.", session.Connection.ConnectionId, request.Username);
-            await SendPacketAsync(session.Connection, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -167,7 +213,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (gameInfo is not null && (gameInfo.IsBanned || (gameInfo.BanDate.HasValue && gameInfo.BanDate.Value > DateTime.UtcNow)))
         {
             _logger.LogWarning("[{ConnectionId}] WorldLogin failed: user '{Username}' is banned.", session.Connection.ConnectionId, user.Username);
-            await SendPacketAsync(session.Connection, new WorldLoginResponsePacket(ResultCode: 2), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 2), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -202,9 +248,17 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             Gold: (uint)Math.Clamp(gold, 0, uint.MaxValue),
             Cash: (uint)Math.Clamp(cash, 0, int.MaxValue),
             UnlockedSlots: gameInfo?.SlotCount ?? 4,
-            Characters: summaries);
+            Characters: summaries,
+            Username: user.Username);
 
-        await SendPacketAsync(session.Connection, response, cancellationToken).ConfigureAwait(false);
+        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+
+        if (session.IsEncrypted)
+        {
+            // Send Part 2 packet (Opcode 0x0003) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
+            await SendPacketAsync(session, new WorldLoginPart2Packet(ResultCode: 0), cancellationToken).ConfigureAwait(false);
+        }
+
         _logger.LogInformation("[{ConnectionId}] WorldLogin successful for '{Username}' with {Count} characters.", session.Connection.ConnectionId, user.Username, summaries.Count);
     }
 
@@ -217,7 +271,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _logger.LogDebug("[{ConnectionId}] GameGuard check received ({Length} bytes). Emitting organic confirmation.", session.Connection.ConnectionId, payload.Length);
 
         var response = new GameGuardPacket(ResultCode: 0);
-        await SendPacketAsync(session.Connection, response, cancellationToken).ConfigureAwait(false);
+        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
     }
 
     private void HandleKeepAlive(WorldSession session)
@@ -240,7 +294,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (!CharacterCreateRequestPacket.TryParse(payload.Span, out var req))
         {
             _logger.LogWarning("[{ConnectionId}] Failed to parse CharacterCreate request.", session.Connection.ConnectionId);
-            await SendPacketAsync(session.Connection, new CharacterCreateResponsePacket(ResultCode: 3), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 3), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -249,7 +303,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (exists)
         {
             _logger.LogInformation("[{ConnectionId}] CharacterCreate failed: name '{Name}' already exists.", session.Connection.ConnectionId, req.Name);
-            await SendPacketAsync(session.Connection, new CharacterCreateResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -258,7 +312,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (req.Slot >= maxSlots)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterCreate failed: slot {Slot} exceeds unlocked slots ({Max}).", session.Connection.ConnectionId, req.Slot, maxSlots);
-            await SendPacketAsync(session.Connection, new CharacterCreateResponsePacket(ResultCode: 2), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 2), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -282,7 +336,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             (uint)newChar.WinCount, (uint)newChar.LossCount, (uint)newChar.DrawCount);
 
         _logger.LogInformation("[{ConnectionId}] Character '{Name}' (Class: {Class}, Slot: {Slot}) created successfully.", session.Connection.ConnectionId, newChar.Name, newChar.Class, newChar.SlotIndex);
-        await SendPacketAsync(session.Connection, new CharacterCreateResponsePacket(ResultCode: 0, summary), cancellationToken).ConfigureAwait(false);
+        await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 0, summary), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleCharacterDeleteAsync(
@@ -297,7 +351,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         if (!CharacterDeleteRequestPacket.TryParse(payload.Span, out var req))
         {
-            await SendPacketAsync(session.Connection, new CharacterDeleteResponsePacket(ResultCode: 1, 0), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 1, 0), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -305,7 +359,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (ch is null || ch.UserId != session.User.Id)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: character {CharId} does not belong to user.", session.Connection.ConnectionId, req.CharacterId);
-            await SendPacketAsync(session.Connection, new CharacterDeleteResponsePacket(ResultCode: 2, req.CharacterId), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 2, req.CharacterId), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -313,12 +367,12 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (!deleted)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: invalid delete key for character {CharId}.", session.Connection.ConnectionId, req.CharacterId);
-            await SendPacketAsync(session.Connection, new CharacterDeleteResponsePacket(ResultCode: 1, req.CharacterId), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 1, req.CharacterId), cancellationToken).ConfigureAwait(false);
             return;
         }
 
         _logger.LogInformation("[{ConnectionId}] Character {CharId} deleted successfully.", session.Connection.ConnectionId, req.CharacterId);
-        await SendPacketAsync(session.Connection, new CharacterDeleteResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+        await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleCharacterSelectAsync(
@@ -333,7 +387,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         if (!CharacterSelectRequestPacket.TryParse(payload.Span, out var req))
         {
-            await SendPacketAsync(session.Connection, new CharacterSelectResponsePacket(ResultCode: 1, 0), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 1, 0), cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -341,19 +395,33 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (ch is null || ch.UserId != session.User.Id)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterSelect failed: character {CharId} does not belong to user.", session.Connection.ConnectionId, req.CharacterId);
-            await SendPacketAsync(session.Connection, new CharacterSelectResponsePacket(ResultCode: 1, req.CharacterId), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 1, req.CharacterId), cancellationToken).ConfigureAwait(false);
             return;
         }
 
         session.ActiveCharacter = ch;
         _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id);
-        await SendPacketAsync(session.Connection, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+        await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
     }
 
-    private static async ValueTask SendPacketAsync(TcpConnection connection, IPacket packet, CancellationToken cancellationToken)
+    private static async ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken)
     {
         using var writer = new PacketWriter(packet.Opcode);
         packet.Serialize(writer);
-        await connection.SendAsync(writer.Build(), cancellationToken).ConfigureAwait(false);
+
+        if (session.IsEncrypted)
+        {
+            byte[] rawWire = writer.Build();
+            ReadOnlySpan<byte> payloadSpan = rawWire.Length >= PacketHeader.HeaderSize
+                ? rawWire.AsSpan(PacketHeader.HeaderSize)
+                : [];
+
+            byte[] encryptedWire = RakionWorldCrypto.EncryptPacket(session.SequenceId, packet.Opcode, payloadSpan);
+            await session.Connection.SendAsync(encryptedWire, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await session.Connection.SendAsync(writer.Build(), cancellationToken).ConfigureAwait(false);
+        }
     }
 }
