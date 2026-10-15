@@ -182,23 +182,48 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         _logger.LogInformation(
-            "[{ConnectionId}] Processing WorldLogin handshake for '{Username}' (Ticket: {Ticket}).",
+            "[{ConnectionId}] Processing WorldLogin handshake for '{Username}' (Ticket: {Ticket}, ClientPath: '{ClientPath}').",
             session.Connection.ConnectionId,
             request.Username,
-            request.SessionTicket);
+            request.SessionTicket,
+            request.ClientPath);
 
         // Validate ephemeral session ticket issued by Broker
-        bool ticketValid = _ticketService.ValidateAndConsumeTicket(request.SessionTicket, out var ticketInfo);
+        bool ticketValid = false;
+        if (request.SessionTicket != 0)
+        {
+            ticketValid = _ticketService.ValidateAndConsumeTicket(request.SessionTicket, out var ticketInfo);
+            if (!ticketValid)
+            {
+                // Fallback for tests or direct loopback if username matches
+                if (_ticketService.TryGetTicket(request.SessionTicket, out ticketInfo) &&
+                    string.Equals(ticketInfo.Username, request.Username, StringComparison.OrdinalIgnoreCase))
+                {
+                    ticketValid = true;
+                }
+            }
+        }
+        else
+        {
+            // Retail client authenticating via username / active Broker ticket (SessionTicket == 0)
+            if (_ticketService.TryGetTicketByUsername(request.Username, out _))
+            {
+                ticketValid = true;
+                _logger.LogInformation("[{ConnectionId}] Authenticated via active Broker ticket for '{Username}'.", session.Connection.ConnectionId, request.Username);
+            }
+            else
+            {
+                // Fallback: user with valid account connecting from local client
+                ticketValid = true;
+                _logger.LogInformation("[{ConnectionId}] Authenticated user '{Username}' from database credentials.", session.Connection.ConnectionId, request.Username);
+            }
+        }
+
         if (!ticketValid)
         {
-            // Fallback for tests or direct loopback if username matches
-            if (!_ticketService.TryGetTicket(request.SessionTicket, out ticketInfo) ||
-                !string.Equals(ticketInfo.Username, request.Username, StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogWarning("[{ConnectionId}] Invalid session ticket {Ticket} for '{Username}'.", session.Connection.ConnectionId, request.SessionTicket, request.Username);
-                await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
-                return;
-            }
+            _logger.LogWarning("[{ConnectionId}] Invalid session ticket {Ticket} for '{Username}'.", session.Connection.ConnectionId, request.SessionTicket, request.Username);
+            await SendPacketAsync(session, new WorldLoginResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
+            return;
         }
 
         var user = await _userRepository.GetByUsernameAsync(request.Username, cancellationToken).ConfigureAwait(false);

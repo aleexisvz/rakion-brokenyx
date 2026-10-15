@@ -147,5 +147,39 @@ public sealed class WorldPacketTests
         Assert.AreEqual((byte)0, roundtripSelRes.ResultCode);
         Assert.AreEqual(777u, roundtripSelRes.CharacterId);
     }
+
+    [TestMethod]
+    public void WorldLoginRequestPacket_RetailClientPayload_ParsesSuccessfully()
+    {
+        // 68 bytes exactly matching retail v258 client SendLogin(user, pass, country, clientPath, flag)
+        byte[] payload = new byte[68];
+        payload[0] = 0; // flag
+        int pos = 1;
+
+        byte[] pathBytes = System.Text.Encoding.ASCII.GetBytes("C:\\Program Files (x86)\\Softnyx\\Rakion\\Bin\\Rakion.bin\0");
+        pathBytes.CopyTo(payload, pos);
+        pos += pathBytes.Length;
+
+        byte[] userBytes = System.Text.Encoding.ASCII.GetBytes("admin\0");
+        userBytes.CopyTo(payload, pos);
+        pos += userBytes.Length;
+
+        byte[] passBytes = System.Text.Encoding.ASCII.GetBytes("admin\0");
+        passBytes.CopyTo(payload, pos);
+        pos += passBytes.Length;
+
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(pos, 2), 0);
+        pos += 2;
+
+        Assert.AreEqual(68, pos);
+        Assert.HasCount(68, payload);
+
+        bool success = WorldLoginRequestPacket.TryParse(payload, out var packet);
+        Assert.IsTrue(success);
+        Assert.AreEqual("admin", packet.Username);
+        Assert.AreEqual("admin", packet.Password);
+        Assert.AreEqual("C:\\Program Files (x86)\\Softnyx\\Rakion\\Bin\\Rakion.bin", packet.ClientPath);
+        Assert.AreEqual((ushort)0, packet.Country);
+    }
 }
 
