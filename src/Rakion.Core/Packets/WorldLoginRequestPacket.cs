@@ -33,21 +33,17 @@ public sealed record WorldLoginRequestPacket(
         try
         {
             // Retail v258 client layout (?SendLogin@IScavengerWorldNet@@UAEXPAD0G0E@Z):
-            // [0]   byte Flag (0)
-            // [1..] ClientPath (null-terminated string, e.g. "C:\...\Rakion.bin")
-            // [..]  Username (null-terminated string)
-            // [..]  Password (null-terminated string)
-            // [..]  Country (ushort)
-            if (payload.Length >= 6 && payload[0] == 0 && payload[1] != 0)
+            // Payload contains: [header/flag bytes] [ClientPath\0] [Username\0] [Password\0] [Country ushort]
+            // We search for the ClientPath by finding ":\" (or drive letter) representing the executable path.
+            int colonBackslash = payload.IndexOf(":\\"u8);
+            if (colonBackslash >= 1)
             {
                 try
                 {
-                    var pathReader = new PacketReader(payload.Slice(1));
+                    int pathStart = colonBackslash - 1; // drive letter before ":\"
+                    var pathReader = new PacketReader(payload.Slice(pathStart));
                     string clientPath = pathReader.ReadNullTerminatedString();
-                    if (!string.IsNullOrEmpty(clientPath) &&
-                        (clientPath.Contains('\\') || clientPath.Contains('/') ||
-                         clientPath.EndsWith(".bin", StringComparison.OrdinalIgnoreCase) ||
-                         clientPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
+                    if (!string.IsNullOrEmpty(clientPath))
                     {
                         string user = pathReader.Remaining > 0 ? pathReader.ReadNullTerminatedString() : string.Empty;
                         string pass = pathReader.Remaining > 0 ? pathReader.ReadNullTerminatedString() : string.Empty;

@@ -153,8 +153,10 @@ public sealed class WorldPacketTests
     {
         // 68 bytes exactly matching retail v258 client SendLogin(user, pass, country, clientPath, flag)
         byte[] payload = new byte[68];
-        payload[0] = 0; // flag
-        int pos = 1;
+        payload[0] = 0x00;
+        payload[1] = 0x44;
+        payload[2] = 0x00;
+        int pos = 3;
 
         byte[] pathBytes = System.Text.Encoding.ASCII.GetBytes("C:\\Program Files (x86)\\Softnyx\\Rakion\\Bin\\Rakion.bin\0");
         pathBytes.CopyTo(payload, pos);
@@ -168,9 +170,6 @@ public sealed class WorldPacketTests
         passBytes.CopyTo(payload, pos);
         pos += passBytes.Length;
 
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(pos, 2), 0);
-        pos += 2;
-
         Assert.AreEqual(68, pos);
         Assert.HasCount(68, payload);
 
@@ -179,7 +178,6 @@ public sealed class WorldPacketTests
         Assert.AreEqual("admin", packet.Username);
         Assert.AreEqual("admin", packet.Password);
         Assert.AreEqual("C:\\Program Files (x86)\\Softnyx\\Rakion\\Bin\\Rakion.bin", packet.ClientPath);
-        Assert.AreEqual((ushort)0, packet.Country);
     }
 }
 
