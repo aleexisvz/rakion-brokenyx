@@ -55,7 +55,7 @@ public sealed class AutoFetchIntegrationTests
         Assert.HasCount(3, lines);
         Assert.AreEqual("+http://localhost/notice.html", lines[0]);
         Assert.AreEqual("=http://localhost/patch/", lines[1]);
-        Assert.AreEqual("~0;0;1026", lines[2]);
+        Assert.AreEqual("~0;0;258", lines[2]);
     }
 
     [TestMethod]
