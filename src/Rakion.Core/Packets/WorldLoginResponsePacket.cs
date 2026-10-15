@@ -39,9 +39,10 @@ public sealed record WorldLoginResponsePacket(
     uint Cash = 0,
     byte UnlockedSlots = 4,
     IReadOnlyList<CharacterSummary>? Characters = null,
-    string Username = "") : IPacket
+    string Username = "",
+    ushort ResponseOpcode = (ushort)RakionOpcode.WorldLogin) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.WorldLogin;
+    public ushort Opcode => ResponseOpcode;
 
     public void Serialize(PacketWriter writer)
     {

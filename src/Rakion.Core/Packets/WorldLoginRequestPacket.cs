@@ -29,8 +29,8 @@ public sealed record WorldLoginRequestPacket(
 
         try
         {
-            // Retail v258 client layout: [0]=0, [1..5]=ticket, [5..17]=padding, [17..]=Username
-            if (payload.Length >= 18 && payload[0] == 0)
+            // Padded test layout: [0]=0, [1..5]=ticket, [5..17]=12 zeroes padding, [17..]=Username
+            if (payload.Length >= 18 && payload[0] == 0 && payload.Slice(5, 12).IndexOfAnyExcept((byte)0) < 0)
             {
                 uint retailTicket = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(1, 4));
                 var retailReader = new PacketReader(payload.Slice(17));
@@ -42,9 +42,11 @@ public sealed record WorldLoginRequestPacket(
                 }
             }
 
-            // Fallback for direct unit tests or legacy client variant
-            var reader = new PacketReader(payload);
-            uint ticket = reader.ReadUInt32();
+            // Direct retail client layout (IScavengerWorldNet::SendLogin):
+            // [0..3] = uint Ticket
+            // [4..]  = null-terminated string Username
+            uint ticket = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(payload[..4]);
+            var reader = new PacketReader(payload[4..]);
             string username = reader.Remaining > 0 ? reader.ReadNullTerminatedString() : string.Empty;
             packet = new WorldLoginRequestPacket(ticket, username);
             return true;

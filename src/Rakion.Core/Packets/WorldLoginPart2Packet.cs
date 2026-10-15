@@ -4,8 +4,8 @@ using Rakion.Core.Protocol;
 namespace Rakion.Core.Packets;
 
 /// <summary>
-/// World server login part 2 packet completing client handshake and enabling Character Select UI (Opcode 0x0003).
-/// Evidence: Observed in RakionWorldServ 0x411ff0 and rakion.bin 0x47e6f0 (incrementing 0x4ff4ad to 2).
+/// World server login part 2 packet completing client handshake and enabling Character Select UI (Opcode 0x000D).
+/// Evidence: Observed in engine.dll jump table opcode 13 (0x000D) calling OnRecvLogin2 (0x36196690).
 /// Payload layout:
 ///   [0]    byte ResultCode (0)
 ///   [1]    byte (0)
@@ -54,3 +54,4 @@ public sealed record WorldLoginPart2Packet(byte ResultCode = 0) : IPacket
         return true;
     }
 }
+

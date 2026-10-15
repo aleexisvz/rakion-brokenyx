@@ -163,10 +163,10 @@ public sealed class WorldServerIntegrationTests
         byte[] decBuffer1 = new byte[cipher1.Length];
         bool ok1 = RakionWorldCrypto.TryDecrypt(cipher1, decBuffer1, out int decLen1);
         Assert.IsTrue(ok1);
-        ushort seq1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(0, 2));
-        ushort op1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(2, 2));
-        Assert.AreEqual((ushort)77, seq1);
+        ushort op1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(0, 2));
+        ushort seq1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(2, 2));
         Assert.AreEqual((ushort)RakionOpcode.WorldLogin, op1);
+        Assert.AreEqual((ushort)77, seq1);
 
         bool parsed1 = WorldLoginResponsePacket.TryParse(decBuffer1.AsSpan(4, decLen1 - 4), out var resp1);
         Assert.IsTrue(parsed1);
@@ -186,10 +186,10 @@ public sealed class WorldServerIntegrationTests
         byte[] decBuffer2 = new byte[cipher2.Length];
         bool ok2 = RakionWorldCrypto.TryDecrypt(cipher2, decBuffer2, out int decLen2);
         Assert.IsTrue(ok2);
-        ushort seq2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(0, 2));
-        ushort op2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(2, 2));
-        Assert.AreEqual((ushort)77, seq2);
+        ushort op2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(0, 2));
+        ushort seq2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(2, 2));
         Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, op2);
+        Assert.AreEqual((ushort)77, seq2);
         Assert.AreEqual(0, decBuffer2[4]); // ResultCode
     }
 

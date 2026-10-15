@@ -84,8 +84,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 if (RakionWorldCrypto.TryDecrypt(cipherBuffer.AsSpan(0, cipherLen), plainBuffer, out int decryptedLen) && decryptedLen >= 4)
                 {
                     session.IsEncrypted = true;
-                    session.SequenceId = BinaryPrimitives.ReadUInt16LittleEndian(plainBuffer.AsSpan(0, 2));
-                    opcode = BinaryPrimitives.ReadUInt16LittleEndian(plainBuffer.AsSpan(2, 2));
+                    opcode = BinaryPrimitives.ReadUInt16LittleEndian(plainBuffer.AsSpan(0, 2));
+                    session.SequenceId = BinaryPrimitives.ReadUInt16LittleEndian(plainBuffer.AsSpan(2, 2));
                     packetPayload = plainBuffer.AsSpan(4, decryptedLen - 4).ToArray();
                     _logger.LogDebug("[{ConnectionId}] Decrypted WorldServer packet: Opcode 0x{Opcode:X4}, Seq {Seq}, Payload {Len} bytes.",
                         connection.ConnectionId, opcode, session.SequenceId, packetPayload.Length);
@@ -111,7 +111,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         switch ((RakionOpcode)opcode)
         {
             case RakionOpcode.WorldLogin:
-            case RakionOpcode.WorldLoginAlt:
+            case RakionOpcode.WorldLoginLegacy:
                 await HandleWorldLoginAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 

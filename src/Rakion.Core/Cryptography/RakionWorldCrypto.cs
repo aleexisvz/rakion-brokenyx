@@ -123,16 +123,16 @@ public static class RakionWorldCrypto
     /// <summary>
     /// Helper to encrypt a packet directly into a byte array for TCP transmission with explicit SequenceId.
     /// Wire plaintext layout:
-    ///   [0..1] ushort SequenceId
-    ///   [2..3] ushort Opcode
+    ///   [0..1] ushort Opcode
+    ///   [2..3] ushort SequenceId
     ///   [4..]  Payload bytes
     /// </summary>
     public static byte[] EncryptPacket(ushort sequenceId, ushort opcode, ReadOnlySpan<byte> payload)
     {
         int plainLen = 4 + payload.Length;
         Span<byte> plain = stackalloc byte[plainLen];
-        BinaryPrimitives.WriteUInt16LittleEndian(plain[..2], sequenceId);
-        BinaryPrimitives.WriteUInt16LittleEndian(plain[2..4], opcode);
+        BinaryPrimitives.WriteUInt16LittleEndian(plain[..2], opcode);
+        BinaryPrimitives.WriteUInt16LittleEndian(plain[2..4], sequenceId);
         payload.CopyTo(plain[4..]);
 
         int blockCount = (plainLen + DataPerBlock - 1) / DataPerBlock;

@@ -82,10 +82,10 @@ public sealed class RakionWorldCryptoTests
         bool ok = RakionWorldCrypto.TryDecrypt(wire.AsSpan(2, wire.Length - 2), dec, out int decLen);
         Assert.IsTrue(ok);
 
-        ushort seq = BinaryPrimitives.ReadUInt16LittleEndian(dec[..2]);
-        ushort op = BinaryPrimitives.ReadUInt16LittleEndian(dec[2..4]);
-        Assert.AreEqual((ushort)1234, seq);
+        ushort op = BinaryPrimitives.ReadUInt16LittleEndian(dec[..2]);
+        ushort seq = BinaryPrimitives.ReadUInt16LittleEndian(dec[2..4]);
         Assert.AreEqual((ushort)0x0002, op);
+        Assert.AreEqual((ushort)1234, seq);
 
         string roundtripPayload = System.Text.Encoding.ASCII.GetString(dec.Slice(4, payload.Length));
         Assert.AreEqual("hello_world_payload", roundtripPayload);

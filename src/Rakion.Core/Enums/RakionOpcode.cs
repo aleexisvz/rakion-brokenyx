@@ -43,10 +43,16 @@ public enum RakionOpcode : ushort
 
     // --- World Server / Character Management Opcodes ---
     /// <summary>
-    /// World server session authentication and character list handshake.
-    /// Evidence: Observed in RakionWorldServ switch jump table (0x004299B8) and OnRecvLogin in rakion.bin.
+    /// World server session authentication and character list handshake for retail v258.
+    /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z and jump table opcode 12 (0x000C).
     /// </summary>
-    WorldLogin = 0x0002,
+    WorldLogin = 0x000C,
+
+    /// <summary>
+    /// Legacy/unencrypted WorldLogin opcode variant.
+    /// Evidence: Observed in RakionWorldServ switch jump table (0x004299B8).
+    /// </summary>
+    WorldLoginLegacy = 0x0002,
 
     /// <summary>
     /// World server login success/failure result response.
@@ -61,10 +67,16 @@ public enum RakionOpcode : ushort
     WorldCharacterList = 0x001F,
 
     /// <summary>
-    /// World server login part 2 packet completing client handshake and enabling Character Select UI.
-    /// Evidence: Observed in RakionWorldServ 0x411ff0 and rakion.bin 0x47e6f0 (incrementing 0x4ff4ad to 2).
+    /// World server login part 2 packet completing client handshake and enabling Character Select UI (retail OnRecvLogin2).
+    /// Evidence: Observed in engine.dll jump table opcode 13 (0x000D) calling 0x36196690.
     /// </summary>
-    WorldLoginPart2 = 0x0003,
+    WorldLoginPart2 = 0x000D,
+
+    /// <summary>
+    /// Legacy world login part 2 packet opcode.
+    /// Evidence: Observed in RakionWorldServ 0x411ff0.
+    /// </summary>
+    WorldLoginPart2Legacy = 0x0003,
 
     /// <summary>
     /// World server character creation request (retail WorldServer opcode).
@@ -89,6 +101,11 @@ public enum RakionOpcode : ushort
     /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z.
     /// </summary>
     WorldLoginAlt = 0x000C,
+
+    /// <summary>
+    /// Retail WorldLogin alias.
+    /// </summary>
+    WorldLoginRetail = 0x000C,
 
     /// <summary>
     /// Client heartbeat / ping packet.
@@ -151,16 +168,28 @@ public enum RakionOpcode : ushort
     CharacterChangeCharName = 0x001C,
 
     /// <summary>
-    /// Character deletion confirmation response.
-    /// Evidence: Observed in RakionWorldServ opcode 19 handler (0x002D).
+    /// Character deletion confirmation response (retail v258 engine.dll opcode 19).
+    /// Evidence: Observed in engine.dll jump table opcode 19 (0x0013) calling 0x36192e70.
     /// </summary>
-    CharacterDeleteResponse = 0x002D,
+    CharacterDeleteResponse = 0x0013,
 
     /// <summary>
-    /// Character selection confirmation response.
+    /// Legacy character deletion confirmation response.
+    /// Evidence: Observed in RakionWorldServ opcode 19 handler (0x002D).
+    /// </summary>
+    CharacterDeleteResponseLegacy = 0x002D,
+
+    /// <summary>
+    /// Character selection confirmation response (retail v258 engine.dll opcode 20).
+    /// Evidence: Observed in engine.dll jump table opcode 20 (0x0014) calling 0x36192f90.
+    /// </summary>
+    CharacterSelectResponse = 0x0014,
+
+    /// <summary>
+    /// Legacy character selection confirmation response.
     /// Evidence: Observed in RakionWorldServ opcode 20 handler (0x002E).
     /// </summary>
-    CharacterSelectResponse = 0x002E,
+    CharacterSelectResponseLegacy = 0x002E,
 
     // --- Channel / Lobby Opcodes ---
     /// <summary>
