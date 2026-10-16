@@ -227,4 +227,23 @@ public enum RakionOpcode : ushort
     /// Evidence: Observed (127 / 0x7F) in WorldServer strings.
     /// </summary>
     FieldChat = 0x007F,
+
+    // --- UDP NAT Probe / Relay Opcodes ---
+    /// <summary>
+    /// UDP hole punch probe / keep-alive sent to UDP Port 1 (40708).
+    /// Evidence: Observed in Rakion.bin 0x00473B84 and RakionWorldServ.exe 0x00429554.
+    /// </summary>
+    UdpHolePunch1 = 0x0201,
+
+    /// <summary>
+    /// UDP hole punch probe / keep-alive sent to UDP Port 2 (40709).
+    /// Evidence: Observed in Rakion.bin 0x00473C2E and RakionWorldServ.exe 0x00429557.
+    /// </summary>
+    UdpHolePunch2 = 0x0202,
+
+    /// <summary>
+    /// UDP tunneling / P2P relay packet.
+    /// Evidence: Observed in RakionWorldServ.exe 0x00429546.
+    /// </summary>
+    UdpTunneling = 0x0401,
 }
