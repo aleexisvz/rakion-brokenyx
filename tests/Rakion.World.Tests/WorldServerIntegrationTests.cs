@@ -42,6 +42,8 @@ public sealed class WorldServerIntegrationTests
         {
             ListenIp = "127.0.0.1",
             Port = 0,
+            UdpPort1 = 0,
+            UdpPort2 = 0,
             ServerId = 1,
             ServerName = "TestWorld"
         });
@@ -54,7 +56,8 @@ public sealed class WorldServerIntegrationTests
             _ticketService,
             NullLogger<WorldPacketHandler>.Instance);
 
-        _server = new WorldServer(_options, _handler, NullLogger<WorldServer>.Instance);
+        var udpHandler = new WorldUdpPacketHandler(NullLogger<WorldUdpPacketHandler>.Instance);
+        _server = new WorldServer(_options, _handler, udpHandler, NullLogger<WorldServer>.Instance);
         _server.Start();
     }
 
@@ -400,5 +403,83 @@ public sealed class WorldServerIntegrationTests
             }
             totalRead += read;
         }
+    }
+
+    [TestMethod]
+    public async Task UdpHolePunch_Port1_EchoesCookieWithFlag0()
+    {
+        // Arrange
+        using var udpClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var targetEp = (IPEndPoint)_server.LocalUdpEndPoint1!;
+
+        uint testCookie = 0x12345678;
+        byte[] request = new byte[UdpProbePacket.RequestTotalSize];
+        BinaryPrimitives.WriteUInt16LittleEndian(request.AsSpan(0, 2), (ushort)RakionOpcode.UdpHolePunch1);
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(2, 4), 1); // Sequence
+        request[6] = 0; // Flag
+        BinaryPrimitives.WriteUInt16LittleEndian(request.AsSpan(7, 2), 0); // UserIndex
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(9, 4), 100); // UserId
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(13, 4), 0x0100007F); // 127.0.0.1
+        BinaryPrimitives.WriteUInt16LittleEndian(request.AsSpan(17, 2), (ushort)((IPEndPoint)udpClient.Client.LocalEndPoint!).Port);
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(19, 4), testCookie);
+
+        // Act
+        await udpClient.SendAsync(request, request.Length, targetEp);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var receiveResult = await udpClient.ReceiveAsync(cts.Token);
+
+        // Assert
+        Assert.HasCount(UdpProbePacket.ResponseSize, receiveResult.Buffer);
+        ushort opcode = BinaryPrimitives.ReadUInt16LittleEndian(receiveResult.Buffer.AsSpan(0, 2));
+        uint cookie1 = BinaryPrimitives.ReadUInt32LittleEndian(receiveResult.Buffer.AsSpan(2, 4));
+        byte flag1 = receiveResult.Buffer[6];
+        byte flag2 = receiveResult.Buffer[7];
+        uint cookie2 = BinaryPrimitives.ReadUInt32LittleEndian(receiveResult.Buffer.AsSpan(8, 4));
+
+        Assert.AreEqual((ushort)RakionOpcode.UdpHolePunch1, opcode);
+        Assert.AreEqual(testCookie, cookie1);
+        Assert.AreEqual(0, flag1);
+        Assert.AreEqual(0, flag2);
+        Assert.AreEqual(testCookie, cookie2);
+    }
+
+    [TestMethod]
+    public async Task UdpHolePunch_Port2_EchoesCookieWithFlag1()
+    {
+        // Arrange
+        using var udpClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var targetEp = (IPEndPoint)_server.LocalUdpEndPoint2!;
+
+        uint testCookie = 0x87654321;
+        byte[] request = new byte[UdpProbePacket.RequestTotalSize];
+        BinaryPrimitives.WriteUInt16LittleEndian(request.AsSpan(0, 2), (ushort)RakionOpcode.UdpHolePunch2);
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(2, 4), 1);
+        request[6] = 0;
+        BinaryPrimitives.WriteUInt16LittleEndian(request.AsSpan(7, 2), 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(9, 4), 100);
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(13, 4), 0x0100007F);
+        BinaryPrimitives.WriteUInt16LittleEndian(request.AsSpan(17, 2), (ushort)((IPEndPoint)udpClient.Client.LocalEndPoint!).Port);
+        BinaryPrimitives.WriteUInt32LittleEndian(request.AsSpan(19, 4), testCookie);
+
+        // Act
+        await udpClient.SendAsync(request, request.Length, targetEp);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var receiveResult = await udpClient.ReceiveAsync(cts.Token);
+
+        // Assert
+        Assert.HasCount(UdpProbePacket.ResponseSize, receiveResult.Buffer);
+        ushort opcode = BinaryPrimitives.ReadUInt16LittleEndian(receiveResult.Buffer.AsSpan(0, 2));
+        uint cookie1 = BinaryPrimitives.ReadUInt32LittleEndian(receiveResult.Buffer.AsSpan(2, 4));
+        byte flag1 = receiveResult.Buffer[6];
+        byte flag2 = receiveResult.Buffer[7];
+        uint cookie2 = BinaryPrimitives.ReadUInt32LittleEndian(receiveResult.Buffer.AsSpan(8, 4));
+
+        Assert.AreEqual((ushort)RakionOpcode.UdpHolePunch1, opcode);
+        Assert.AreEqual(testCookie, cookie1);
+        Assert.AreEqual(1, flag1);
+        Assert.AreEqual(1, flag2);
+        Assert.AreEqual(testCookie, cookie2);
     }
 }
