@@ -74,6 +74,7 @@ Console.WriteLine("""
   Unified Server Host:
     - Broker TCP Server:     Port 40706
     - World TCP Server:      Port 40708
+    - World UDP Listeners:   Ports 40708 & 40709 (NAT Probe / Ping)
     - AutoFetch HTTP Server: Port 8080 (Softnyx launcher notice & patch)
 ======================================================================
 """);
@@ -113,6 +114,7 @@ builder.Services.AddSingleton<BrokerServer>();
 builder.Services.AddSingleton<AutoFetchServer>();
 
 builder.Services.AddSingleton<WorldPacketHandler>();
+builder.Services.AddSingleton<WorldUdpPacketHandler>();
 builder.Services.AddSingleton<WorldServer>();
 
 // Hosted background services

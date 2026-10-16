@@ -93,7 +93,7 @@ rakion-brokenyx/
 ### Fase 3: World Server (Gestión de Personajes, Canales y Lobby)
 > **Objetivo:** Lograr que el cliente entre al juego en el puerto 40708, cargue sus personajes, permita crear/borrar y acceda al canal de Lobby.
 
-- [x] **3.1 Servidor TCP en Puerto 40708:** Listener principal de sesiones de juego.
+- [x] **3.1 Servidor TCP y Dual UDP en Puertos 40708/40709:** Listener principal TCP de sesiones de juego y listeners duales UDP para responder a sondeos de NAT traversal / keep-alive del cliente.
 - [x] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
 - [x] **3.3 Bypass Orgánico de GameGuard:**
   - Cuando el cliente envíe su paquete de verificación (`SendGameGuard`), el servidor responde con la confirmación de validación correcta de forma transparente. Esto elimina para siempre la necesidad de DLLs `ggauth*.dll` o parches en el cliente.
