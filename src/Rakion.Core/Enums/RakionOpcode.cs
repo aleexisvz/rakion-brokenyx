@@ -108,6 +108,13 @@ public enum RakionOpcode : ushort
     WorldLoginRetail = 0x000C,
 
     /// <summary>
+    /// UDP hole punching / NAT probe success notification and confirmation.
+    /// Evidence: Observed in engine.dll ?SendSuccessUDP@IScavengerWorldNet@@UAEXE@Z (0x000E),
+    /// OnRecvSuccessUDP (0x36192DA0), and RakionWorldServ 0x4208b3.
+    /// </summary>
+    UdpSuccess = 0x000E,
+
+    /// <summary>
     /// Client heartbeat / ping packet.
     /// Evidence: Observed in engine.dll ?SendAlive@IScavengerWorldNet@@UAEXXZ (0x000F).
     /// </summary>
