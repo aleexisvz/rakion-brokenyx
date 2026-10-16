@@ -181,6 +181,27 @@ public sealed class WorldPacketTests
     }
 
     [TestMethod]
+    public void WorldLoginRequestPacket_CleanRetailSendLogin_ParsesUserAndPassword()
+    {
+        // Retail IScavengerWorldNet::SendLogin (0x36190AD0):
+        // [0]=Language(0), [1..2]=SubPacketLength(27), [3..]="admin\0", "secret\0", <8-byte IP MD5 + \0>, IdcIndex(1)
+        byte[] payload =
+        [
+            0x00, 0x1B, 0x00,
+            (byte)'a', (byte)'d', (byte)'m', (byte)'i', (byte)'n', 0x00,
+            (byte)'s', (byte)'e', (byte)'c', (byte)'r', (byte)'e', (byte)'t', 0x00,
+            0x30, 0x61, 0xA6, 0x86, 0x24, 0x0F, 0x74, 0xE7, 0x00,
+            0x01, 0x00
+        ];
+
+        bool success = WorldLoginRequestPacket.TryParse(payload, out var packet);
+        Assert.IsTrue(success);
+        Assert.AreEqual("admin", packet.Username);
+        Assert.AreEqual("secret", packet.Password);
+        Assert.AreEqual((ushort)1, packet.Country);
+    }
+
+    [TestMethod]
     public void WorldLoginPart2Packet_DefaultSlots_SerializesExact1326Bytes()
     {
         var packet = new WorldLoginPart2Packet();

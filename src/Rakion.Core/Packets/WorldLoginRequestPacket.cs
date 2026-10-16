@@ -32,9 +32,33 @@ public sealed record WorldLoginRequestPacket(
 
         try
         {
-            // Retail v258 client layout (?SendLogin@IScavengerWorldNet@@UAEXPAD0G0E@Z):
-            // Payload contains: [header/flag bytes] [ClientPath\0] [Username\0] [Password\0] [Country ushort]
-            // We search for the ClientPath by finding ":\" (or drive letter) representing the executable path.
+            // Retail v258 client layout (?SendLogin@IScavengerWorldNet@@UAEXPAD0G0E@Z at 0x36190AD0):
+            // Payload after [opcode(2)][seq(2)] is:
+            //   [0]    = byte Language
+            //   [1..2] = ushort SubPacketLength (equals payload.Length)
+            //   [3..]  = szUserID\0 + szPassword\0 + szLocalIP(8-byte MD5)\0 + ushort wIDCIndex
+            // Note: If Rakion.bin's .poly unpacker stub fails to strip argv[0] from lpCmdLine,
+            // szUserID at [3..] will be the quoted executable path ("C:\...\Rakion.bin").
+            ushort subPacketLen = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(1, 2));
+            if (payload.Length >= 6 && subPacketLen == payload.Length && payload[3] != 0)
+            {
+                var retailSubReader = new PacketReader(payload.Slice(3));
+                string userIdOrPath = retailSubReader.ReadNullTerminatedString();
+                string secondToken = retailSubReader.Remaining > 0 ? retailSubReader.ReadNullTerminatedString() : string.Empty;
+                string thirdToken = retailSubReader.Remaining > 0 ? retailSubReader.ReadNullTerminatedString() : string.Empty;
+                ushort idcIndex = retailSubReader.Remaining >= 2 ? retailSubReader.ReadUInt16() : (ushort)0;
+
+                if (userIdOrPath.Contains(":\\", System.StringComparison.Ordinal))
+                {
+                    packet = new WorldLoginRequestPacket(0, secondToken, thirdToken, userIdOrPath, idcIndex);
+                    return true;
+                }
+
+                packet = new WorldLoginRequestPacket(0, userIdOrPath, secondToken, thirdToken, idcIndex);
+                return true;
+            }
+
+            // Fallback search if executable path appears at a different offset:
             int colonBackslash = payload.IndexOf(":\\"u8);
             if (colonBackslash >= 1)
             {
@@ -45,7 +69,6 @@ public sealed record WorldLoginRequestPacket(
                     string clientPath = pathReader.ReadNullTerminatedString();
                     if (!string.IsNullOrEmpty(clientPath))
                     {
-                        // Skip any null bytes or alignment zeroes between clientPath and username
                         while (pathReader.Remaining > 0 && pathReader.PeekByte() == 0)
                         {
                             pathReader.ReadByte();
@@ -61,7 +84,6 @@ public sealed record WorldLoginRequestPacket(
                         string pass = pathReader.Remaining > 0 ? pathReader.ReadNullTerminatedString() : string.Empty;
                         ushort country = pathReader.Remaining >= 2 ? pathReader.ReadUInt16() : (ushort)0;
 
-                        // Emit packet so handler can use credentials or resolve via active Broker session ticket
                         packet = new WorldLoginRequestPacket(0, user, pass, clientPath, country);
                         return true;
                     }
