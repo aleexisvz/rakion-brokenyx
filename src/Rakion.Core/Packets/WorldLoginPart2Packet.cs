@@ -56,10 +56,10 @@ public sealed record WorldLoginPart2Packet(
                 writer.WriteByte((byte)c.Class);
                 writer.WriteUInt32(c.LevelPoint);
                 writer.WriteUInt32(c.Draw);
-                writer.WriteByte(c.Level);
-                writer.WriteByte(c.Slot);
-                writer.WriteByte(0); // Flag
-                writer.WriteUInt32(0); // Rank
+                writer.WriteByte(0); // Flag (engine.dll 0x361961D9)
+                writer.WriteByte(c.Level); // Level (engine.dll 0x361961FC)
+                writer.WriteByte(c.Slot); // Slot (engine.dll 0x3619620A)
+                writer.WriteUInt32(0); // Rank (engine.dll 0x3619621B)
                 writer.WriteUInt16(c.Hit1);
                 writer.WriteUInt16(c.Hit2);
                 writer.WriteUInt16(c.Hit3);

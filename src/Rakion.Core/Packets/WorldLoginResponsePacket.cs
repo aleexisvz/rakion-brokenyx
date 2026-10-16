@@ -116,10 +116,10 @@ public sealed record WorldLoginResponsePacket(
             writer.WriteByte((byte)c.Class);
             writer.WriteUInt32(c.LevelPoint);
             writer.WriteUInt32(c.Draw);
-            writer.WriteByte(c.Level);
-            writer.WriteByte(c.Slot);
-            writer.WriteByte(0); // Flag
-            writer.WriteUInt32(0); // Rank
+            writer.WriteByte(0); // Flag (engine.dll 0x361961D9)
+            writer.WriteByte(c.Level); // Level (engine.dll 0x361961FC)
+            writer.WriteByte(c.Slot); // Slot (engine.dll 0x3619620A)
+            writer.WriteUInt32(0); // Rank (engine.dll 0x3619621B)
             writer.WriteUInt16(c.Hit1);
             writer.WriteUInt16(c.Hit2);
             writer.WriteUInt16(c.Hit3);
@@ -209,9 +209,9 @@ public sealed record WorldLoginResponsePacket(
                     byte classId = r.ReadByte();
                     uint levelPoint = r.ReadUInt32();
                     uint draw = r.ReadUInt32();
+                    byte flag = r.ReadByte();
                     byte level = r.ReadByte();
                     byte charSlot = r.ReadByte();
-                    byte flag = r.ReadByte();
                     uint rank = r.ReadUInt32();
                     ushort hit1 = r.ReadUInt16();
                     ushort hit2 = r.ReadUInt16();
