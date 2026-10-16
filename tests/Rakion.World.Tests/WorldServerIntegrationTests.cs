@@ -482,4 +482,61 @@ public sealed class WorldServerIntegrationTests
         Assert.AreEqual(1, flag2);
         Assert.AreEqual(testCookie, cookie2);
     }
+
+    [TestMethod]
+    public async Task UdpSuccess_EncryptedHandshake_RespondsWithUdpSuccessConfirmation()
+    {
+        // Arrange
+        var user = await CreateUserAsync("UdpPlayer");
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        // 1. Authenticate with encrypted WorldLogin handshake
+        using var plainWriter = new PacketWriter();
+        plainWriter.WriteByte(0);
+        plainWriter.WriteUInt32(ticket);
+        plainWriter.WriteZeroBytes(12);
+        plainWriter.WriteNullTerminatedString(user.Username);
+
+        byte[] encryptedLogin = RakionWorldCrypto.EncryptPacket(1, (ushort)RakionOpcode.WorldLogin, plainWriter.WrittenSpan);
+        await stream.WriteAsync(encryptedLogin);
+        await stream.FlushAsync();
+
+        // Consume LoginResponse (Part 1) and Part 2
+        byte[] lenBuffer = new byte[2];
+        await ReadExactAsync(stream, lenBuffer);
+        ushort wireLen1 = BinaryPrimitives.ReadUInt16LittleEndian(lenBuffer);
+        byte[] cipher1 = new byte[wireLen1 - 2];
+        await ReadExactAsync(stream, cipher1);
+
+        await ReadExactAsync(stream, lenBuffer);
+        ushort wireLen2 = BinaryPrimitives.ReadUInt16LittleEndian(lenBuffer);
+        byte[] cipher2 = new byte[wireLen2 - 2];
+        await ReadExactAsync(stream, cipher2);
+
+        // 2. Client sends Opcode 0x000E (SendSuccessUDP) after completing UDP probes
+        byte[] clientUdpReport = [0x00]; // status == 0
+        byte[] encryptedUdpReport = RakionWorldCrypto.EncryptPacket(1, (ushort)RakionOpcode.UdpSuccess, clientUdpReport);
+        await stream.WriteAsync(encryptedUdpReport);
+        await stream.FlushAsync();
+
+        // 3. WorldServer responds with encrypted Opcode 0x000E confirmation
+        await ReadExactAsync(stream, lenBuffer);
+        ushort wireLen3 = BinaryPrimitives.ReadUInt16LittleEndian(lenBuffer);
+        byte[] cipher3 = new byte[wireLen3 - 2];
+        await ReadExactAsync(stream, cipher3);
+
+        byte[] decBuffer3 = new byte[cipher3.Length];
+        bool ok3 = RakionWorldCrypto.TryDecrypt(cipher3, decBuffer3, out int decLen3);
+        Assert.IsTrue(ok3);
+
+        ushort op3 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer3.AsSpan(0, 2));
+        Assert.AreEqual((ushort)RakionOpcode.UdpSuccess, op3);
+
+        bool parsed3 = UdpSuccessPacket.TryParse(decBuffer3.AsSpan(4, decLen3 - 4), out var udpConfirmation);
+        Assert.IsTrue(parsed3);
+        Assert.AreEqual((byte)0, udpConfirmation.Result, "UdpSuccess confirmation Result must be 0 (Success)");
+    }
 }

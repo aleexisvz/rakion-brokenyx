@@ -124,6 +124,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 HandleKeepAlive(session);
                 break;
 
+            case RakionOpcode.UdpSuccess:
+                await HandleUdpSuccessAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
             case RakionOpcode.CharacterCreate:
             case RakionOpcode.CharacterCreateRetail:
                 await HandleCharacterCreateAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
@@ -342,6 +346,41 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     {
         session.LastKeepAliveUtc = DateTime.UtcNow;
         _logger.LogTrace("[{ConnectionId}] KeepAlive ping received.", session.Connection.ConnectionId);
+    }
+
+    private async ValueTask HandleUdpSuccessAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[{ConnectionId}] Client reported UDP success/probe completion (Opcode 0x000E, {Length} bytes).",
+            session.Connection.ConnectionId,
+            payload.Length);
+
+        uint clientIpInt = 0x0100007F; // Default 127.0.0.1
+        if (session.Connection.RemoteEndPoint is IPEndPoint ipEp)
+        {
+            byte[] addressBytes = ipEp.Address.GetAddressBytes();
+            if (addressBytes.Length == 4)
+            {
+                clientIpInt = BinaryPrimitives.ReadUInt32LittleEndian(addressBytes);
+            }
+        }
+
+        var response = new UdpSuccessPacket(
+            Result: 0,
+            Ip1: clientIpInt,
+            Port1: (ushort)_options.Value.UdpPort1,
+            Ip2: clientIpInt,
+            Port2: (ushort)_options.Value.UdpPort2);
+
+        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation(
+            "[{ConnectionId}] Sent UdpSuccess confirmation (Opcode 0x000E, Result: 0, UDP1: {Port1}, UDP2: {Port2}).",
+            session.Connection.ConnectionId,
+            _options.Value.UdpPort1,
+            _options.Value.UdpPort2);
     }
 
     private async ValueTask HandleCharacterCreateAsync(

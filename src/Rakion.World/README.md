@@ -19,9 +19,12 @@
   - **`SendCharacterCreate` (`0x000D`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y le asigna el equipamiento inicial.
   - **`SendCharacterDelete` (`0x000F`):** Verifica la clave de borrado y retira el personaje.
   - **`SendCharacterSelect` (`0x0011`):** Selecciona el personaje activo y autoriza la transición a la pantalla de lobby/canales.
+  - **`UdpSuccess` (`0x000E`):** Al concluir el sondeo UDP de hole punching, el cliente emite Opcode `0x000E`. El servidor confirma con la estructura de 13 bytes (`Result = 0`, `IP1`, `Port1`, `IP2`, `Port2`), cerrando el temporizador y el diálogo modal *"Waiting for response from the world."* de forma definitiva.
 
 ### 3. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
 - Procesa datagramas UDP enviados por el cliente al entrar a la selección de personaje (`CMenuSelectCharacter`):
   - Recibe `0x0201` en el puerto 40708 (UDP 1) y `0x0202` en el puerto 40709 (UDP 2).
   - Responde con el datagrama de 12 bytes reflejando la Cookie enviada por el cliente y las banderas de puerto correspondientes (`0` para UDP 1, `1` para UDP 2).
-  - Esta respuesta le indica al cliente v258 que la conectividad hacia el mundo está abierta, cerrando el diálogo modal *"Waiting for response from the world."* y evitando el timeout de desconexión (error 777: *"Network connection to server is blocked"*).
+  - Esta respuesta le indica al cliente v258 que la conectividad hacia el mundo está abierta, preparando el envío de `0x000E` (`UdpSuccess`) y evitando el timeout de desconexión (error 777 / 415: *"Network connection is blocked"*).
+
+
