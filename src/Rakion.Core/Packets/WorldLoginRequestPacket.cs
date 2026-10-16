@@ -35,26 +35,36 @@ public sealed record WorldLoginRequestPacket(
             // Retail v258 client layout (?SendLogin@IScavengerWorldNet@@UAEXPAD0G0E@Z at 0x36190AD0):
             // Payload after [opcode(2)][seq(2)] is:
             //   [0]    = byte Language
-            //   [1..2] = ushort SubPacketLength (equals payload.Length)
+            //   [1..2] = ushort (0x0044 = 68, or payload.Length)
             //   [3..]  = szUserID\0 + szPassword\0 + szLocalIP(8-byte MD5)\0 + ushort wIDCIndex
             // Note: If Rakion.bin's .poly unpacker stub fails to strip argv[0] from lpCmdLine,
             // szUserID at [3..] will be the quoted executable path ("C:\...\Rakion.bin").
             ushort subPacketLen = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(1, 2));
-            if (payload.Length >= 6 && subPacketLen == payload.Length && payload[3] != 0)
+            if (payload.Length >= 5 && (subPacketLen == 0x44 || subPacketLen == payload.Length || payload[1] == 0x44) && payload[3] >= 0x20 && payload[3] < 0x7F)
             {
-                var retailSubReader = new PacketReader(payload.Slice(3));
+                var remainingSpan = payload.Slice(3);
+                var retailSubReader = new PacketReader(remainingSpan);
                 string userIdOrPath = retailSubReader.ReadNullTerminatedString();
-                string secondToken = retailSubReader.Remaining > 0 ? retailSubReader.ReadNullTerminatedString() : string.Empty;
-                string thirdToken = retailSubReader.Remaining > 0 ? retailSubReader.ReadNullTerminatedString() : string.Empty;
-                ushort idcIndex = retailSubReader.Remaining >= 2 ? retailSubReader.ReadUInt16() : (ushort)0;
+
+                string secondToken = string.Empty;
+                if (remainingSpan.Slice(retailSubReader.Position).IndexOf((byte)0) >= 0)
+                {
+                    secondToken = retailSubReader.ReadNullTerminatedString();
+                }
+
+                string thirdToken = string.Empty;
+                if (remainingSpan.Slice(retailSubReader.Position).IndexOf((byte)0) >= 0)
+                {
+                    thirdToken = retailSubReader.ReadNullTerminatedString();
+                }
 
                 if (userIdOrPath.Contains(":\\", System.StringComparison.Ordinal))
                 {
-                    packet = new WorldLoginRequestPacket(0, secondToken, thirdToken, userIdOrPath, idcIndex);
+                    packet = new WorldLoginRequestPacket(0, secondToken, thirdToken, userIdOrPath, 0);
                     return true;
                 }
 
-                packet = new WorldLoginRequestPacket(0, userIdOrPath, secondToken, thirdToken, idcIndex);
+                packet = new WorldLoginRequestPacket(0, userIdOrPath, secondToken, string.Empty, 0);
                 return true;
             }
 

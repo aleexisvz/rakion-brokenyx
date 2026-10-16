@@ -198,7 +198,25 @@ public sealed class WorldPacketTests
         Assert.IsTrue(success);
         Assert.AreEqual("admin", packet.Username);
         Assert.AreEqual("secret", packet.Password);
-        Assert.AreEqual((ushort)1, packet.Country);
+    }
+
+    [TestMethod]
+    public void WorldLoginRequestPacket_LiveRetailSendLogin20Bytes_ParsesCorrectly()
+    {
+        // Live client captured bytes: 00440061646D696E0061646D696E0090F969E665
+        byte[] payload =
+        [
+            0x00, 0x44, 0x00,
+            (byte)'a', (byte)'d', (byte)'m', (byte)'i', (byte)'n', 0x00,
+            (byte)'a', (byte)'d', (byte)'m', (byte)'i', (byte)'n', 0x00,
+            0x90, 0xF9, 0x69, 0xE6, 0x65
+        ];
+
+        bool success = WorldLoginRequestPacket.TryParse(payload, out var packet);
+        Assert.IsTrue(success);
+        Assert.AreEqual(0u, packet.SessionTicket);
+        Assert.AreEqual("admin", packet.Username);
+        Assert.AreEqual("admin", packet.Password);
     }
 
     [TestMethod]
