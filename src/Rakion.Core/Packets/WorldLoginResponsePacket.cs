@@ -61,13 +61,13 @@ public sealed record WorldLoginResponsePacket(
         // [15..18] RankGrade (uint = 0)
         // [19..]   Username (null-terminated string)
         writer.WriteUInt32(UserId);
-        writer.WriteUInt16(0); // country
-        writer.WriteUInt32(Gold);
-        writer.WriteUInt32(Cash);
-        writer.WriteUInt32(0); // rankgrade
+        writer.WriteUInt16(0); // Country (engine.dll 0x36195F6C)
+        writer.WriteUInt32(0); // Aux uint32 (engine.dll 0x36195F76)
+        writer.WriteUInt32(0); // Aux uint32 (engine.dll 0x36195F84)
+        writer.WriteUInt32(0); // Aux uint32 (engine.dll 0x36195F92)
         writer.WriteNullTerminatedString(Username ?? string.Empty);
 
-        // Fixed auxiliary blocks matching RakionWorldServ.exe 0x411a59..0x411c50
+        // Fixed auxiliary blocks matching RakionWorldServ.exe 0x00426DD5..0x00427052 and engine.dll 0x36195FB8..0x3619610C
         writer.WriteUInt32(0);
         writer.WriteUInt16(0);
         writer.WriteUInt32(0);
@@ -80,12 +80,12 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteByte(0);
-        writer.WriteByte(0); // Buddy count
-        writer.WriteUInt16(0);
-        writer.WriteUInt32(0);
-        writer.WriteUInt32(0);
-        writer.WriteByte(UnlockedSlots);
-        writer.WriteByte(0); // Extra byte al
+        writer.WriteByte(0); // Buddy count (engine.dll 0x3619608D)
+        writer.WriteUInt16(0); // Post-buddy uint16 (engine.dll 0x361960D0)
+        writer.WriteUInt32(Gold); // Gold (engine.dll 0x361960DA -> [AccountInfo + 0x64], RakionWorldServ 0x00427008)
+        writer.WriteUInt32(Cash); // Cash (engine.dll 0x361960E8 -> [AccountInfo + 0x68], RakionWorldServ 0x00427002)
+        writer.WriteByte(UnlockedSlots); // UnlockedSlots (engine.dll 0x361960F5 -> [AccountInfo + 0x6C], RakionWorldServ 0x00427032)
+        writer.WriteByte(0); // SelectedSlotIndex (engine.dll 0x36196100 -> [esp + 0x50], RakionWorldServ 0x00427050)
 
         var list = Characters ?? [];
         int totalSlots = Math.Min((int)UnlockedSlots, 4);
@@ -104,39 +104,40 @@ public sealed record WorldLoginResponsePacket(
 
             if (c is null || c.Id == 0)
             {
-                writer.WriteUInt32(0); // Empty slot marker for client loop
+                writer.WriteUInt32(0); // Empty slot marker for client loop (engine.dll 0x36196143)
                 continue;
             }
 
-            writer.WriteUInt32(c.Id);
-            writer.WriteNullTerminatedString(c.Name);
-            writer.WriteUInt32(c.Exp);
-            writer.WriteUInt32(c.Win);
-            writer.WriteUInt32(c.Lose);
-            writer.WriteByte((byte)c.Class);
-            writer.WriteUInt32(c.LevelPoint);
-            writer.WriteUInt32(c.Draw);
-            writer.WriteByte(0); // Flag (engine.dll 0x361961D9)
-            writer.WriteByte(c.Level); // Level (engine.dll 0x361961FC)
-            writer.WriteByte(c.Slot); // Slot (engine.dll 0x3619620A)
-            writer.WriteUInt32(0); // Rank (engine.dll 0x3619621B)
-            writer.WriteUInt16(c.Hit1);
-            writer.WriteUInt16(c.Hit2);
-            writer.WriteUInt16(c.Hit3);
-            writer.WriteUInt16(c.Hit4);
-            writer.WriteUInt16(c.Chit);
-            writer.WriteUInt16(c.Hp);
-            writer.WriteUInt16(c.Ap);
-            writer.WriteUInt16(c.AttackSpeed);
-            writer.WriteUInt16(c.Speed);
-            writer.WriteUInt16(c.MaxCp);
-            writer.WriteUInt16(0);
-            writer.WriteZeroBytes(0x26);
-            writer.WriteZeroBytes(0x13);
-            writer.WriteZeroBytes(0x4c);
-            writer.WriteZeroBytes(0x4c);
-            writer.WriteZeroBytes(0x64);
-            writer.WriteByte(0);
+            // Observed in engine.dll 0x36196143..0x3619655E and RakionWorldServ.exe 0x00427090..0x00427518:
+            writer.WriteUInt32(c.Id);                 // [CharacterRecord + 0x00] Id
+            writer.WriteNullTerminatedString(c.Name); // [CharacterRecord + 0x10] Name
+            writer.WriteUInt32(c.Win);                // [CharacterRecord + 0x04] Win (engine.dll 0x3619617B)
+            writer.WriteUInt32(c.Lose);               // [CharacterRecord + 0x08] Lose (engine.dll 0x3619618B)
+            writer.WriteUInt32(c.Draw);               // [CharacterRecord + 0x0C] Draw (engine.dll 0x3619619B)
+            writer.WriteByte(0);                      // [CharacterRecord + 0xB0] RankGrade (engine.dll 0x361961AB)
+            writer.WriteUInt32(0);                    // [CharacterRecord + 0xB4] TotalRank (engine.dll 0x361961B9)
+            writer.WriteUInt32(0);                    // [CharacterRecord + 0xB8] ClassRank (engine.dll 0x361961C9)
+            writer.WriteByte(0);                      // [CharacterRecord + 0x24] Auth (engine.dll 0x361961D9)
+            writer.WriteByte((byte)c.Class);          // [CharacterRecord + 0x2C] Class (engine.dll 0x361961FF, RakionWorldServ 0x004271E5)
+            writer.WriteByte(c.Level);                // [CharacterRecord + 0x2D] Level (engine.dll 0x3619620D, RakionWorldServ 0x004271ED)
+            writer.WriteUInt32(c.Exp);                // [CharacterRecord + 0x30] Exp (engine.dll 0x3619621B, RakionWorldServ 0x004271FF)
+            writer.WriteUInt16((ushort)c.LevelPoint); // [CharacterRecord + 0x34] LevelPoint (ushort, engine.dll 0x3619622B, RakionWorldServ 0x0042730E)
+            writer.WriteUInt16(c.Hit1);               // [CharacterRecord + 0x3C] Hit1 (engine.dll 0x3619623D)
+            writer.WriteUInt16(c.Hit2);               // [CharacterRecord + 0x48] Hit2 (engine.dll 0x36196271)
+            writer.WriteUInt16(c.Hit3);               // [CharacterRecord + 0x54] Hit3 (engine.dll 0x361962A5)
+            writer.WriteUInt16(c.Hit4);               // [CharacterRecord + 0x60] Hit4 (engine.dll 0x361962D9)
+            writer.WriteUInt16(c.Chit);               // [CharacterRecord + 0x6C] Chit (engine.dll 0x3619630D)
+            writer.WriteUInt16(c.Hp);                 // [CharacterRecord + 0x78] Hp (engine.dll 0x36196341)
+            writer.WriteUInt16(c.Ap);                 // [CharacterRecord + 0x84] Ap (engine.dll 0x36196375)
+            writer.WriteUInt16(c.AttackSpeed);        // [CharacterRecord + 0x90] AttackSpeed (engine.dll 0x361963A9)
+            writer.WriteUInt16(c.Speed);              // [CharacterRecord + 0x9C] Speed (engine.dll 0x361963DD)
+            writer.WriteUInt16(c.MaxCp);              // [CharacterRecord + 0xA8] MaxCp (engine.dll 0x36196411)
+            writer.WriteZeroBytes(0x26);              // 19 * uint16 EquippedItemIds (engine.dll 0x36196450)
+            writer.WriteZeroBytes(0x13);              // 19 * byte EquippedItemLevels (engine.dll 0x36196472)
+            writer.WriteZeroBytes(0x4c);              // 19 * uint32 EquippedItemSerials (engine.dll 0x361964B0)
+            writer.WriteZeroBytes(0x4c);              // 19 * uint32 EquippedItemLimitTimes (engine.dll 0x361964F0)
+            writer.WriteZeroBytes(0x64);              // 100 * byte StageRanks (engine.dll 0x36196530)
+            writer.WriteByte(3);                      // [CharacterRecord + 0x41C] PotionSlotCount (engine.dll 0x36196547, RakionWorldServ 0x00427514)
         }
     }
 
@@ -163,9 +164,9 @@ public sealed record WorldLoginResponsePacket(
                 var r = new PacketReader(payload.Slice(1));
                 uint userId = r.ReadUInt32();
                 ushort country = r.ReadUInt16();
-                uint gold = r.ReadUInt32();
-                uint cash = r.ReadUInt32();
-                uint rankGrade = r.ReadUInt32();
+                r.ReadUInt32();
+                r.ReadUInt32();
+                r.ReadUInt32();
                 string username = r.ReadNullTerminatedString();
 
                 r.ReadUInt32();
@@ -187,8 +188,8 @@ public sealed record WorldLoginResponsePacket(
                     r.ReadNullTerminatedString();
                 }
                 r.ReadUInt16();
-                r.ReadUInt32();
-                r.ReadUInt32();
+                uint gold = r.ReadUInt32();
+                uint cash = r.ReadUInt32();
                 byte slots = r.ReadByte();
                 byte extraFlag = r.ReadByte();
                 int totalSlots = Math.Min((int)slots, 4);
@@ -203,16 +204,17 @@ public sealed record WorldLoginResponsePacket(
                     }
 
                     string name = r.ReadNullTerminatedString();
-                    uint exp = r.ReadUInt32();
                     uint win = r.ReadUInt32();
                     uint lose = r.ReadUInt32();
-                    byte classId = r.ReadByte();
-                    uint levelPoint = r.ReadUInt32();
                     uint draw = r.ReadUInt32();
-                    byte flag = r.ReadByte();
+                    byte rankGrade = r.ReadByte();
+                    uint totalRank = r.ReadUInt32();
+                    uint classRank = r.ReadUInt32();
+                    byte auth = r.ReadByte();
+                    byte classId = r.ReadByte();
                     byte level = r.ReadByte();
-                    byte charSlot = r.ReadByte();
-                    uint rank = r.ReadUInt32();
+                    uint exp = r.ReadUInt32();
+                    uint levelPoint = r.ReadUInt16();
                     ushort hit1 = r.ReadUInt16();
                     ushort hit2 = r.ReadUInt16();
                     ushort hit3 = r.ReadUInt16();
@@ -223,11 +225,10 @@ public sealed record WorldLoginResponsePacket(
                     ushort attackSpeed = r.ReadUInt16();
                     ushort speed = r.ReadUInt16();
                     ushort maxCp = r.ReadUInt16();
-                    r.ReadUInt16();
                     r.Skip(0x26 + 0x13 + 0x4c * 2 + 0x64 + 1);
 
                     chars.Add(new CharacterSummary(
-                        id, name, charSlot, (CharacterClass)classId, level, exp, levelPoint,
+                        id, name, (byte)slot, (CharacterClass)classId, level, exp, levelPoint,
                         hit1, hit2, hit3, hit4, chit, hp, ap, attackSpeed, speed, maxCp,
                         win, lose, draw));
                 }

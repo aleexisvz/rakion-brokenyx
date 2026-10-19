@@ -71,12 +71,15 @@ public sealed class WorldPacketTests
         var c0 = roundtrip.Characters[0];
         Assert.AreEqual("NinjaGirl", c0.Name);
         Assert.AreEqual(CharacterClass.Ninja, c0.Class);
+        Assert.AreEqual((byte)0, c0.Slot);
         Assert.AreEqual((byte)15, c0.Level);
         Assert.AreEqual(130, c0.Speed);
 
         var c1 = roundtrip.Characters[1];
         Assert.AreEqual("IronGolem", c1.Name);
         Assert.AreEqual(CharacterClass.Blacksmith, c1.Class);
+        Assert.AreEqual((byte)1, c1.Slot);
+        Assert.AreEqual((byte)8, c1.Level);
     }
 
     [TestMethod]
@@ -273,8 +276,7 @@ public sealed class WorldPacketTests
     [TestMethod]
     public void WorldLoginResponsePacket_CharacterFieldOrder_MatchesEngineDllDisassembly()
     {
-        // Verified against engine.dll 0x361961C9..0x36196225:
-        // Draw (4 bytes) -> Flag (1 byte) -> Level (1 byte) -> Slot (1 byte) -> Rank (4 bytes) -> Hit1 (2 bytes)...
+        // Verified against engine.dll 0x36195E10..0x3619655E and RakionWorldServ.exe 0x00426B30..0x00427518:
         const byte expectedLevel = 42;
         const byte expectedSlot = 0;
         const uint expectedDraw = 7;
@@ -282,7 +284,7 @@ public sealed class WorldPacketTests
         const uint expectedWin = 99;
         const uint expectedLose = 11;
         const byte expectedClass = (byte)CharacterClass.Ninja;
-        const uint expectedLevelPoint = 3;
+        const ushort expectedLevelPoint = 3;
 
         var character = new CharacterSummary(
             Id: 999,
@@ -313,12 +315,7 @@ public sealed class WorldPacketTests
         Assert.AreEqual((byte)0, res);
         uint uId = reader.ReadUInt32();
         Assert.AreEqual(1u, uId);
-        reader.Skip(2); // country
-        uint gold = reader.ReadUInt32();
-        Assert.AreEqual(100u, gold);
-        uint cash = reader.ReadUInt32();
-        Assert.AreEqual(50u, cash);
-        reader.Skip(4); // rankGrade
+        reader.Skip(2 + 4 + 4 + 4); // Country + 3 aux uint32s
         reader.ReadNullTerminatedString(); // Username
 
         // Auxiliary blocks matching RakionWorldServ
@@ -328,20 +325,23 @@ public sealed class WorldPacketTests
         reader.Skip(4 + 2);
         reader.ReadNullTerminatedString();
         reader.ReadNullTerminatedString();
-        reader.Skip(1 + 1 + 2 + 4 + 4);
+        reader.Skip(1 + 1 + 2); // flag + buddyCount(0) + post-buddy uint16
+        uint gold = reader.ReadUInt32();
+        Assert.AreEqual(100u, gold, "Gold must be at engine.dll 0x361960DA ([AccountInfo + 0x64])");
+        uint cash = reader.ReadUInt32();
+        Assert.AreEqual(50u, cash, "Cash must be at engine.dll 0x361960E8 ([AccountInfo + 0x68])");
         byte slots = reader.ReadByte();
         Assert.AreEqual((byte)1, slots);
         byte extra = reader.ReadByte();
+        Assert.AreEqual((byte)0, extra);
 
-        // Slot 0 Character Record
+        // Slot 0 Character Record (339 bytes total when Name is "T\0")
+        int recordStart = reader.Remaining;
         uint id = reader.ReadUInt32();
         Assert.AreEqual(999u, id);
 
         string name = reader.ReadNullTerminatedString();
         Assert.AreEqual("T", name);
-
-        uint exp = reader.ReadUInt32();
-        Assert.AreEqual(expectedExp, exp);
 
         uint win = reader.ReadUInt32();
         Assert.AreEqual(expectedWin, win);
@@ -349,28 +349,41 @@ public sealed class WorldPacketTests
         uint lose = reader.ReadUInt32();
         Assert.AreEqual(expectedLose, lose);
 
-        byte classId = reader.ReadByte();
-        Assert.AreEqual(expectedClass, classId);
-
-        uint lp = reader.ReadUInt32();
-        Assert.AreEqual(expectedLevelPoint, lp);
-
         uint draw = reader.ReadUInt32();
         Assert.AreEqual(expectedDraw, draw);
 
-        // CRITICAL CHECK: In engine.dll 0x361961D9:
-        // Offset immediately after Draw is Flag (1 byte), followed by Level (1 byte), followed by Slot (1 byte), followed by Rank (4 bytes)
-        byte flag = reader.ReadByte();
-        Assert.AreEqual((byte)0, flag, "Flag must be 0 immediately after Draw (engine.dll 0x361961D9)");
+        byte rankGrade = reader.ReadByte();
+        Assert.AreEqual((byte)0, rankGrade);
+
+        uint totalRank = reader.ReadUInt32();
+        Assert.AreEqual(0u, totalRank);
+
+        uint classRank = reader.ReadUInt32();
+        Assert.AreEqual(0u, classRank);
+
+        byte auth = reader.ReadByte();
+        Assert.AreEqual((byte)0, auth, "Auth must be 0 immediately after ClassRank (engine.dll 0x361961D9)");
+
+        byte classId = reader.ReadByte();
+        Assert.AreEqual(expectedClass, classId, "Class must follow Auth (engine.dll 0x361961FF, [CharacterRecord + 0x2C])");
 
         byte level = reader.ReadByte();
-        Assert.AreEqual(expectedLevel, level, "Level must follow Flag (engine.dll 0x361961FC)");
+        Assert.AreEqual(expectedLevel, level, "Level must follow Class (engine.dll 0x3619620D, [CharacterRecord + 0x2D])");
 
-        byte slot = reader.ReadByte();
-        Assert.AreEqual(expectedSlot, slot, "Slot must follow Level (engine.dll 0x3619620A)");
+        uint exp = reader.ReadUInt32();
+        Assert.AreEqual(expectedExp, exp, "Exp must follow Level (engine.dll 0x3619621B, [CharacterRecord + 0x30])");
 
-        uint rank = reader.ReadUInt32();
-        Assert.AreEqual(0u, rank, "Rank must follow Slot (engine.dll 0x3619621B)");
+        ushort lp = reader.ReadUInt16();
+        Assert.AreEqual(expectedLevelPoint, lp, "LevelPoint is ushort (2 bytes) at engine.dll 0x3619622B ([CharacterRecord + 0x34])");
+
+        // 10 stat ushorts (Hit1..MaxCp) = 20 bytes
+        reader.Skip(20);
+        // Equipment + StageRanks = 0x26 + 0x13 + 0x4C + 0x4C + 0x64 = 309 bytes
+        reader.Skip(0x26 + 0x13 + 0x4C + 0x4C + 0x64);
+        byte potionSlots = reader.ReadByte();
+        Assert.AreEqual((byte)3, potionSlots);
+        Assert.AreEqual(0, reader.Remaining, "No trailing misaligned bytes after character record");
+        Assert.AreEqual(55 + 2 + 309, recordStart - reader.Remaining);
     }
 }
 

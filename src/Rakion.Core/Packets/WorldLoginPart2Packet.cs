@@ -48,35 +48,36 @@ public sealed record WorldLoginPart2Packet(
                     continue;
                 }
 
-                writer.WriteUInt32(c.Id);
-                writer.WriteNullTerminatedString(c.Name);
-                writer.WriteUInt32(c.Exp);
-                writer.WriteUInt32(c.Win);
-                writer.WriteUInt32(c.Lose);
-                writer.WriteByte((byte)c.Class);
-                writer.WriteUInt32(c.LevelPoint);
-                writer.WriteUInt32(c.Draw);
-                writer.WriteByte(0); // Flag (engine.dll 0x361961D9)
-                writer.WriteByte(c.Level); // Level (engine.dll 0x361961FC)
-                writer.WriteByte(c.Slot); // Slot (engine.dll 0x3619620A)
-                writer.WriteUInt32(0); // Rank (engine.dll 0x3619621B)
-                writer.WriteUInt16(c.Hit1);
-                writer.WriteUInt16(c.Hit2);
-                writer.WriteUInt16(c.Hit3);
-                writer.WriteUInt16(c.Hit4);
-                writer.WriteUInt16(c.Chit);
-                writer.WriteUInt16(c.Hp);
-                writer.WriteUInt16(c.Ap);
-                writer.WriteUInt16(c.AttackSpeed);
-                writer.WriteUInt16(c.Speed);
-                writer.WriteUInt16(c.MaxCp);
-                writer.WriteUInt16(0);
-                writer.WriteZeroBytes(0x26);
-                writer.WriteZeroBytes(0x13);
-                writer.WriteZeroBytes(0x4c);
-                writer.WriteZeroBytes(0x4c);
-                writer.WriteZeroBytes(0x64);
-                writer.WriteByte(0);
+                // Observed in engine.dll 0x36196720..0x36196B3B and RakionWorldServ.exe 0x00426365..0x00426AC0:
+                writer.WriteUInt32(c.Id);                 // [CharacterRecord + 0x00] Id
+                writer.WriteNullTerminatedString(c.Name); // [CharacterRecord + 0x10] Name
+                writer.WriteUInt32(c.Win);                // [CharacterRecord + 0x04] Win
+                writer.WriteUInt32(c.Lose);               // [CharacterRecord + 0x08] Lose
+                writer.WriteUInt32(c.Draw);               // [CharacterRecord + 0x0C] Draw
+                writer.WriteByte(0);                      // [CharacterRecord + 0xB0] RankGrade
+                writer.WriteUInt32(0);                    // [CharacterRecord + 0xB4] TotalRank
+                writer.WriteUInt32(0);                    // [CharacterRecord + 0xB8] ClassRank
+                writer.WriteByte(0);                      // [CharacterRecord + 0x24] Auth
+                writer.WriteByte((byte)c.Class);          // [CharacterRecord + 0x2C] Class
+                writer.WriteByte(c.Level);                // [CharacterRecord + 0x2D] Level
+                writer.WriteUInt32(c.Exp);                // [CharacterRecord + 0x30] Exp
+                writer.WriteUInt16((ushort)c.LevelPoint); // [CharacterRecord + 0x34] LevelPoint (ushort)
+                writer.WriteUInt16(c.Hit1);               // [CharacterRecord + 0x3C] Hit1
+                writer.WriteUInt16(c.Hit2);               // [CharacterRecord + 0x48] Hit2
+                writer.WriteUInt16(c.Hit3);               // [CharacterRecord + 0x54] Hit3
+                writer.WriteUInt16(c.Hit4);               // [CharacterRecord + 0x60] Hit4
+                writer.WriteUInt16(c.Chit);               // [CharacterRecord + 0x6C] Chit
+                writer.WriteUInt16(c.Hp);                 // [CharacterRecord + 0x78] Hp
+                writer.WriteUInt16(c.Ap);                 // [CharacterRecord + 0x84] Ap
+                writer.WriteUInt16(c.AttackSpeed);        // [CharacterRecord + 0x90] AttackSpeed
+                writer.WriteUInt16(c.Speed);              // [CharacterRecord + 0x9C] Speed
+                writer.WriteUInt16(c.MaxCp);              // [CharacterRecord + 0xA8] MaxCp
+                writer.WriteZeroBytes(0x26);              // 19 * uint16 EquippedItemIds
+                writer.WriteZeroBytes(0x13);              // 19 * byte EquippedItemLevels
+                writer.WriteZeroBytes(0x4c);              // 19 * uint32 EquippedItemSerials
+                writer.WriteZeroBytes(0x4c);              // 19 * uint32 EquippedItemLimitTimes
+                writer.WriteZeroBytes(0x64);              // 100 * byte StageRanks
+                writer.WriteByte(3);                      // [CharacterRecord + 0x41C] PotionSlotCount
             }
         }
 
