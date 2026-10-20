@@ -37,7 +37,7 @@ public sealed record WorldLoginResponsePacket(
     uint UserId = 0,
     uint Gold = 0,
     uint Cash = 0,
-    byte UnlockedSlots = 4,
+    byte UnlockedSlots = 3,
     IReadOnlyList<CharacterSummary>? Characters = null,
     string Username = "",
     ushort ResponseOpcode = (ushort)RakionOpcode.WorldLogin) : IPacket
@@ -62,9 +62,9 @@ public sealed record WorldLoginResponsePacket(
         // [19..]   Username (null-terminated string)
         writer.WriteUInt32(UserId);
         writer.WriteUInt16(0); // Country (engine.dll 0x36195F6C)
-        writer.WriteUInt32(0); // Aux uint32 (engine.dll 0x36195F76)
-        writer.WriteUInt32(0); // Aux uint32 (engine.dll 0x36195F84)
-        writer.WriteUInt32(0); // Aux uint32 (engine.dll 0x36195F92)
+        writer.WriteUInt32(Gold); // [7..10] Gold (engine.dll 0x36195F1F -> [esp + 0x30])
+        writer.WriteUInt32(Cash); // [11..14] Cash (engine.dll 0x36195F30 -> [esp + 0x4C])
+        writer.WriteUInt32(0); // [15..18] RankGrade (engine.dll 0x36195F43)
         writer.WriteNullTerminatedString(Username ?? string.Empty);
 
         // Fixed auxiliary blocks matching RakionWorldServ.exe 0x00426DD5..0x00427052 and engine.dll 0x36195FB8..0x3619610C
@@ -164,9 +164,9 @@ public sealed record WorldLoginResponsePacket(
                 var r = new PacketReader(payload.Slice(1));
                 uint userId = r.ReadUInt32();
                 ushort country = r.ReadUInt16();
-                r.ReadUInt32();
-                r.ReadUInt32();
-                r.ReadUInt32();
+                uint gold = r.ReadUInt32();
+                uint cash = r.ReadUInt32();
+                uint rankGrade = r.ReadUInt32();
                 string username = r.ReadNullTerminatedString();
 
                 r.ReadUInt32();
@@ -188,8 +188,8 @@ public sealed record WorldLoginResponsePacket(
                     r.ReadNullTerminatedString();
                 }
                 r.ReadUInt16();
-                uint gold = r.ReadUInt32();
-                uint cash = r.ReadUInt32();
+                r.ReadUInt32(); // postBuddyGold
+                r.ReadUInt32(); // postBuddyCash
                 byte slots = r.ReadByte();
                 byte extraFlag = r.ReadByte();
                 int totalSlots = Math.Min((int)slots, 4);
@@ -207,7 +207,7 @@ public sealed record WorldLoginResponsePacket(
                     uint win = r.ReadUInt32();
                     uint lose = r.ReadUInt32();
                     uint draw = r.ReadUInt32();
-                    byte rankGrade = r.ReadByte();
+                    byte charRankGrade = r.ReadByte();
                     uint totalRank = r.ReadUInt32();
                     uint classRank = r.ReadUInt32();
                     byte auth = r.ReadByte();

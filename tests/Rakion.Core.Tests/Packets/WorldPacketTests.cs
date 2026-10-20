@@ -315,7 +315,14 @@ public sealed class WorldPacketTests
         Assert.AreEqual((byte)0, res);
         uint uId = reader.ReadUInt32();
         Assert.AreEqual(1u, uId);
-        reader.Skip(2 + 4 + 4 + 4); // Country + 3 aux uint32s
+        ushort country = reader.ReadUInt16();
+        Assert.AreEqual((ushort)0, country);
+        uint headerGold = reader.ReadUInt32();
+        Assert.AreEqual(100u, headerGold, "Gold must be at [7..10] (engine.dll 0x36195F1F)");
+        uint headerCash = reader.ReadUInt32();
+        Assert.AreEqual(50u, headerCash, "Cash must be at [11..14] (engine.dll 0x36195F30)");
+        uint headerRankGrade = reader.ReadUInt32();
+        Assert.AreEqual(0u, headerRankGrade, "RankGrade must be at [15..18] (engine.dll 0x36195F43)");
         reader.ReadNullTerminatedString(); // Username
 
         // Auxiliary blocks matching RakionWorldServ
@@ -352,8 +359,8 @@ public sealed class WorldPacketTests
         uint draw = reader.ReadUInt32();
         Assert.AreEqual(expectedDraw, draw);
 
-        byte rankGrade = reader.ReadByte();
-        Assert.AreEqual((byte)0, rankGrade);
+        byte charRankGrade = reader.ReadByte();
+        Assert.AreEqual((byte)0, charRankGrade);
 
         uint totalRank = reader.ReadUInt32();
         Assert.AreEqual(0u, totalRank);
@@ -383,7 +390,7 @@ public sealed class WorldPacketTests
         byte potionSlots = reader.ReadByte();
         Assert.AreEqual((byte)3, potionSlots);
         Assert.AreEqual(0, reader.Remaining, "No trailing misaligned bytes after character record");
-        Assert.AreEqual(55 + 2 + 309, recordStart - reader.Remaining);
+        Assert.AreEqual(366, recordStart - reader.Remaining);
     }
 }
 

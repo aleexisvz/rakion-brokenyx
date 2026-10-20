@@ -83,7 +83,7 @@ public sealed class UserRepository : IUserRepository
 
             const string insertGameInfoSql = """
                 INSERT INTO user_game_info (user_id, username, gold, tutorial_completed, stage_level_free, slot_count, bag_count, is_banned, country, created_at)
-                VALUES (@UserId, @Username, @Gold, 0, 0, 4, 1, 0, @Country, @CreatedAt);
+                VALUES (@UserId, @Username, @Gold, 0, 0, 3, 1, 0, @Country, @CreatedAt);
                 """;
 
             await connection.ExecuteAsync(new CommandDefinition(

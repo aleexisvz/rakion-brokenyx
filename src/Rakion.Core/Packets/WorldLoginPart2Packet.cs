@@ -18,7 +18,7 @@ namespace Rakion.Core.Packets;
 /// If UnlockedSlots &gt; 4, character records for slots 4..(UnlockedSlots-1) are serialized before the tail block.
 /// </summary>
 public sealed record WorldLoginPart2Packet(
-    byte UnlockedSlots = 4,
+    byte UnlockedSlots = 3,
     IReadOnlyList<CharacterSummary>? Characters = null) : IPacket
 {
     public const int BasePayloadSize = 1326;

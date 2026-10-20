@@ -310,12 +310,18 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount));
         }
 
+        byte unlockedSlots = gameInfo?.SlotCount ?? 3;
+        if (unlockedSlots > 6 || unlockedSlots == 0)
+        {
+            unlockedSlots = 3;
+        }
+
         var response = new WorldLoginResponsePacket(
             ResultCode: 0,
             UserId: (uint)user.Id,
             Gold: (uint)Math.Clamp(gold, 0, uint.MaxValue),
             Cash: (uint)Math.Clamp(cash, 0, int.MaxValue),
-            UnlockedSlots: gameInfo?.SlotCount ?? 4,
+            UnlockedSlots: unlockedSlots,
             Characters: summaries,
             Username: user.Username);
 
@@ -324,7 +330,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (session.IsEncrypted)
         {
             // Send Part 2 packet (Opcode 0x000D) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
-            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: (byte)(gameInfo?.SlotCount ?? 4), Characters: summaries), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries), cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation("[{ConnectionId}] WorldLogin successful for '{Username}' with {Count} characters.", session.Connection.ConnectionId, user.Username, summaries.Count);
@@ -411,7 +417,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         // Validate slot bounds
-        byte maxSlots = session.GameInfo?.SlotCount ?? 4;
+        byte maxSlots = session.GameInfo?.SlotCount ?? 3;
         if (req.Slot >= maxSlots)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterCreate failed: slot {Slot} exceeds unlocked slots ({Max}).", session.Connection.ConnectionId, req.Slot, maxSlots);

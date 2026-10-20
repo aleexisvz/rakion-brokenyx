@@ -36,7 +36,7 @@ CREATE TABLE `user_game_info` (
     `gold` BIGINT NOT NULL DEFAULT 10000,
     `tutorial_completed` TINYINT(1) NOT NULL DEFAULT 0,
     `stage_level_free` TINYINT(1) NOT NULL DEFAULT 0,
-    `slot_count` TINYINT UNSIGNED NOT NULL DEFAULT 4,
+    `slot_count` TINYINT UNSIGNED NOT NULL DEFAULT 3,
     `bag_count` TINYINT UNSIGNED NOT NULL DEFAULT 1,
     `is_banned` TINYINT(1) NOT NULL DEFAULT 0,
     `ban_date` DATETIME NULL,

@@ -97,7 +97,7 @@ public sealed class WorldServerIntegrationTests
         Assert.AreEqual((uint)user.Id, response.UserId);
         Assert.AreEqual(25000u, response.Gold);
         Assert.AreEqual(500u, response.Cash);
-        Assert.AreEqual(4, response.UnlockedSlots);
+        Assert.AreEqual(3, response.UnlockedSlots);
         Assert.IsNotNull(response.Characters);
         Assert.HasCount(2, response.Characters);
 
