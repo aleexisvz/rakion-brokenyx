@@ -13,7 +13,7 @@
 
 ### 1. Entidades de Dominio (`Rakion.Database.Entities`)
 - **`UserEntity`:** Credenciales de cuenta, correo electrónico, país y nivel de autoridad GM.
-- **`UserGameInfoEntity`:** Balance de oro, tutorial, estado de baneo, slots de personajes desbloqueados (por defecto 4), bolsas de inventario y estado PowerUser.
+- **`UserGameInfoEntity`:** Balance de oro, tutorial, estado de baneo, slots de personajes desbloqueados (por defecto 3 en v258), bolsas de inventario y estado PowerUser.
 - **`CashEntity`:** Saldo de dinero real (Cash).
 - **`CharacterEntity`:** Datos del personaje, clase (`CharacterClass`), nivel, experiencia, puntos sin repartir, atributos de combate (`Hit1`–`Hit4`, `Chit`, `Hp`, `Ap`, `AttackSpeed`, `Speed`, `MaxCp`) y clave de borrado (`DeleteKey`).
 - **`ItemEntity`:** Catálogo maestro de armas, armaduras, accesorios y células de invocación con precios y requisitos de nivel.

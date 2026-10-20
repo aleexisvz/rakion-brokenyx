@@ -30,5 +30,19 @@
 - **`IPacket`:** Contrato para paquetes fuertemente tipados.
 - **`PacketParseException`:** Excepción tipada para fallos de formato o desbordamiento de búfer.
 
-### 3. Criptografía IPC (`Rakion.Core.Cryptography`)
+### 3. Criptografía (`Rakion.Core.Cryptography`)
+- **`RakionWorldCrypto`:** Cifrado simétrico AES-128-CBC utilizado en el World Server v258:
+  - Clave estática de 16 bytes: `1674492837493282` (`31 36 37 34 34 39 32 38 33 37 34 39 33 32 38 32`).
+  - Vector de inicialización (IV) de 16 bytes nulos.
+  - Enmarcado Cliente -> Servidor: `[0..1] ushort Opcode`, `[2..3] ushort SequenceId`, `[4..] Payload bytes` (relleno PKCS7 a múltiplo de 16 bytes).
+  - Enmarcado Servidor -> Cliente: `[0..1] ushort Opcode`, `[2..] Payload bytes` (sin Sequence ID, relleno PKCS7 a múltiplo de 16 bytes).
 - **`IpcCrypto`:** Algoritmo exacto de suma de comprobación de 1 byte (**BCRC**) y cifrado simétrico XOR descompilado del protocolo Broker-WorldServer de `BrokenServer.exe`.
+
+### 4. Paquetes del Protocolo (`Rakion.Core.Packets`)
+- **Handshake y Auth:** `LoginRequestPacket`, `LoginResponsePacket`, `ServerListResponsePacket`, `WorldLoginRequestPacket`, `WorldLoginResponsePacket`, `WorldLoginPart2Packet`.
+- **Sondeo UDP y NAT:** `UdpProbePacket` (0x0201 / 0x0202), `UdpSuccessPacket` (0x000E).
+- **Gestión de Personajes:** `CharacterCreateRequestPacket` (0x0012), `CharacterCreateResponsePacket` (0x002B), `CharacterDeleteRequestPacket` (0x0013), `CharacterDeleteResponsePacket` (0x002D), `CharacterSelectRequestPacket` (0x0014), `CharacterSelectResponsePacket` (0x002E).
+- **Seguridad:** `GameGuardPacket` (0x0001 / 0x0002).
+
+### 5. Utilidades (`Rakion.Core.Utilities`)
+- **`XfsPacker`:** Empacador de archivos `.xfs` con cabecera dual y compresión ZLIB, empleado para la generación dinámica o extracción de `NyxLauncherEnc.xfs`.

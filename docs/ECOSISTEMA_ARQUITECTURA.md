@@ -1,7 +1,7 @@
 # Arquitectura Integral del Ecosistema Rakion v258
 **Proyecto:** `rakion-brokenyx`  
 **Ruta del Proyecto:** `C:\Users\Alexis\Projects\C#\rakion-brokenyx`  
-**Objetivo:** Especificación técnica completa del ecosistema (Cliente, Launcher, Web, Servidores y Protocolos) para la reimplementación limpia y orgánica de un emulador de servidor en C# moderno (.NET 8/9), prescindiendo de parches binarios y hacks heredados.
+**Objetivo:** Especificación técnica completa del ecosistema (Cliente, Launcher, Web, Servidores y Protocolos) para la reimplementación limpia y orgánica de un emulador de servidor en C# moderno (.NET 10 LTS), prescindiendo de parches binarios y hacks heredados.
 
 ---
 
@@ -213,13 +213,31 @@ sequenceDiagram
     Broker->>Player: Respuesta de Auth (Token de Sesión / OK)
     Player-->>Broker: Cierra conexión TCP con Broker
 
-    Note over Player, World: Fase 2: Conexión al Mundo y Lobby
-    Player->>World: Conexión TCP (Puerto 40708)
-    Player->>World: Handshake inicial con Token de Sesión
-    World->>DB: Carga Personajes (`characterinfo`), Inventario (`useriteminfo`), Oro y Cash
-    World->>Player: Envía Lista de Personajes (Nivel, Clase, Stats, Equipamiento)
-    Player->>World: SendCharacterSelect(CharID)
-    World->>Player: Confirma ingreso al Canal (Beginner, Free, etc.)
+    Note over Player, World: Fase 2: Conexión al Mundo, Cifrado y Selección de Personajes
+    Player->>World: Conexión TCP (Puerto 40708, Cifrado AES-128-CBC)
+    Player->>World: Opcode 0x000C (WorldLogin con Token de Sesión)
+    World->>DB: Carga Personajes (`characterinfo`), Balances (Oro y Cash)
+    World->>Player: Opcode 0x000C (Lista de Personajes, 3 slots habilitados, Oro y Cash)
+    Player->>World: Opcode 0x000D (WorldLoginPart2)
+    World->>Player: Opcode 0x000D (WorldLoginPart2 Acknowledge)
+    Par Sondeo UDP Dual
+        Player->>World: UDP Port 40708 (Opcode 0x0201, Cookie)
+        World->>Player: UDP Port 40708 (Opcode 0x0201, Cookie, PortFlag=0)
+        Player->>World: UDP Port 40709 (Opcode 0x0202, Cookie)
+        World->>Player: UDP Port 40709 (Opcode 0x0202, Cookie, PortFlag=1)
+    End
+    Player->>World: Opcode 0x000E (UdpSuccess)
+    World->>Player: Opcode 0x000E (UdpSuccessResponse, Result=0, IPs/Puertos)
+    Opt Creación de Personaje
+        Player->>World: Opcode 0x0012 (CharacterCreate: Nombre, Clase, Slot)
+        World->>DB: Inserta personaje en `characterinfo` con equipo inicial
+        World->>Player: Opcode 0x002B (CharacterCreateResponse: Success)
+    End
+    Player->>World: Opcode 0x0014 (CharacterSelect: CharID)
+    World->>Player: Opcode 0x002E (CharacterSelectResponse: Success)
+    Opt Completar Tutorial
+        Player->>World: Opcode 0x001A (CharacterTutorialClear)
+    End
 
     Note over Player, World: Fase 3: Salas y Preparación
     Player->>World: SendFieldList()

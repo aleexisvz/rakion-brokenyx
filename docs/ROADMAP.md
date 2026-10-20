@@ -1,4 +1,4 @@
-# Hoja de Ruta (Roadmap): Emulador Rakion Server en C# (.NET 8/9)
+# Hoja de Ruta (Roadmap): Emulador Rakion Server en C# (.NET 10 LTS)
 **Proyecto:** `rakion-brokenyx`  
 **Directorio Base:** `C:\Users\Alexis\Projects\C#\rakion-brokenyx`  
 **Filosofía del Proyecto:** Construir un servidor limpio, modular, de alto rendimiento y de código abierto en C# que emule de forma nativa y orgánica los protocolos de Rakion v258. Cero parches binarios, cero inyecciones de memoria, cero dependencias obsoletas de 32-bit (GameGuard/MySQL 4) y soporte nativo multiplataforma (Windows y Linux/Docker).
@@ -10,16 +10,19 @@
 ```text
 rakion-brokenyx/
 ├── src/
-│   ├── Rakion.Core/             # Tipos primitivos, Opcodes, Enums, CNetMessage, Criptografía
+│   ├── Rakion.Core/             # Tipos primitivos, Opcodes, Enums, CNetMessage, Criptografía AES/BCRC
 │   ├── Rakion.Network/          # Sockets asíncronos TCP (Pipelines) y UDP, Buffers de memoria
-│   ├── Rakion.Database/         # Modelos de datos, Dapper/EF Core, Repositorios MySQL
+│   ├── Rakion.Database/         # Modelos de datos, Dapper, Repositorios MySQL/MariaDB
 │   ├── Rakion.Broker/           # Servidor de Handshake, Login y Entrega de ServerList (Puerto 40706)
-│   ├── Rakion.World/            # Servidor de Juego: Lobby, Salas, Inventario, Herrería (Puerto 40708)
+│   ├── Rakion.World/            # Servidor de Juego: Lobby, Salas, Inventario, Herrería (Puerto 40708 + UDP dual)
 │   ├── Rakion.Relay/            # Servidor UDP de Relevo P2P y Sincronización de Combate (40708/40709)
-│   └── Rakion.App/              # Punto de entrada unificado / Daemon CLI para ejecutar todos o parte de los servicios
+│   └── Rakion.App/              # Punto de entrada unificado / Daemon CLI para ejecutar todos los servicios
 ├── tests/
-│   ├── Rakion.Core.Tests/       # Pruebas unitarias de serialización de paquetes y opcodes
-│   └── Rakion.Network.Tests/    # Pruebas de integración de sockets y concurrencia
+│   ├── Rakion.Core.Tests/       # Pruebas unitarias de serialización de paquetes, opcodes y AES-128
+│   ├── Rakion.Network.Tests/    # Pruebas de integración de sockets y concurrencia TCP
+│   ├── Rakion.Database.Tests/   # Pruebas de persistencia, concurrencia de balance y repositorios SQLite
+│   ├── Rakion.Broker.Tests/     # Pruebas de autenticación Broker, tickets de sesión y AutoFetch HTTP
+│   └── Rakion.World.Tests/      # Pruebas de ciclo de vida de WorldServer, login y UDP hole punching
 ├── config/
 │   └── appsettings.json         # Configuración centralizada de IPs, puertos, base de datos y tasas de juego
 └── docs/
@@ -92,6 +95,7 @@ rakion-brokenyx/
 
 ### Fase 3: World Server (Gestión de Personajes, Canales y Lobby)
 > **Objetivo:** Lograr que el cliente entre al juego en el puerto 40708, cargue sus personajes, permita crear/borrar y acceda al canal de Lobby.
+> **Estado:** Items 3.1 a 3.5 Completados y verificados en juego con cliente retail v258 (85%). En desarrollo: Item 3.6 (Canales y Lobby).
 
 - [x] **3.1 Servidor TCP y Dual UDP en Puertos 40708/40709:** Listener principal TCP de sesiones de juego y listeners duales UDP para responder a sondeos de NAT traversal / keep-alive del cliente.
 - [x] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
