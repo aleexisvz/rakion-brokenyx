@@ -57,7 +57,7 @@ public sealed class RepositoryTests
         var gameInfo = await _userRepo.GetGameInfoByUserIdAsync(userId);
         Assert.IsNotNull(gameInfo);
         Assert.AreEqual(10_000, gameInfo.Gold);
-        Assert.AreEqual(4, gameInfo.SlotCount);
+        Assert.AreEqual(3, gameInfo.SlotCount);
         Assert.IsFalse(gameInfo.IsBanned);
 
         long cash = await _balanceRepo.GetCashAsync(userId);

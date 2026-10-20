@@ -103,6 +103,15 @@ public sealed class PacketWriter : IDisposable
         _position += bytes.Length;
     }
 
+    public void WriteZeroBytes(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if (count == 0) return;
+        EnsureCapacity(count);
+        _buffer.AsSpan(_position, count).Clear();
+        _position += count;
+    }
+
     public void WriteFixedString(string value, int fixedLength, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(value);

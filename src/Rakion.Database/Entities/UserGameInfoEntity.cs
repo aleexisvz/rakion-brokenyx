@@ -27,9 +27,9 @@ public sealed class UserGameInfoEntity
     public bool StageLevelFree { get; set; }
 
     /// <summary>
-    /// Number of unlocked character slots (default 4, maximum 6).
+    /// Number of unlocked character slots (default 3, maximum 6).
     /// </summary>
-    public byte SlotCount { get; set; } = 4;
+    public byte SlotCount { get; set; } = 3;
 
     /// <summary>
     /// Number of unlocked inventory bags (default 1, maximum 3).

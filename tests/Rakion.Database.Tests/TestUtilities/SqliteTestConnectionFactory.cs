@@ -47,7 +47,7 @@ public sealed class SqliteTestConnectionFactory : IDbConnectionFactory, IDisposa
                 gold INTEGER NOT NULL DEFAULT 10000,
                 tutorial_completed INTEGER NOT NULL DEFAULT 0,
                 stage_level_free INTEGER NOT NULL DEFAULT 0,
-                slot_count INTEGER NOT NULL DEFAULT 4,
+                slot_count INTEGER NOT NULL DEFAULT 3,
                 bag_count INTEGER NOT NULL DEFAULT 1,
                 is_banned INTEGER NOT NULL DEFAULT 0,
                 ban_date DATETIME NULL,

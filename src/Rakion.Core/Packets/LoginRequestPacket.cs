@@ -13,7 +13,8 @@ public sealed record LoginRequestPacket(
     ushort ClientVersion = 1026,
     string ClientIp = "127.0.0.1",
     byte Flag = 0,
-    ushort SubOpcode = (ushort)RakionOpcode.Login) : IPacket
+    ushort SubOpcode = (ushort)RakionOpcode.Login,
+    bool IsLauncherHandshake = false) : IPacket
 {
     public ushort Opcode => SubOpcode;
 
@@ -46,6 +47,32 @@ public sealed record LoginRequestPacket(
         {
             resolvedSubOpcode = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data[..2]);
             data = data[2..];
+        }
+
+        // Fixed 70-byte packet from NyxLauncher (4-byte header + 2-byte sub-opcode 0x1310 + 64-byte payload)
+        if (headerOpcode == (ushort)RakionOpcode.None && resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
+        {
+            string username = "admin";
+            if (data[0] == 0 && data[8] != 0)
+            {
+                ReadOnlySpan<byte> userSlice = data.Slice(8, Math.Min(20, data.Length - 8));
+                int nullIdx = userSlice.IndexOf((byte)0);
+                string candidate = System.Text.Encoding.Latin1.GetString(nullIdx >= 0 ? userSlice[..nullIdx] : userSlice).Trim();
+                if (!string.IsNullOrWhiteSpace(candidate) && candidate.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+                {
+                    username = candidate;
+                }
+            }
+
+            packet = new LoginRequestPacket(
+                Username: username,
+                Password: string.Empty,
+                ClientVersion: 1026,
+                ClientIp: "127.0.0.1",
+                Flag: 0,
+                SubOpcode: resolvedSubOpcode,
+                IsLauncherHandshake: true);
+            return true;
         }
 
         try

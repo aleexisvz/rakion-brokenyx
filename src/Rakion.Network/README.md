@@ -22,3 +22,12 @@
   - Notificación de eventos (`OnConnectedAsync`, `OnPacketReceivedAsync`, `OnDisconnectedAsync`).
 - **`ITcpPacketHandler`:**
   - Contrato que implementan el Broker Server o el World Server para reaccionar a la conexión de clientes y al despacho de paquetes deserializados.
+
+### 2. Servidor UDP (`Rakion.Network.Udp`)
+- **`UdpServer`:**
+  - Servidor UDP asíncrono de alto rendimiento (`SocketType.Dgram`, `ProtocolType.Udp`).
+  - Pooling de buffers mediante `ArrayPool<byte>.Shared` para cero allocations en el hot path.
+  - Mitigación de desconexiones fantasma por ICMP Port Unreachable en Windows (`SIO_UDP_CONNRESET`).
+  - Propiedad `PortFlag` para distinguir roles de puertos en escuchas duales (e.g. 40708 vs 40709).
+- **`IUdpPacketHandler`:**
+  - Interfaz asíncrona para despachar datagramas entrantes hacia los manejadores de mundo o relay.

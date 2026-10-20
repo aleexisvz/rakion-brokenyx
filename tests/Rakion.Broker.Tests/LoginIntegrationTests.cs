@@ -173,7 +173,136 @@ public sealed class LoginIntegrationTests
         Assert.AreEqual((ushort)0x4001, response.SubOpcode);
         Assert.IsNotNull(response.SessionTicket);
     }
+    [TestMethod]
+    public async Task Login_NyxLauncherFixedHandshake_ExistingUser_ReturnsSuccessAndIssuesTicket()
+    {
+        string hash = _hasher.HashPassword("any_password");
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "LauncherUser", PasswordHash = hash });
 
+        // Build 70-byte fixed packet
+        byte[] packet = new byte[70];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), 70);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), 0x0000);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(4, 2), 0x1310);
+        System.Text.Encoding.Latin1.GetBytes("LauncherUser").CopyTo(packet.AsSpan(14));
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+        Assert.AreEqual((ushort)0xCBEB, responseHeader.Opcode);
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
+        Assert.AreEqual((ushort)0x1312, responsePacket.SubOpcode);
+
+        bool foundTicket = _ticketService.TryGetTicketByUsername("LauncherUser", out var ticketInfo);
+        Assert.IsTrue(foundTicket, "A valid session ticket should have been issued for LauncherUser.");
+        Assert.IsGreaterThan(0u, ticketInfo.Ticket);
+    }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherFixedHandshake_NonExistentUser_ReturnsInvalidCredentials()
+    {
+        byte[] packet = new byte[70];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), 70);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), 0x0000);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(4, 2), 0x1310);
+        System.Text.Encoding.Latin1.GetBytes("NoSuchUser").CopyTo(packet.AsSpan(14));
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.InvalidCredentials, responsePacket.Result);
+    }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherSecondaryHandshake_OpcodeCDDFWith3000_ReturnsCL_AUTH_LOGIN_2_Success()
+    {
+        // 6-byte packet: TotalLength=6, Opcode=0xCDDF, Payload=0x3000
+        byte[] packet = new byte[6];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), 6);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)RakionOpcode.ServerListRequest); // 0xCDDF
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(4, 2), (ushort)RakionOpcode.LoginAlt2); // 0x3000
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+        Assert.AreEqual((ushort)0xEBD3, responseHeader.Opcode);
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
+        Assert.AreEqual((ushort)0x3001, responsePacket.SubOpcode);
+    }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherStartGame_Opcode4000_ReturnsCL_AUTH_LOGIN_4_WithTicket()
+    {
+        // Real observed Start Game payload from NyxLauncher (46 bytes)
+        byte[] payload = Convert.FromHexString(
+            "00400652616B696F6E000000001450656E7469756D3F49492028302E323520B56D29580B0000FFFFFF7F0000FFFF");
+
+        byte[] packet = new byte[PacketHeader.HeaderSize + payload.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), (ushort)packet.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)RakionOpcode.None);
+        payload.CopyTo(packet.AsSpan(PacketHeader.HeaderSize));
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+        Assert.AreEqual((ushort)0x1BAF, responseHeader.Opcode);
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
+        Assert.AreEqual((ushort)0x4001, responsePacket.SubOpcode);
+        Assert.IsNotNull(responsePacket.SessionTicket);
+        Assert.IsGreaterThan(0u, responsePacket.SessionTicket.Value);
+    }
     private async Task<LoginResponsePacket> SendLoginPacketAsync(string username, string password, ushort opcode)
     {
         var endPoint = (IPEndPoint)_server.LocalEndPoint!;
