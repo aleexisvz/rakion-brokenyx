@@ -12,14 +12,19 @@
 - Ambos protocolos conviven limpiamente en el puerto 40708 gracias al aislamiento nativo de sockets TCP y UDP en el stack de red del sistema operativo.
 
 ### 2. `WorldPacketHandler` (`Rakion.World.Handlers`)
-- Manejador TCP para el protocolo de juego:
+- Manejador TCP para el protocolo de juego con cifrado AES-128-CBC (clave estática `1674492837493282` y vector IV nulo):
+  - **Framing de Cifrado:**
+    - Cliente -> Servidor: `[0..1] ushort Opcode`, `[2..3] ushort SequenceId`, `[4..] Payload bytes` (relleno PKCS7 a múltiplo de 16 bytes).
+    - Servidor -> Cliente: `[0..1] ushort Opcode`, `[2..] Payload bytes` (sin Sequence ID, relleno PKCS7 a múltiplo de 16 bytes).
+  - **`WorldLogin` (`0x000C`):** Procesa la credencial de autenticación inicial presentada por el cliente contra el ticket emitido por el Broker Server. Responde con `0x000C` conteniendo la lista de personajes serializados, 3 ranuras habilitadas (`UnlockedSlots = 3`), oro (offset 40) y cash (offset 48).
+  - **`WorldLoginPart2` (`0x000D`):** Handshake secundario de inicialización de mundo.
   - **`SendGameGuard` (`0x0001`):** Responde con éxito (`0x0002`), eliminando la necesidad de emuladores GameGuard o DLLs anticheat legadas.
-  - **`SendSessionTicket` (`0x0007`):** Valida el ticket emitido por el Broker Server y asocia el socket con la cuenta de usuario.
-  - **`SendCharacterList` (`0x000B`):** Carga los personajes del jugador desde la base de datos y los envía empaquetados en `0x000C`.
-  - **`SendCharacterCreate` (`0x000D`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y le asigna el equipamiento inicial.
-  - **`SendCharacterDelete` (`0x000F`):** Verifica la clave de borrado y retira el personaje.
-  - **`SendCharacterSelect` (`0x0011`):** Selecciona el personaje activo y autoriza la transición a la pantalla de lobby/canales.
+  - **`KeepAlive` (`0x000F`):** Pings periódicos de actividad en lobby y selección de personajes (`?SendAlive@IScavengerWorldNet`).
   - **`UdpSuccess` (`0x000E`):** Al concluir el sondeo UDP de hole punching, el cliente emite Opcode `0x000E`. El servidor confirma con la estructura de 13 bytes (`Result = 0`, `IP1`, `Port1`, `IP2`, `Port2`), cerrando el temporizador y el diálogo modal *"Waiting for response from the world."* de forma definitiva.
+  - **`CharacterCreate` (`0x0012`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y responde con `0x002B`.
+  - **`CharacterDelete` (`0x0013`):** Verifica la clave de borrado y retira el personaje (`0x002D`).
+  - **`CharacterSelect` (`0x0014`):** Selecciona el personaje activo y responde con `0x002E`, autorizando la transición a la pantalla de lobby/tutorial/canales.
+  - **`CharacterTutorialClear` (`0x001A`):** Notificación emitida por el cliente tras completar el tutorial (`?SendCharacterTutorialClear@IScavengerWorldNet`).
 
 ### 3. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
 - Procesa datagramas UDP enviados por el cliente al entrar a la selección de personaje (`CMenuSelectCharacter`):

@@ -143,6 +143,13 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 await HandleCharacterSelectAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
+            case RakionOpcode.CharacterTutorialClear:
+                _logger.LogInformation(
+                    "[{ConnectionId}] Character tutorial clear notification received for user '{Username}'.",
+                    connection.ConnectionId,
+                    session.User?.Username ?? "Unknown");
+                break;
+
             default:
                 _logger.LogWarning(
                     "[{ConnectionId}] Unhandled WorldServer opcode: 0x{Opcode:X4} (Payload length: {Length} bytes).",
