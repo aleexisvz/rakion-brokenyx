@@ -311,7 +311,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         byte unlockedSlots = gameInfo?.SlotCount ?? 3;
-        if (unlockedSlots > 6 || unlockedSlots == 0)
+        if (unlockedSlots > 3 || unlockedSlots == 0)
         {
             unlockedSlots = 3;
         }
@@ -333,7 +333,14 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries), cancellationToken).ConfigureAwait(false);
         }
 
-        _logger.LogInformation("[{ConnectionId}] WorldLogin successful for '{Username}' with {Count} characters.", session.Connection.ConnectionId, user.Username, summaries.Count);
+        _logger.LogInformation(
+            "[{ConnectionId}] WorldLogin successful for '{Username}' with {Count} characters (UnlockedSlots={Slots}, Gold={Gold}, Cash={Cash}).",
+            session.Connection.ConnectionId,
+            user.Username,
+            summaries.Count,
+            unlockedSlots,
+            gold,
+            cash);
     }
 
     private async ValueTask HandleGameGuardAsync(
