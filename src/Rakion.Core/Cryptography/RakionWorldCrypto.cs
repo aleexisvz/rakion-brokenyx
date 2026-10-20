@@ -121,13 +121,41 @@ public static class RakionWorldCrypto
     }
 
     /// <summary>
-    /// Helper to encrypt a packet directly into a byte array for TCP transmission with explicit SequenceId.
+    /// Encrypts a server packet directly into a byte array for TCP transmission to client.
+    /// Wire plaintext layout:
+    ///   [0..1] ushort Opcode
+    ///   [2..]  Payload bytes
+    /// Note: As observed in engine.dll (0x361901D1, 0x36197AA7) and RakionWorldServ.exe (0x4038E0, 0x40493C),
+    /// server-to-client packets have NO SequenceId in the plaintext. The payload immediately follows the 2-byte opcode.
+    /// </summary>
+    public static byte[] EncryptServerPacket(ushort opcode, ReadOnlySpan<byte> payload)
+    {
+        int plainLen = 2 + payload.Length;
+        Span<byte> plain = stackalloc byte[plainLen];
+        BinaryPrimitives.WriteUInt16LittleEndian(plain[..2], opcode);
+        payload.CopyTo(plain[2..]);
+
+        int blockCount = (plainLen + DataPerBlock - 1) / DataPerBlock;
+        if (blockCount == 0)
+        {
+            blockCount = 1;
+        }
+
+        int totalLen = HeaderSize + blockCount * BlockSize;
+        byte[] result = new byte[totalLen];
+        Encrypt(plain, result);
+        return result;
+    }
+
+    /// <summary>
+    /// Encrypts a client packet directly into a byte array for TCP transmission to server (used in tests/client simulation).
     /// Wire plaintext layout:
     ///   [0..1] ushort Opcode
     ///   [2..3] ushort SequenceId
     ///   [4..]  Payload bytes
+    /// Note: As observed in engine.dll 0x361905E0 (SendTCPPacket), the client writes SequenceId at [2..3].
     /// </summary>
-    public static byte[] EncryptPacket(ushort sequenceId, ushort opcode, ReadOnlySpan<byte> payload)
+    public static byte[] EncryptClientPacket(ushort sequenceId, ushort opcode, ReadOnlySpan<byte> payload)
     {
         int plainLen = 4 + payload.Length;
         Span<byte> plain = stackalloc byte[plainLen];
@@ -148,8 +176,15 @@ public static class RakionWorldCrypto
     }
 
     /// <summary>
-    /// Helper to encrypt a packet directly into a byte array for TCP transmission with sequence ID 0.
+    /// Helper to encrypt a packet directly into a byte array for TCP transmission.
+    /// Defaults to server-to-client packet format (Opcode + Payload).
     /// </summary>
     public static byte[] EncryptPacket(ushort opcode, ReadOnlySpan<byte> payload)
-        => EncryptPacket(0, opcode, payload);
+        => EncryptServerPacket(opcode, payload);
+
+    /// <summary>
+    /// Compatibility overload for server-to-client packet transmission. Note that server-to-client packets do not use SequenceId.
+    /// </summary>
+    public static byte[] EncryptPacket(ushort sequenceId, ushort opcode, ReadOnlySpan<byte> payload)
+        => EncryptServerPacket(opcode, payload);
 }

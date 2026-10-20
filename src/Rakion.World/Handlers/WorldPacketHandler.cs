@@ -532,7 +532,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 ? rawWire.AsSpan(PacketHeader.HeaderSize)
                 : [];
 
-            byte[] encryptedWire = RakionWorldCrypto.EncryptPacket(session.SequenceId, packet.Opcode, payloadSpan);
+            byte[] encryptedWire = RakionWorldCrypto.EncryptServerPacket(packet.Opcode, payloadSpan);
             await session.Connection.SendAsync(encryptedWire, cancellationToken).ConfigureAwait(false);
         }
         else

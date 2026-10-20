@@ -70,10 +70,10 @@ public sealed class RakionWorldCryptoTests
     }
 
     [TestMethod]
-    public void RoundTrip_EncryptPacket_WithSequenceId_PreservesSequenceAndOpcode()
+    public void RoundTrip_EncryptClientPacket_WithSequenceId_PreservesSequenceAndOpcode()
     {
         byte[] payload = System.Text.Encoding.ASCII.GetBytes("hello_world_payload");
-        byte[] wire = RakionWorldCrypto.EncryptPacket(1234, 0x0002, payload);
+        byte[] wire = RakionWorldCrypto.EncryptClientPacket(1234, 0x0002, payload);
 
         ushort wireLen = BinaryPrimitives.ReadUInt16LittleEndian(wire.AsSpan(0, 2));
         Assert.AreEqual(wire.Length, wireLen);
@@ -89,5 +89,25 @@ public sealed class RakionWorldCryptoTests
 
         string roundtripPayload = System.Text.Encoding.ASCII.GetString(dec.Slice(4, payload.Length));
         Assert.AreEqual("hello_world_payload", roundtripPayload);
+    }
+
+    [TestMethod]
+    public void RoundTrip_EncryptServerPacket_PreservesOpcodeAndPayloadDirectly()
+    {
+        byte[] payload = System.Text.Encoding.ASCII.GetBytes("server_login_response_payload");
+        byte[] wire = RakionWorldCrypto.EncryptServerPacket(0x000C, payload);
+
+        ushort wireLen = BinaryPrimitives.ReadUInt16LittleEndian(wire.AsSpan(0, 2));
+        Assert.AreEqual(wire.Length, wireLen);
+
+        Span<byte> dec = stackalloc byte[128];
+        bool ok = RakionWorldCrypto.TryDecrypt(wire.AsSpan(2, wire.Length - 2), dec, out int decLen);
+        Assert.IsTrue(ok);
+
+        ushort op = BinaryPrimitives.ReadUInt16LittleEndian(dec[..2]);
+        Assert.AreEqual((ushort)0x000C, op);
+
+        string roundtripPayload = System.Text.Encoding.ASCII.GetString(dec.Slice(2, payload.Length));
+        Assert.AreEqual("server_login_response_payload", roundtripPayload);
     }
 }

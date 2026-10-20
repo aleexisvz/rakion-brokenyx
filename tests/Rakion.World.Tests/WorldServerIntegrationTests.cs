@@ -152,7 +152,7 @@ public sealed class WorldServerIntegrationTests
         plainWriter.WriteZeroBytes(12); // padding
         plainWriter.WriteNullTerminatedString(user.Username);
 
-        byte[] encryptedWire = RakionWorldCrypto.EncryptPacket(77, (ushort)RakionOpcode.WorldLogin, plainWriter.WrittenSpan);
+        byte[] encryptedWire = RakionWorldCrypto.EncryptClientPacket(77, (ushort)RakionOpcode.WorldLogin, plainWriter.WrittenSpan);
         await stream.WriteAsync(encryptedWire);
         await stream.FlushAsync();
 
@@ -167,11 +167,9 @@ public sealed class WorldServerIntegrationTests
         bool ok1 = RakionWorldCrypto.TryDecrypt(cipher1, decBuffer1, out int decLen1);
         Assert.IsTrue(ok1);
         ushort op1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(0, 2));
-        ushort seq1 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer1.AsSpan(2, 2));
         Assert.AreEqual((ushort)RakionOpcode.WorldLogin, op1);
-        Assert.AreEqual((ushort)77, seq1);
 
-        bool parsed1 = WorldLoginResponsePacket.TryParse(decBuffer1.AsSpan(4, decLen1 - 4), out var resp1);
+        bool parsed1 = WorldLoginResponsePacket.TryParse(decBuffer1.AsSpan(2, decLen1 - 2), out var resp1);
         Assert.IsTrue(parsed1);
         Assert.AreEqual(0, resp1.ResultCode);
         Assert.AreEqual((uint)user.Id, resp1.UserId);
@@ -190,11 +188,9 @@ public sealed class WorldServerIntegrationTests
         bool ok2 = RakionWorldCrypto.TryDecrypt(cipher2, decBuffer2, out int decLen2);
         Assert.IsTrue(ok2);
         ushort op2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(0, 2));
-        ushort seq2 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer2.AsSpan(2, 2));
         Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, op2);
-        Assert.AreEqual((ushort)77, seq2);
-        Assert.AreEqual(0, decBuffer2[4]); // WordCount
-        Assert.IsTrue(WorldLoginPart2Packet.TryParse(decBuffer2.AsSpan(4, decLen2 - 4), out _));
+        Assert.AreEqual(0, decBuffer2[2]); // WordCount
+        Assert.IsTrue(WorldLoginPart2Packet.TryParse(decBuffer2.AsSpan(2, decLen2 - 2), out _));
     }
 
     [TestMethod]
@@ -500,7 +496,7 @@ public sealed class WorldServerIntegrationTests
         plainWriter.WriteZeroBytes(12);
         plainWriter.WriteNullTerminatedString(user.Username);
 
-        byte[] encryptedLogin = RakionWorldCrypto.EncryptPacket(1, (ushort)RakionOpcode.WorldLogin, plainWriter.WrittenSpan);
+        byte[] encryptedLogin = RakionWorldCrypto.EncryptClientPacket(1, (ushort)RakionOpcode.WorldLogin, plainWriter.WrittenSpan);
         await stream.WriteAsync(encryptedLogin);
         await stream.FlushAsync();
 
@@ -518,7 +514,7 @@ public sealed class WorldServerIntegrationTests
 
         // 2. Client sends Opcode 0x000E (SendSuccessUDP) after completing UDP probes
         byte[] clientUdpReport = [0x00]; // status == 0
-        byte[] encryptedUdpReport = RakionWorldCrypto.EncryptPacket(1, (ushort)RakionOpcode.UdpSuccess, clientUdpReport);
+        byte[] encryptedUdpReport = RakionWorldCrypto.EncryptClientPacket(1, (ushort)RakionOpcode.UdpSuccess, clientUdpReport);
         await stream.WriteAsync(encryptedUdpReport);
         await stream.FlushAsync();
 
@@ -535,7 +531,7 @@ public sealed class WorldServerIntegrationTests
         ushort op3 = BinaryPrimitives.ReadUInt16LittleEndian(decBuffer3.AsSpan(0, 2));
         Assert.AreEqual((ushort)RakionOpcode.UdpSuccess, op3);
 
-        bool parsed3 = UdpSuccessPacket.TryParse(decBuffer3.AsSpan(4, decLen3 - 4), out var udpConfirmation);
+        bool parsed3 = UdpSuccessPacket.TryParse(decBuffer3.AsSpan(2, decLen3 - 2), out var udpConfirmation);
         Assert.IsTrue(parsed3);
         Assert.AreEqual((byte)0, udpConfirmation.Result, "UdpSuccess confirmation Result must be 0 (Success)");
     }
