@@ -60,25 +60,34 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
             payload.Length,
             Convert.ToHexString(payload.Span));
 
+        // NyxLauncher packets may carry an embedded sub-opcode (0x1310, 0x3000, 0x4000, 0x5000)
+        // under varied header framing opcodes (such as 0x0000, 0xCDDF, or 0x650D during retry).
+        if (payload.Length >= 2)
+        {
+            ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
+            if (subOpcode == (ushort)RakionOpcode.LoginAlt2 || subOpcode == (ushort)RakionOpcode.LoginAlt3)
+            {
+                _logger.LogInformation(
+                    "[{ConnectionId}] NyxLauncher secondary login handshake (0x{SubOpcode:X4}) received via opcode 0x{Opcode:X4}. Sending CL_AUTH_LOGIN_2 success.",
+                    connection.ConnectionId,
+                    subOpcode,
+                    header.Opcode);
+
+                await SendLoginResponseAsync(connection, subOpcode, LoginResultCode.Success, null, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (subOpcode == (ushort)RakionOpcode.Login || subOpcode == (ushort)RakionOpcode.LoginAlt4)
+            {
+                await HandleLoginRequestAsync(connection, header.Opcode, payload, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+
         switch ((RakionOpcode)header.Opcode)
         {
             case RakionOpcode.ServerListRequest:
             case RakionOpcode.ServerListResponse:
-                if (payload.Length >= 2)
-                {
-                    ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
-                    if (subOpcode == (ushort)RakionOpcode.LoginAlt2 || subOpcode == (ushort)RakionOpcode.LoginAlt3 || subOpcode == (ushort)RakionOpcode.LoginAlt4)
-                    {
-                        _logger.LogInformation(
-                            "[{ConnectionId}] NyxLauncher secondary login handshake (0x{SubOpcode:X4}) received via 0xCDDF. Sending CL_AUTH_LOGIN_2 success.",
-                            connection.ConnectionId,
-                            subOpcode);
-
-                        await SendLoginResponseAsync(connection, subOpcode, LoginResultCode.Success, null, cancellationToken).ConfigureAwait(false);
-                        break;
-                    }
-                }
-
                 await HandleServerListRequestAsync(connection, payload, cancellationToken).ConfigureAwait(false);
                 break;
 

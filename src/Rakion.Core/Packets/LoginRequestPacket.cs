@@ -45,15 +45,23 @@ public sealed record LoginRequestPacket(
         ushort resolvedSubOpcode = headerOpcode;
         ReadOnlySpan<byte> data = payload;
 
-        // If header opcode is None (0x0000), the sub-opcode (0x1310, 0x3000, 0x4000, 0x5000) is the first UInt16
-        if (headerOpcode == (ushort)RakionOpcode.None && data.Length >= 2)
+        // Check if the payload embeds a recognized sub-opcode (0x1310, 0x3000, 0x4000, 0x5000),
+        // regardless of the framing header opcode (e.g. 0x0000, 0xCDDF, or 0x650D during retry)
+        if (data.Length >= 2)
         {
-            resolvedSubOpcode = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data[..2]);
-            data = data[2..];
+            ushort embeddedSubOpcode = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data[..2]);
+            if (embeddedSubOpcode is (ushort)RakionOpcode.Login
+                or (ushort)RakionOpcode.LoginAlt2
+                or (ushort)RakionOpcode.LoginAlt3
+                or (ushort)RakionOpcode.LoginAlt4)
+            {
+                resolvedSubOpcode = embeddedSubOpcode;
+                data = data[2..];
+            }
         }
 
         // Fixed 70-byte packet from NyxLauncher (4-byte header + 2-byte sub-opcode 0x1310 + 64-byte payload)
-        if (headerOpcode == (ushort)RakionOpcode.None && resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
+        if (resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
         {
             if (NyxLauncherCrypto.TryDecryptPart1(data[..32], out string decUser, out uint decSalt))
             {
