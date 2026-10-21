@@ -1,5 +1,6 @@
 using Rakion.Database.Entities;
 using Rakion.Network.Tcp;
+using Rakion.World.Channels;
 
 namespace Rakion.World.Session;
 
@@ -14,6 +15,7 @@ public sealed class WorldSession
     public UserEntity? User { get; set; }
     public UserGameInfoEntity? GameInfo { get; set; }
     public CharacterEntity? ActiveCharacter { get; set; }
+    public LobbyChannel? ActiveChannel { get; set; }
     public bool IsAuthenticated => User is not null;
     public bool GameGuardVerified { get; set; }
     public bool IsEncrypted { get; set; }
