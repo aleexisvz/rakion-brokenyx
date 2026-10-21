@@ -101,10 +101,25 @@ public sealed class NyxLauncherCryptoTests
     }
 
     [TestMethod]
-    public void TryDecryptPart1_BufferTooShort_ReturnsFalse()
+    public void TryVerifyPasswordChallenge_WithCapturedNyxLauncherPacket_AsdasdUser()
     {
-        byte[] shortBuffer = new byte[16];
-        bool success = NyxLauncherCrypto.TryDecryptPart1(shortBuffer, out _, out _);
-        Assert.IsFalse(success);
+        // Real packet captured live from NyxLauncher.exe (user "asdasd", pass "asdasd")
+        // Payload (64 bytes):
+        byte[] payload = Convert.FromHexString(
+            "4D2FDCE7BFDA1966949AB21CD2D37C6D845C31AFBF300DD17F6071F0CAE7B236AC4404380CEC772E5EE62F250BE2AFB7B0B85046998BD6623D9727DD3271CBC8");
+
+        bool part1Ok = NyxLauncherCrypto.TryDecryptPart1(payload.AsSpan(0, 32), out string user, out uint salt);
+        Assert.IsTrue(part1Ok);
+        Assert.AreEqual("asdasd", user);
+        Assert.AreEqual(0x29u, salt);
+
+        // Verification with correct password must succeed
+        bool correctPass = NyxLauncherCrypto.TryVerifyPasswordChallenge(payload.AsSpan(32, 32), user, "asdasd", salt, out ushort version);
+        Assert.IsTrue(correctPass);
+        Assert.AreEqual((ushort)1026, version);
+
+        // Verification with wrong password must fail
+        bool wrongPass = NyxLauncherCrypto.TryVerifyPasswordChallenge(payload.AsSpan(32, 32), user, "wrongpass", salt, out _);
+        Assert.IsFalse(wrongPass);
     }
 }

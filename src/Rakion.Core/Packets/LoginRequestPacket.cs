@@ -100,7 +100,7 @@ public sealed record LoginRequestPacket(
                 SubOpcode: resolvedSubOpcode,
                 IsLauncherHandshake: true,
                 LauncherSalt: 0,
-                LauncherCiphertext: data[32..].ToArray());
+                LauncherCiphertext: null);
             return true;
         }
 
