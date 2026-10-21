@@ -143,6 +143,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 await HandleCharacterSelectAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
+            case RakionOpcode.CharacterChangeBuddyName:
+                await HandleCharacterChangeBuddyNameAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
             case RakionOpcode.CharacterTutorialClear:
                 _logger.LogInformation(
                     "[{ConnectionId}] Character tutorial clear notification received for user '{Username}'.",
@@ -534,6 +538,32 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         session.ActiveCharacter = ch;
         _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id);
         await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleCharacterChangeBuddyNameAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.User is null)
+        {
+            return;
+        }
+
+        string charName = string.Empty;
+        if (CharacterChangeBuddyNameRequestPacket.TryParse(payload.Span, out var req))
+        {
+            charName = req.CharacterName;
+        }
+
+        _logger.LogInformation(
+            "[{ConnectionId}] CharacterChangeBuddyName (0x0015) received for user '{Username}' (Character: '{Name}'). Responding with success to complete client creation notice.",
+            session.Connection.ConnectionId,
+            session.User.Username,
+            charName);
+
+        // Confirmation packet: ResultCode = 0 (Success), CharacterName
+        await SendPacketAsync(session, new CharacterChangeBuddyNameResponsePacket(ResultCode: 0, charName), cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken)

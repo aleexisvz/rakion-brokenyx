@@ -392,6 +392,33 @@ public sealed class WorldPacketTests
         Assert.AreEqual(0, reader.Remaining, "No trailing misaligned bytes after character record");
         Assert.AreEqual(366, recordStart - reader.Remaining);
     }
+
+    [TestMethod]
+    public void CharacterChangeBuddyNamePackets_RoundtripSerialization()
+    {
+        // 1. Request packet
+        var req = new CharacterChangeBuddyNameRequestPacket("NinjaHero");
+        using var reqWriter = new PacketWriter(req.Opcode);
+        req.Serialize(reqWriter);
+        byte[] reqBytes = reqWriter.Build();
+
+        Assert.IsTrue(PacketHeader.TryParse(reqBytes.AsSpan(0, PacketHeader.HeaderSize), out var reqHeader));
+        Assert.AreEqual((ushort)RakionOpcode.CharacterChangeBuddyName, reqHeader.Opcode);
+        Assert.IsTrue(CharacterChangeBuddyNameRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out var roundtripReq));
+        Assert.AreEqual("NinjaHero", roundtripReq.CharacterName);
+
+        // 2. Response packet
+        var res = new CharacterChangeBuddyNameResponsePacket(ResultCode: 0, "NinjaHero");
+        using var resWriter = new PacketWriter(res.Opcode);
+        res.Serialize(resWriter);
+        byte[] resBytes = resWriter.Build();
+
+        Assert.IsTrue(PacketHeader.TryParse(resBytes.AsSpan(0, PacketHeader.HeaderSize), out var resHeader));
+        Assert.AreEqual((ushort)RakionOpcode.CharacterChangeBuddyName, resHeader.Opcode);
+        Assert.IsTrue(CharacterChangeBuddyNameResponsePacket.TryParse(resBytes.AsSpan(PacketHeader.HeaderSize), out var roundtripRes));
+        Assert.AreEqual((byte)0, roundtripRes.ResultCode);
+        Assert.AreEqual("NinjaHero", roundtripRes.CharacterName);
+    }
 }
 
 
