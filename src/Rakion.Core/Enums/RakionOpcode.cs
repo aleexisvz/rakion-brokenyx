@@ -207,6 +207,47 @@ public enum RakionOpcode : ushort
 
     // --- Channel / Lobby Opcodes ---
     /// <summary>
+    /// Channel list request / response (retail v258 engine.dll opcode 29).
+    /// Evidence: Observed in engine.dll ?SendChannelList@IScavengerWorldNet@@UAEXEE@Z (0x001D)
+    /// and OnRecvChannelList (0x361931E0).
+    /// </summary>
+    ChannelList = 0x001D,
+
+    /// <summary>
+    /// Channel characters request / response (retail v258 engine.dll opcode 30).
+    /// Evidence: Observed in engine.dll ?SendChannelCharacters@IScavengerWorldNet@@UAEXXZ (0x001E)
+    /// and OnRecvChannelCharacters (0x361932A0).
+    /// </summary>
+    ChannelCharacters = 0x001E,
+
+    /// <summary>
+    /// Channel enter request / response (retail v258 engine.dll opcode 31).
+    /// Evidence: Observed in engine.dll ?SendChannelEnter@IScavengerWorldNet@@UAEXEPAD@Z (0x001F)
+    /// and OnRecvChannelEnter (0x361933F0).
+    /// </summary>
+    ChannelEnter = 0x001F,
+
+    /// <summary>
+    /// Channel exit request / response (retail v258 engine.dll opcode 32).
+    /// Evidence: Observed in engine.dll ?SendChannelExit@IScavengerWorldNet@@UAEXXZ (0x0020)
+    /// and OnRecvChannelExit (0x36193490).
+    /// </summary>
+    ChannelExit = 0x0020,
+
+    /// <summary>
+    /// Channel create request / response (retail v258 engine.dll opcode 33).
+    /// Evidence: Observed in engine.dll ?SendChannelCreate@IScavengerWorldNet@@UAEXPAD0E@Z (0x0021).
+    /// </summary>
+    ChannelCreate = 0x0021,
+
+    /// <summary>
+    /// Channel lobby chat message broadcast (retail v258 engine.dll opcode 34).
+    /// Evidence: Observed in engine.dll ?SendChannelChat@IScavengerWorldNet@@UAEXPAD@Z (0x0022)
+    /// and OnRecvChannelChat (0x361934E0).
+    /// </summary>
+    ChannelChat = 0x0022,
+
+    /// <summary>
     /// Requests or returns the active field / room list in the channel.
     /// Evidence: Observed (71 / 0x47) in WorldServer strings.
     /// </summary>
