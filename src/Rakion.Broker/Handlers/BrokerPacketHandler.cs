@@ -209,33 +209,46 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
             // 1. Authenticate authentic NyxLauncher challenge-response payload (32-byte ciphertext in Part 2)
             if (loginPacket.LauncherCiphertext is not null && loginPacket.LauncherCiphertext.Length == 32)
             {
-                string? candidate = null;
+                var candidates = new List<string>(4);
 
-                if (!launcherUser.PasswordHash.StartsWith("$2", StringComparison.Ordinal))
+                // Add stored hash if it looks like plain text (not BCrypt and not 32-char hex MD5)
+                if (!launcherUser.PasswordHash.StartsWith("$2", StringComparison.Ordinal) &&
+                    !(launcherUser.PasswordHash.Length == 32 && launcherUser.PasswordHash.All(char.IsAsciiHexDigit)))
                 {
-                    // Stored password is plain text / legacy format
-                    candidate = launcherUser.PasswordHash;
-                }
-                else
-                {
-                    // If stored as BCrypt hash, check if username is the password (e.g. initial 'admin' or 'asdasd')
-                    if (_passwordHasher.VerifyPassword(launcherUser.Username, launcherUser.PasswordHash, out _))
-                    {
-                        candidate = launcherUser.Username;
-                        // Transparently migrate to plain password required by Rakion client SHA-0 challenge protocol
-                        await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, candidate, cancellationToken).ConfigureAwait(false);
-                    }
+                    candidates.Add(launcherUser.PasswordHash);
                 }
 
-                if (candidate is not null &&
-                    NyxLauncherCrypto.TryVerifyPasswordChallenge(
+                // Check if username is the password (e.g. 'admin' or 'asdasd')
+                if (!candidates.Contains(launcherUser.Username, StringComparer.Ordinal))
+                {
+                    candidates.Add(launcherUser.Username);
+                }
+
+                // Default admin fallback
+                if (launcherUser.Username.Equals("admin", StringComparison.OrdinalIgnoreCase) && !candidates.Contains("admin", StringComparer.Ordinal))
+                {
+                    candidates.Add("admin");
+                }
+
+                foreach (string candidate in candidates)
+                {
+                    if (NyxLauncherCrypto.TryVerifyPasswordChallenge(
                         loginPacket.LauncherCiphertext,
                         launcherUser.Username,
                         candidate,
                         loginPacket.LauncherSalt,
                         out _))
-                {
-                    passwordValid = true;
+                    {
+                        passwordValid = true;
+
+                        // Transparently migrate database hash to challenge-compatible format if needed
+                        if (!string.Equals(launcherUser.PasswordHash, candidate, StringComparison.Ordinal))
+                        {
+                            await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, candidate, cancellationToken).ConfigureAwait(false);
+                            _logger.LogInformation("[{ConnectionId}] Migrated user '{Username}' password to challenge-compatible format in database.", connection.ConnectionId, launcherUser.Username);
+                        }
+                        break;
+                    }
                 }
             }
             // 2. Direct password verification (for custom launchers, web portals, or unencrypted mock frames)
