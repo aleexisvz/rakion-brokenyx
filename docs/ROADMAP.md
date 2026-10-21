@@ -96,7 +96,7 @@ rakion-brokenyx/
 
 ### Fase 3: World Server (Gestión de Personajes, Canales y Lobby)
 > **Objetivo:** Lograr que el cliente entre al juego en el puerto 40708, cargue sus personajes, permita crear/borrar y acceda al canal de Lobby.
-> **Estado:** Items 3.1 a 3.5 Completados y verificados en juego con cliente retail v258 (85%). En desarrollo: Item 3.6 (Canales y Lobby).
+> **Estado:** Fase 3 Completada al 100% (Items 3.1 a 3.6 terminados y verificados con pruebas automatizadas).
 
 - [x] **3.1 Servidor TCP y Dual UDP en Puertos 40708/40709:** Listener principal TCP de sesiones de juego y listeners duales UDP para responder a sondeos de NAT traversal / keep-alive del cliente.
 - [x] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
@@ -109,7 +109,7 @@ rakion-brokenyx/
   - Implementar `SendCharacterCreate`: verificar que el nombre no esté en uso, crear fila con clase seleccionada (0 a 4) y otorgar el equipamiento básico inicial.
   - Implementar `SendCharacterDelete`: verificar la clave de borrado (`deletekey`) y retirar el personaje de forma segura ante claves vacías (comportamiento retail v258).
   - Implementar `SendCharacterChangeBuddyName` (`0x0015`): responder a la confirmación de nombre para el sistema de mensajería (Buddy system), cerrando el diálogo modal "Notice" post-creación.
-- [ ] **3.6 Sistema de Canales de Lobby:**
+- [x] **3.6 Sistema de Canales de Lobby:**
   - Implementar canales: Canal de Principiantes (con límite de nivel), Canal Libre, Canal de Clanes.
   - Procesar entrada (`SendChannelEnter`) y salida (`SendChannelExit`).
   - Chat general del canal (`SendChannelChat`) con difusión a todos los sockets presentes en el canal.
