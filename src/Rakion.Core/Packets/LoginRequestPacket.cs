@@ -1,3 +1,4 @@
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Protocol;
 
@@ -14,7 +15,9 @@ public sealed record LoginRequestPacket(
     string ClientIp = "127.0.0.1",
     byte Flag = 0,
     ushort SubOpcode = (ushort)RakionOpcode.Login,
-    bool IsLauncherHandshake = false) : IPacket
+    bool IsLauncherHandshake = false,
+    uint LauncherSalt = 0,
+    byte[]? LauncherCiphertext = null) : IPacket
 {
     public ushort Opcode => SubOpcode;
 
@@ -52,6 +55,30 @@ public sealed record LoginRequestPacket(
         // Fixed 70-byte packet from NyxLauncher (4-byte header + 2-byte sub-opcode 0x1310 + 64-byte payload)
         if (headerOpcode == (ushort)RakionOpcode.None && resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
         {
+            if (NyxLauncherCrypto.TryDecryptPart1(data[..32], out string decUser, out uint decSalt))
+            {
+                string password = string.Empty;
+                ushort clientVer = 1026;
+                if (NyxLauncherCrypto.TryDecryptPart2Direct(data[32..], out string directPass, out ushort directVer))
+                {
+                    password = directPass;
+                    clientVer = directVer;
+                }
+
+                packet = new LoginRequestPacket(
+                    Username: decUser,
+                    Password: password,
+                    ClientVersion: clientVer,
+                    ClientIp: "127.0.0.1",
+                    Flag: 0,
+                    SubOpcode: resolvedSubOpcode,
+                    IsLauncherHandshake: true,
+                    LauncherSalt: decSalt,
+                    LauncherCiphertext: data[32..].ToArray());
+                return true;
+            }
+
+            // Fallback for mock/unencrypted legacy test frames
             string username = "admin";
             if (data[0] == 0 && data[8] != 0)
             {
@@ -71,7 +98,9 @@ public sealed record LoginRequestPacket(
                 ClientIp: "127.0.0.1",
                 Flag: 0,
                 SubOpcode: resolvedSubOpcode,
-                IsLauncherHandshake: true);
+                IsLauncherHandshake: true,
+                LauncherSalt: 0,
+                LauncherCiphertext: data[32..].ToArray());
             return true;
         }
 

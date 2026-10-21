@@ -31,6 +31,12 @@
 - **`PacketParseException`:** Excepción tipada para fallos de formato o desbordamiento de búfer.
 
 ### 3. Criptografía (`Rakion.Core.Cryptography`)
+- **`NyxLauncherCrypto`:** Criptografía limpia para autenticación con `NyxLauncher.exe` (Opcode `0x1310`):
+  - Clave estática de 16 bytes ubicada en VA `0x464FA0` (`A9 27 53 04 1B FC AC E6 5B 23 38 34 68 46 03 8C`).
+  - Constante mágica de bloque `0xA8C2F5D3` en VA `0x4053E5`.
+  - Parte 1 (`payload[0..31]`): Descifrado AES-128-ECB de usuario (máx 16 bytes) y salt UInt32 LE.
+  - Parte 2 (`payload[32..63]`): Validación del desafío de contraseña con clave de sesión `SHA1(username[..16] + password + salt)[0..16]` y extracción de versión del cliente.
+  - Generador de tramas completas de 70 bytes (`BuildPacket`) para pruebas y emulación limpia.
 - **`RakionWorldCrypto`:** Cifrado simétrico AES-128-CBC utilizado en el World Server v258:
   - Clave estática de 16 bytes: `1674492837493282` (`31 36 37 34 34 39 32 38 33 37 34 39 33 32 38 32`).
   - Vector de inicialización (IV) de 16 bytes nulos.
