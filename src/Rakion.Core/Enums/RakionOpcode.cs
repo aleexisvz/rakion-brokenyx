@@ -249,9 +249,10 @@ public enum RakionOpcode : ushort
 
     /// <summary>
     /// Requests or returns the active field / room list in the channel.
-    /// Evidence: Observed (71 / 0x47) in WorldServer strings.
+    /// Evidence: Observed in engine.dll ?SendFieldList (0x36191ba0, opcode 0x0036)
+    /// and RakionWorldServ opcode switch (0x42b0ba -> 0x422c90).
     /// </summary>
-    FieldList = 0x0047,
+    FieldList = 0x0036,
 
     /// <summary>
     /// Quick join into an open room.

@@ -202,6 +202,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 await HandleCharacterWhisperAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
+            case RakionOpcode.FieldList:
+                await HandleFieldListAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
             default:
                 _logger.LogWarning(
                     "[{ConnectionId}] Unhandled WorldServer opcode: 0x{Opcode:X4} (Payload length: {Length} bytes).",
@@ -863,6 +867,22 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         // Send confirmation echo to sender
         var senderConfirmation = new CharacterWhisperResponsePacket(ResultCode: 0, session.ActiveCharacter.Name, req.Message);
         await SendPacketAsync(session, senderConfirmation, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleFieldListAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[{ConnectionId}] Processing FieldList request (Opcode 0x0036) for user '{Username}'.",
+            session.Connection.ConnectionId,
+            session.User?.Username ?? "Unknown");
+
+        // When room system is not yet populated with rooms (Phase 4), respond with empty room list (0 rooms).
+        // This dismisses the client's "Waiting for game list from the world." modal dialog and displays the lobby.
+        var response = FieldListResponsePacket.Empty;
+        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken)

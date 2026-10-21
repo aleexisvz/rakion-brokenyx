@@ -305,6 +305,50 @@ public sealed class ChannelIntegrationTests
         Assert.AreEqual((byte)1, wRespFail.ResultCode);
     }
 
+    [TestMethod]
+    public async Task FieldList_ReturnsEmptyList_WhenNoRoomsExist()
+    {
+        int port = ((System.Net.IPEndPoint)_server.LocalEndPoint!).Port;
+
+        int userId = await _userRepository.CreateUserAsync(new UserEntity
+        {
+            Username = "fielduser",
+            PasswordHash = "hash",
+            Email = "f@test.com"
+        });
+
+        var charEntity = await _characterRepository.CreateCharacterAsync(userId, "FieldHero", CharacterClass.Swordman, slotIndex: 0);
+        int charId = charEntity.Id;
+
+        _ticketService.IssueTicket("fielduser", "127.0.0.1");
+
+        using var client = new TcpClient();
+        await client.ConnectAsync("127.0.0.1", port);
+        using var stream = client.GetStream();
+
+        // 1. Handshake login
+        var loginReq = new WorldLoginRequestPacket(SessionTicket: 0, Username: "fielduser", ClientPath: "Rakion.exe");
+        await SendClientPacketAsync(stream, 1, loginReq.Opcode, loginReq);
+        await ReadServerPacketAsync(stream); // WorldLoginResponse
+        await ReadServerPacketAsync(stream); // WorldLoginPart2
+
+        // 2. Select character (auto-enters channel 0 and receives 0x0014, 0x001F, 0x001E)
+        var selectReq = new CharacterSelectRequestPacket((uint)charId);
+        await SendClientPacketAsync(stream, 2, selectReq.Opcode, selectReq);
+        await ReadServerPacketAsync(stream); // CharacterSelectResponse (0x0014)
+        await ReadServerPacketAsync(stream); // ChannelEnterResponse (0x001F)
+        await ReadServerPacketAsync(stream); // ChannelCharactersResponse (0x001E)
+
+        // 3. Client requests FieldList (Opcode 0x0036) upon entering the lobby
+        await SendClientPacketAsync(stream, 3, (ushort)RakionOpcode.FieldList, new FieldListRequestPacket());
+        var (fieldOp, fieldPayload) = await ReadServerPacketAsync(stream);
+
+        Assert.AreEqual((ushort)RakionOpcode.FieldList, fieldOp);
+        Assert.AreEqual(0x0036, (ushort)fieldOp);
+        Assert.IsTrue(FieldListResponsePacket.TryParse(fieldPayload, out var fieldResp));
+        Assert.IsEmpty(fieldResp.Fields);
+    }
+
     private static async Task SendClientPacketAsync(NetworkStream stream, ushort sequenceId, ushort opcode, IPacket packet)
     {
         using var writer = new PacketWriter();
