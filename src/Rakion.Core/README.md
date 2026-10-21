@@ -35,7 +35,7 @@
   - Clave estática de 16 bytes ubicada en VA `0x464FA0` (`A9 27 53 04 1B FC AC E6 5B 23 38 34 68 46 03 8C`).
   - Constante mágica de bloque `0xA8C2F5D3` en VA `0x4053E5`.
   - Parte 1 (`payload[0..31]`): Descifrado AES-128-ECB de usuario (máx 16 bytes) y salt UInt32 LE.
-  - Parte 2 (`payload[32..63]`): Validación del desafío de contraseña con clave de sesión `SHA1(username[..16] + password + salt)[0..16]` y extracción de versión del cliente.
+  - Parte 2 (`payload[32..63]`): Validación del desafío de contraseña con clave de sesión `SHA-0(username[..16] + password + salt)[0..16]` y extracción de versión del cliente.
   - Generador de tramas completas de 70 bytes (`BuildPacket`) para pruebas y emulación limpia.
 - **`RakionWorldCrypto`:** Cifrado simétrico AES-128-CBC utilizado en el World Server v258:
   - Clave estática de 16 bytes: `1674492837493282` (`31 36 37 34 34 39 32 38 33 37 34 39 33 32 38 32`).
@@ -47,7 +47,7 @@
 ### 4. Paquetes del Protocolo (`Rakion.Core.Packets`)
 - **Handshake y Auth:** `LoginRequestPacket`, `LoginResponsePacket`, `ServerListResponsePacket`, `WorldLoginRequestPacket`, `WorldLoginResponsePacket`, `WorldLoginPart2Packet`.
 - **Sondeo UDP y NAT:** `UdpProbePacket` (0x0201 / 0x0202), `UdpSuccessPacket` (0x000E).
-- **Gestión de Personajes:** `CharacterCreateRequestPacket` (0x0012), `CharacterCreateResponsePacket` (0x002B), `CharacterDeleteRequestPacket` (0x0013), `CharacterDeleteResponsePacket` (0x002D), `CharacterSelectRequestPacket` (0x0014), `CharacterSelectResponsePacket` (0x002E).
+- **Gestión de Personajes:** `CharacterCreateRequestPacket` (0x0012), `CharacterCreateResponsePacket` (0x002B), `CharacterDeleteRequestPacket` (0x0013), `CharacterDeleteResponsePacket` (0x002D), `CharacterSelectRequestPacket` (0x0014), `CharacterSelectResponsePacket` (0x002E), `CharacterChangeBuddyNameRequestPacket` (0x0015), `CharacterChangeBuddyNameResponsePacket` (0x0015).
 - **Seguridad:** `GameGuardPacket` (0x0001 / 0x0002).
 
 ### 5. Utilidades (`Rakion.Core.Utilities`)

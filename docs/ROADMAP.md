@@ -107,7 +107,8 @@ rakion-brokenyx/
   - Al seleccionar un personaje, colocarlo en estado activo de sesión.
 - [x] **3.5 Creación y Borrado de Personajes:**
   - Implementar `SendCharacterCreate`: verificar que el nombre no esté en uso, crear fila con clase seleccionada (0 a 4) y otorgar el equipamiento básico inicial.
-  - Implementar `SendCharacterDelete`: verificar la clave de borrado (`deletekey`) y retirar el personaje.
+  - Implementar `SendCharacterDelete`: verificar la clave de borrado (`deletekey`) y retirar el personaje de forma segura ante claves vacías (comportamiento retail v258).
+  - Implementar `SendCharacterChangeBuddyName` (`0x0015`): responder a la confirmación de nombre para el sistema de mensajería (Buddy system), cerrando el diálogo modal "Notice" post-creación.
 - [ ] **3.6 Sistema de Canales de Lobby:**
   - Implementar canales: Canal de Principiantes (con límite de nivel), Canal Libre, Canal de Clanes.
   - Procesar entrada (`SendChannelEnter`) y salida (`SendChannelExit`).
