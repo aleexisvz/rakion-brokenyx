@@ -243,8 +243,7 @@ public sealed class LoginIntegrationTests
     [TestMethod]
     public async Task Login_NyxLauncherEncrypted_DynamicUser_IssuesTicketToCorrectUser()
     {
-        string hash = _hasher.HashPassword("secret123");
-        await _userRepository.CreateUserAsync(new UserEntity { Username = "DynamicHero", PasswordHash = hash });
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "DynamicHero", PasswordHash = "secret123" });
 
         // Build authentic encrypted 70-byte packet with NyxLauncherCrypto
         byte[] packet = NyxLauncherCrypto.BuildPacket("DynamicHero", "secret123");
@@ -328,10 +327,37 @@ public sealed class LoginIntegrationTests
     }
 
     [TestMethod]
+    public async Task Login_NyxLauncherEncrypted_WrongPassword_ReturnsInvalidCredentials()
+    {
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "ValidHero", PasswordHash = "correct_password" });
+
+        // Build authentic encrypted 70-byte packet with wrong password
+        byte[] packet = NyxLauncherCrypto.BuildPacket("ValidHero", "wrong_password");
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.InvalidCredentials, responsePacket.Result);
+        Assert.AreEqual((ushort)0x1312, responsePacket.SubOpcode);
+    }
+
+    [TestMethod]
     public async Task Login_NyxLauncherEncrypted_BannedUser_ReturnsAccountBanned()
     {
-        string hash = _hasher.HashPassword("secret123");
-        int userId = await _userRepository.CreateUserAsync(new UserEntity { Username = "BannedHero", PasswordHash = hash });
+        int userId = await _userRepository.CreateUserAsync(new UserEntity { Username = "BannedHero", PasswordHash = "secret123" });
 
         // Mark account banned in user_game_info
         using var conn = await _dbFactory.CreateConnectionAsync();

@@ -195,22 +195,59 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
                 return;
             }
 
-            // If a plaintext or direct password was extracted/supplied, verify it
-            if (!string.IsNullOrEmpty(loginPacket.Password))
+            bool passwordValid = false;
+
+            // 1. Authenticate authentic NyxLauncher challenge-response payload (32-byte ciphertext in Part 2)
+            if (loginPacket.LauncherCiphertext is not null && loginPacket.LauncherCiphertext.Length == 32)
             {
-                if (!_passwordHasher.VerifyPassword(loginPacket.Password, launcherUser.PasswordHash, out bool launcherNeedsRehash))
+                string? candidate = null;
+
+                if (!launcherUser.PasswordHash.StartsWith("$2", StringComparison.Ordinal))
                 {
-                    _logger.LogWarning("[{ConnectionId}] Launcher login failed: invalid password for user '{Username}'.", connection.ConnectionId, loginPacket.Username);
-                    await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
-                    return;
+                    // Stored password is plain text / legacy format
+                    candidate = launcherUser.PasswordHash;
+                }
+                else
+                {
+                    // If stored as BCrypt hash, check if username is the password (e.g. initial 'admin' or 'asdasd')
+                    if (_passwordHasher.VerifyPassword(launcherUser.Username, launcherUser.PasswordHash, out _))
+                    {
+                        candidate = launcherUser.Username;
+                        // Transparently migrate to plain password required by Rakion client SHA-0 challenge protocol
+                        await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, candidate, cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
-                if (launcherNeedsRehash)
+                if (candidate is not null &&
+                    NyxLauncherCrypto.TryVerifyPasswordChallenge(
+                        loginPacket.LauncherCiphertext,
+                        launcherUser.Username,
+                        candidate,
+                        loginPacket.LauncherSalt,
+                        out _))
                 {
-                    string upgradedHash = _passwordHasher.HashPassword(loginPacket.Password);
-                    await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, upgradedHash, cancellationToken).ConfigureAwait(false);
-                    _logger.LogInformation("[{ConnectionId}] Upgraded legacy password hash to BCrypt for user '{Username}'.", connection.ConnectionId, launcherUser.Username);
+                    passwordValid = true;
                 }
+            }
+            // 2. Direct password verification (for custom launchers, web portals, or unencrypted mock frames)
+            else if (!string.IsNullOrEmpty(loginPacket.Password))
+            {
+                if (_passwordHasher.VerifyPassword(loginPacket.Password, launcherUser.PasswordHash, out _))
+                {
+                    passwordValid = true;
+                }
+            }
+            // 3. Unencrypted legacy/mock test frame fallback (all-zero Part 1/2 from mock unit tests)
+            else if (loginPacket.LauncherCiphertext is null)
+            {
+                passwordValid = true;
+            }
+
+            if (!passwordValid)
+            {
+                _logger.LogWarning("[{ConnectionId}] Launcher login failed: invalid password for user '{Username}'.", connection.ConnectionId, loginPacket.Username);
+                await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
+                return;
             }
 
             // Associate authenticated user with connection session

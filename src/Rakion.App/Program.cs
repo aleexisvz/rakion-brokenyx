@@ -57,7 +57,7 @@ if (args.Contains("--create-user"))
     var user = new UserEntity
     {
         Username = username,
-        PasswordHash = hasher.HashPassword(password),
+        PasswordHash = password,
         Email = $"{username}@brokenyx.local",
         Country = 9,
         Authority = authority
@@ -135,13 +135,19 @@ try
         var adminUser = new UserEntity
         {
             Username = "admin",
-            PasswordHash = hasher.HashPassword("admin"),
+            PasswordHash = "admin",
             Email = "admin@brokenyx.local",
             Country = 9,
             Authority = 100
         };
         int adminId = await userRepo.CreateUserAsync(adminUser, initialGold: 100_000, initialCash: 50_000);
         Console.WriteLine($"[+] Auto-seeded administrator account: Username='admin', Password='admin' (ID: {adminId}, Authority: 100).");
+    }
+    else if (existingAdmin.PasswordHash.StartsWith("$2", StringComparison.Ordinal) &&
+             hasher.VerifyPassword("admin", existingAdmin.PasswordHash, out _))
+    {
+        await userRepo.UpdatePasswordHashAsync(existingAdmin.Id, "admin");
+        Console.WriteLine($"[+] Migrated administrator account to challenge-compatible format.");
     }
 }
 catch (Exception ex)
