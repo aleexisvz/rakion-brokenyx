@@ -7,6 +7,7 @@ using Rakion.Broker.Configuration;
 using Rakion.Broker.Handlers;
 using Rakion.Broker.Hosting;
 using Rakion.Broker.Services;
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
@@ -237,6 +238,128 @@ public sealed class LoginIntegrationTests
         Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
 
         Assert.AreEqual(LoginResultCode.InvalidCredentials, responsePacket.Result);
+    }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherEncrypted_DynamicUser_IssuesTicketToCorrectUser()
+    {
+        string hash = _hasher.HashPassword("secret123");
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "DynamicHero", PasswordHash = hash });
+
+        // Build authentic encrypted 70-byte packet with NyxLauncherCrypto
+        byte[] packet = NyxLauncherCrypto.BuildPacket("DynamicHero", "secret123");
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        // 1. Send 0x1310 handshake
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+        Assert.AreEqual((ushort)0xCBEB, responseHeader.Opcode);
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+        Assert.AreEqual(LoginResultCode.Success, responsePacket.Result);
+        Assert.AreEqual((ushort)0x1312, responsePacket.SubOpcode);
+
+        // 2. Send 0x4000 "Start Game" on the SAME connection
+        byte[] startPayload = Convert.FromHexString(
+            "00400652616B696F6E000000001450656E7469756D3F49492028302E323520B56D29580B0000FFFFFF7F0000FFFF");
+        byte[] startGamePacket = new byte[PacketHeader.HeaderSize + startPayload.Length];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(0, 2), (ushort)startGamePacket.Length);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(2, 2), (ushort)RakionOpcode.None);
+        startPayload.CopyTo(startGamePacket.AsSpan(PacketHeader.HeaderSize));
+
+        await stream.WriteAsync(startGamePacket);
+        await stream.FlushAsync();
+
+        byte[] startHeaderBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, startHeaderBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(startHeaderBuffer, out var startResponseHeader));
+        Assert.AreEqual((ushort)0x1BAF, startResponseHeader.Opcode);
+
+        byte[] startPayloadBuffer = new byte[startResponseHeader.PayloadLength];
+        await ReadExactAsync(stream, startPayloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(startPayloadBuffer, startResponseHeader.Opcode, out var startResponsePacket));
+        Assert.AreEqual(LoginResultCode.Success, startResponsePacket.Result);
+        Assert.AreEqual((ushort)0x4001, startResponsePacket.SubOpcode);
+        Assert.IsNotNull(startResponsePacket.SessionTicket);
+
+        // 3. Verify that the session ticket was issued to "DynamicHero", NOT "admin"
+        bool foundDynamicTicket = _ticketService.TryGetTicketByUsername("DynamicHero", out var dynamicTicket);
+        Assert.IsTrue(foundDynamicTicket, "Session ticket must be issued to the authenticated DynamicHero user.");
+        Assert.AreEqual(startResponsePacket.SessionTicket.Value, dynamicTicket.Ticket);
+
+        bool foundAdminTicket = _ticketService.TryGetTicketByUsername("admin", out _);
+        Assert.IsFalse(foundAdminTicket, "No session ticket should be issued to admin when DynamicHero logged in.");
+    }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherEncrypted_InvalidPassword_ReturnsInvalidCredentials()
+    {
+        string hash = _hasher.HashPassword("secret123");
+        await _userRepository.CreateUserAsync(new UserEntity { Username = "NyxPlayer2", PasswordHash = hash });
+
+        // Build authentic encrypted 70-byte packet with wrong password
+        byte[] packet = NyxLauncherCrypto.BuildPacket("NyxPlayer2", "wrong_password");
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.InvalidCredentials, responsePacket.Result);
+    }
+
+    [TestMethod]
+    public async Task Login_NyxLauncherEncrypted_BannedUser_ReturnsAccountBanned()
+    {
+        string hash = _hasher.HashPassword("secret123");
+        int userId = await _userRepository.CreateUserAsync(new UserEntity { Username = "BannedHero", PasswordHash = hash });
+
+        // Mark account banned in user_game_info
+        using var conn = await _dbFactory.CreateConnectionAsync();
+        await conn.ExecuteAsync(
+            "UPDATE user_game_info SET is_banned = 1, ban_date = @BanDate, ban_reason = 'Test violation' WHERE user_id = @UserId",
+            new { BanDate = DateTime.UtcNow.AddDays(7), UserId = userId });
+
+        byte[] packet = NyxLauncherCrypto.BuildPacket("BannedHero", "secret123");
+
+        var endPoint = (IPEndPoint)_server.LocalEndPoint!;
+        using var client = new TcpClient();
+        await client.ConnectAsync(endPoint.Address, endPoint.Port);
+        NetworkStream stream = client.GetStream();
+
+        await stream.WriteAsync(packet);
+        await stream.FlushAsync();
+
+        byte[] headerBuffer = new byte[PacketHeader.HeaderSize];
+        await ReadExactAsync(stream, headerBuffer);
+        Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
+
+        byte[] payloadBuffer = new byte[responseHeader.PayloadLength];
+        await ReadExactAsync(stream, payloadBuffer);
+        Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
+
+        Assert.AreEqual(LoginResultCode.AccountBanned, responsePacket.Result);
     }
 
     [TestMethod]
