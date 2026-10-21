@@ -158,3 +158,75 @@ public sealed record CharacterSelectResponsePacket(
     }
 }
 
+/// <summary>
+/// Character name change request for messenger / buddy system (opcode 0x0015).
+/// Evidence: Observed in engine.dll ?SendCharacterChangeBuddyName@IScavengerWorldNet@@UAEXPAD@Z (0x0015).
+/// </summary>
+public sealed record CharacterChangeBuddyNameRequestPacket(
+    string CharacterName) : IPacket
+{
+    public ushort Opcode => (ushort)RakionOpcode.CharacterChangeBuddyName;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteNullTerminatedString(CharacterName);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> payload, out CharacterChangeBuddyNameRequestPacket packet)
+    {
+        try
+        {
+            var reader = new PacketReader(payload);
+            string name = reader.Remaining > 0 ? reader.ReadNullTerminatedString() : string.Empty;
+            packet = new CharacterChangeBuddyNameRequestPacket(name);
+            return true;
+        }
+        catch (PacketParseException)
+        {
+            packet = default!;
+            return false;
+        }
+    }
+}
+
+/// <summary>
+/// Character name change response for messenger (opcode 0x0015).
+/// Structure: [0] byte ResultCode (0 = Success), [1..N] null-terminated CharacterName.
+/// Evidence: Observed in engine.dll OnRecvChangeBuddyName (0x36192FB0).
+/// </summary>
+public sealed record CharacterChangeBuddyNameResponsePacket(
+    byte ResultCode,
+    string CharacterName) : IPacket
+{
+    public ushort Opcode => (ushort)RakionOpcode.CharacterChangeBuddyName;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(ResultCode);
+        writer.WriteNullTerminatedString(CharacterName);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> payload, out CharacterChangeBuddyNameResponsePacket packet)
+    {
+        if (payload.Length < 2)
+        {
+            packet = default!;
+            return false;
+        }
+
+        try
+        {
+            var reader = new PacketReader(payload);
+            byte result = reader.ReadByte();
+            string name = reader.Remaining > 0 ? reader.ReadNullTerminatedString() : string.Empty;
+            packet = new CharacterChangeBuddyNameResponsePacket(result, name);
+            return true;
+        }
+        catch (PacketParseException)
+        {
+            packet = default!;
+            return false;
+        }
+    }
+}
+

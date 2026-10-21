@@ -84,6 +84,7 @@ rakion-brokenyx/
   - **Resultado visual:** La pantalla de selección de servidores del cliente se dibuja correctamente con los servidores en verde.
 - [x] **2.3 Manejador del Opcode `0x1310` / `0x3000` / `0x4000` (SV_AUTH_LOGIN):**
   - Desempaquetar `UserID`, `Password` y versión del cliente (`LoginRequestPacket`).
+  - Autenticación dinámica de `NyxLauncher.exe`: descifrado AES-128-ECB de la clave estática `0x464FA0`, verificación de desafío de contraseña con clave de sesión `SHA-0` (`NyxLauncherCrypto`), y vinculación del usuario autenticado a la conexión TCP para que `0x4000` ("Start Game") emita el ticket de sesión al usuario real.
   - Validar contra la base de datos (`IUserRepository`), con actualización automática transparente a BCrypt de contraseñas heredadas (MD5 / plaintext).
   - Comprobar estado de baneo en `user_game_info` (`is_banned`, `ban_date`, `ban_reason`).
   - Responder con código de éxito (`LoginResultCode.Success`) o error de credenciales/baneo (`LoginResponsePacket`).
@@ -106,7 +107,8 @@ rakion-brokenyx/
   - Al seleccionar un personaje, colocarlo en estado activo de sesión.
 - [x] **3.5 Creación y Borrado de Personajes:**
   - Implementar `SendCharacterCreate`: verificar que el nombre no esté en uso, crear fila con clase seleccionada (0 a 4) y otorgar el equipamiento básico inicial.
-  - Implementar `SendCharacterDelete`: verificar la clave de borrado (`deletekey`) y retirar el personaje.
+  - Implementar `SendCharacterDelete`: verificar la clave de borrado (`deletekey`) y retirar el personaje de forma segura ante claves vacías (comportamiento retail v258).
+  - Implementar `SendCharacterChangeBuddyName` (`0x0015`): responder a la confirmación de nombre para el sistema de mensajería (Buddy system), cerrando el diálogo modal "Notice" post-creación.
 - [ ] **3.6 Sistema de Canales de Lobby:**
   - Implementar canales: Canal de Principiantes (con límite de nivel), Canal Libre, Canal de Clanes.
   - Procesar entrada (`SendChannelEnter`) y salida (`SendChannelExit`).

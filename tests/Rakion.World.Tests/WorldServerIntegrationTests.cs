@@ -252,6 +252,41 @@ public sealed class WorldServerIntegrationTests
     }
 
     [TestMethod]
+    public async Task CharacterCreate_FollowedByChangeBuddyName_CompletesNoticeHandshake()
+    {
+        // Arrange
+        var user = await CreateUserAsync("PlayerBuddy");
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        await SendPacketAsync(stream, new WorldLoginRequestPacket(ticket, user.Username));
+        await ReadPacketAsync(stream);
+
+        // 1. Act: Create character "Asku"
+        var createReq = new CharacterCreateRequestPacket("Asku", CharacterClass.Ninja, 0);
+        await SendPacketAsync(stream, createReq);
+
+        var (createHeader, createPayload) = await ReadPacketAsync(stream);
+        Assert.AreEqual((ushort)RakionOpcode.CharacterCreate, createHeader.Opcode);
+        Assert.IsTrue(CharacterCreateResponsePacket.TryParse(createPayload, out var createResp));
+        Assert.AreEqual(0, createResp.ResultCode);
+
+        // 2. Act: Client sends 0x0015 (SendCharacterChangeBuddyName) for messenger notice
+        var buddyReq = new CharacterChangeBuddyNameRequestPacket("Asku");
+        await SendPacketAsync(stream, buddyReq);
+
+        var (buddyHeader, buddyPayload) = await ReadPacketAsync(stream);
+
+        // 3. Assert: Server replies with 0x0015 success to dismiss the Notice popup
+        Assert.AreEqual((ushort)RakionOpcode.CharacterChangeBuddyName, buddyHeader.Opcode);
+        Assert.IsTrue(CharacterChangeBuddyNameResponsePacket.TryParse(buddyPayload, out var buddyResp));
+        Assert.AreEqual(0, buddyResp.ResultCode);
+        Assert.AreEqual("Asku", buddyResp.CharacterName);
+    }
+
+    [TestMethod]
     public async Task CharacterCreate_DuplicateName_ReturnsFailure()
     {
         // Arrange
@@ -325,6 +360,37 @@ public sealed class WorldServerIntegrationTests
         var (header, payload) = await ReadPacketAsync(stream);
 
         // Assert: Opcode 0x002D
+        Assert.AreEqual((ushort)RakionOpcode.CharacterDeleteResponse, header.Opcode);
+        Assert.IsTrue(CharacterDeleteResponsePacket.TryParse(payload, out var deleteResp));
+        Assert.AreEqual(0, deleteResp.ResultCode);
+        Assert.AreEqual((uint)ch.Id, deleteResp.CharacterId);
+
+        // Verify character is removed from active roster
+        var characters = await _characterRepository.GetCharactersByUserIdAsync(user.Id);
+        Assert.IsEmpty(characters);
+    }
+
+    [TestMethod]
+    public async Task CharacterDelete_EmptyKey_DeletesDefaultCharacter()
+    {
+        // Arrange
+        var user = await CreateUserAsync("PlayerDeleteEmpty");
+        var ch = await _characterRepository.CreateCharacterAsync(user.Id, "DelEmpty", CharacterClass.Swordman, 0);
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        await SendPacketAsync(stream, new WorldLoginRequestPacket(ticket, user.Username));
+        await ReadPacketAsync(stream);
+
+        // Act: Delete character with empty key (retail client behavior without security pin)
+        var deleteReq = new CharacterDeleteRequestPacket((uint)ch.Id, "");
+        await SendPacketAsync(stream, deleteReq);
+
+        var (header, payload) = await ReadPacketAsync(stream);
+
+        // Assert: Opcode 0x0013 / CharacterDeleteResponse
         Assert.AreEqual((ushort)RakionOpcode.CharacterDeleteResponse, header.Opcode);
         Assert.IsTrue(CharacterDeleteResponsePacket.TryParse(payload, out var deleteResp));
         Assert.AreEqual(0, deleteResp.ResultCode);

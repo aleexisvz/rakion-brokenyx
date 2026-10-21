@@ -151,6 +151,13 @@ public enum RakionOpcode : ushort
     CharacterSelect = 0x0014,
 
     /// <summary>
+    /// Character name change notification for messenger / buddy system after character creation.
+    /// Evidence: Observed in engine.dll ?SendCharacterChangeBuddyName@IScavengerWorldNet@@UAEXPAD@Z (0x0015)
+    /// and OnRecvChangeBuddyName jump table opcode 21 calling 0x36192FB0.
+    /// </summary>
+    CharacterChangeBuddyName = 0x0015,
+
+    /// <summary>
     /// Whisper / private chat between characters.
     /// Evidence: Observed in engine.dll ?SendCharacterWhisper@IScavengerWorldNet@@UAEXPAD0@Z (0x0016).
     /// </summary>

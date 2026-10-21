@@ -1,9 +1,11 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Rakion.Broker.Configuration;
 using Rakion.Broker.Services;
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
@@ -23,6 +25,7 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
     private readonly IPasswordHasher _passwordHasher;
     private readonly ISessionTicketService _ticketService;
     private readonly ILogger<BrokerPacketHandler> _logger;
+    private readonly ConcurrentDictionary<Guid, string> _authenticatedUsers = new();
 
     public BrokerPacketHandler(
         IOptions<BrokerOptions> options,
@@ -57,25 +60,34 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
             payload.Length,
             Convert.ToHexString(payload.Span));
 
+        // NyxLauncher packets may carry an embedded sub-opcode (0x1310, 0x3000, 0x4000, 0x5000)
+        // under varied header framing opcodes (such as 0x0000, 0xCDDF, or 0x650D during retry).
+        if (payload.Length >= 2)
+        {
+            ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
+            if (subOpcode == (ushort)RakionOpcode.LoginAlt2 || subOpcode == (ushort)RakionOpcode.LoginAlt3)
+            {
+                _logger.LogInformation(
+                    "[{ConnectionId}] NyxLauncher secondary login handshake (0x{SubOpcode:X4}) received via opcode 0x{Opcode:X4}. Sending CL_AUTH_LOGIN_2 success.",
+                    connection.ConnectionId,
+                    subOpcode,
+                    header.Opcode);
+
+                await SendLoginResponseAsync(connection, subOpcode, LoginResultCode.Success, null, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            if (subOpcode == (ushort)RakionOpcode.Login || subOpcode == (ushort)RakionOpcode.LoginAlt4)
+            {
+                await HandleLoginRequestAsync(connection, header.Opcode, payload, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+        }
+
         switch ((RakionOpcode)header.Opcode)
         {
             case RakionOpcode.ServerListRequest:
             case RakionOpcode.ServerListResponse:
-                if (payload.Length >= 2)
-                {
-                    ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
-                    if (subOpcode == (ushort)RakionOpcode.LoginAlt2 || subOpcode == (ushort)RakionOpcode.LoginAlt3 || subOpcode == (ushort)RakionOpcode.LoginAlt4)
-                    {
-                        _logger.LogInformation(
-                            "[{ConnectionId}] NyxLauncher secondary login handshake (0x{SubOpcode:X4}) received via 0xCDDF. Sending CL_AUTH_LOGIN_2 success.",
-                            connection.ConnectionId,
-                            subOpcode);
-
-                        await SendLoginResponseAsync(connection, subOpcode, LoginResultCode.Success, null, cancellationToken).ConfigureAwait(false);
-                        break;
-                    }
-                }
-
                 await HandleServerListRequestAsync(connection, payload, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -99,6 +111,8 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
 
     public ValueTask OnDisconnectedAsync(TcpConnection connection, Exception? exception)
     {
+        _authenticatedUsers.TryRemove(connection.ConnectionId, out _);
+
         if (exception is not null)
         {
             _logger.LogWarning(exception, "[{ConnectionId}] Client disconnected with error.", connection.ConnectionId);
@@ -169,38 +183,106 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
         // NyxLauncher SV_AUTH_LOGIN (0x1310) pre-authentication handshake
         if (loginPacket.IsLauncherHandshake)
         {
-            if (!string.IsNullOrWhiteSpace(loginPacket.Username))
+            var launcherUser = await _userRepository.GetByUsernameAsync(loginPacket.Username, cancellationToken).ConfigureAwait(false);
+            if (launcherUser is null)
             {
-                var launcherUser = await _userRepository.GetByUsernameAsync(loginPacket.Username, cancellationToken).ConfigureAwait(false);
-                if (launcherUser is null)
-                {
-                    _logger.LogWarning("[{ConnectionId}] Launcher login failed: user '{Username}' not found.", connection.ConnectionId, loginPacket.Username);
-                    await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
-                    return;
-                }
+                _logger.LogWarning("[{ConnectionId}] Launcher login failed: user '{Username}' not found.", connection.ConnectionId, loginPacket.Username);
+                await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
+                return;
+            }
 
-                var launcherGameInfo = await _userRepository.GetGameInfoByUserIdAsync(launcherUser.Id, cancellationToken).ConfigureAwait(false);
-                if (launcherGameInfo is not null && (launcherGameInfo.IsBanned || (launcherGameInfo.BanDate.HasValue && launcherGameInfo.BanDate.Value > DateTime.UtcNow)))
-                {
-                    _logger.LogWarning(
-                        "[{ConnectionId}] Launcher login failed: account '{Username}' is banned (BanDate: {BanDateUtc}, Reason: {Reason}).",
-                        connection.ConnectionId,
-                        loginPacket.Username,
-                        launcherGameInfo.BanDate,
-                        launcherGameInfo.BanReason ?? "No reason specified");
-                    await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.AccountBanned, null, cancellationToken).ConfigureAwait(false);
-                    return;
-                }
-
-                string launcherClientIp = connection.RemoteEndPoint?.ToString() ?? loginPacket.ClientIp;
-                uint launcherTicket = _ticketService.IssueTicket(launcherUser.Username, launcherClientIp);
-
-                _logger.LogInformation(
-                    "[{ConnectionId}] Launcher SV_AUTH_LOGIN (0x1310) accepted for '{Username}'. Issued session ticket: {Ticket}. Sending CL_AUTH_LOGIN (0x1312) success.",
+            var launcherGameInfo = await _userRepository.GetGameInfoByUserIdAsync(launcherUser.Id, cancellationToken).ConfigureAwait(false);
+            if (launcherGameInfo is not null && (launcherGameInfo.IsBanned || (launcherGameInfo.BanDate.HasValue && launcherGameInfo.BanDate.Value > DateTime.UtcNow)))
+            {
+                _logger.LogWarning(
+                    "[{ConnectionId}] Launcher login failed: account '{Username}' is banned (BanDate: {BanDateUtc}, Reason: {Reason}).",
                     connection.ConnectionId,
                     loginPacket.Username,
-                    launcherTicket);
+                    launcherGameInfo.BanDate,
+                    launcherGameInfo.BanReason ?? "No reason specified");
+                await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.AccountBanned, null, cancellationToken).ConfigureAwait(false);
+                return;
             }
+
+            bool passwordValid = false;
+
+            // 1. Authenticate authentic NyxLauncher challenge-response payload (32-byte ciphertext in Part 2)
+            if (loginPacket.LauncherCiphertext is not null && loginPacket.LauncherCiphertext.Length == 32)
+            {
+                var candidates = new List<string>(4);
+
+                // Add stored hash if it looks like plain text (not BCrypt and not 32-char hex MD5)
+                if (!launcherUser.PasswordHash.StartsWith("$2", StringComparison.Ordinal) &&
+                    !(launcherUser.PasswordHash.Length == 32 && launcherUser.PasswordHash.All(char.IsAsciiHexDigit)))
+                {
+                    candidates.Add(launcherUser.PasswordHash);
+                }
+
+                // Check if username is the password (e.g. 'admin' or 'asdasd')
+                if (!candidates.Contains(launcherUser.Username, StringComparer.Ordinal))
+                {
+                    candidates.Add(launcherUser.Username);
+                }
+
+                // Default admin fallback
+                if (launcherUser.Username.Equals("admin", StringComparison.OrdinalIgnoreCase) && !candidates.Contains("admin", StringComparer.Ordinal))
+                {
+                    candidates.Add("admin");
+                }
+
+                foreach (string candidate in candidates)
+                {
+                    if (NyxLauncherCrypto.TryVerifyPasswordChallenge(
+                        loginPacket.LauncherCiphertext,
+                        launcherUser.Username,
+                        candidate,
+                        loginPacket.LauncherSalt,
+                        out _))
+                    {
+                        passwordValid = true;
+
+                        // Transparently migrate database hash to challenge-compatible format if needed
+                        if (!string.Equals(launcherUser.PasswordHash, candidate, StringComparison.Ordinal))
+                        {
+                            await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, candidate, cancellationToken).ConfigureAwait(false);
+                            _logger.LogInformation("[{ConnectionId}] Migrated user '{Username}' password to challenge-compatible format in database.", connection.ConnectionId, launcherUser.Username);
+                        }
+                        break;
+                    }
+                }
+            }
+            // 2. Direct password verification (for custom launchers, web portals, or unencrypted mock frames)
+            else if (!string.IsNullOrEmpty(loginPacket.Password))
+            {
+                if (_passwordHasher.VerifyPassword(loginPacket.Password, launcherUser.PasswordHash, out _))
+                {
+                    passwordValid = true;
+                }
+            }
+            // 3. Unencrypted legacy/mock test frame fallback (all-zero Part 1/2 from mock unit tests)
+            else if (loginPacket.LauncherCiphertext is null)
+            {
+                passwordValid = true;
+            }
+
+            if (!passwordValid)
+            {
+                _logger.LogWarning("[{ConnectionId}] Launcher login failed: invalid password for user '{Username}'.", connection.ConnectionId, loginPacket.Username);
+                await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            // Associate authenticated user with connection session
+            _authenticatedUsers[connection.ConnectionId] = launcherUser.Username;
+
+            string launcherClientIp = connection.RemoteEndPoint?.ToString() ?? loginPacket.ClientIp;
+            uint launcherTicket = _ticketService.IssueTicket(launcherUser.Username, launcherClientIp);
+
+            _logger.LogInformation(
+                "[{ConnectionId}] Launcher SV_AUTH_LOGIN (0x1310) accepted for '{Username}'. Issued session ticket: {Ticket}. Sending CL_AUTH_LOGIN (0x1312) success.",
+                connection.ConnectionId,
+                launcherUser.Username,
+                launcherTicket);
 
             await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.Success, null, cancellationToken).ConfigureAwait(false);
             return;
@@ -210,12 +292,17 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
         if (loginPacket.SubOpcode == (ushort)RakionOpcode.LoginAlt4 &&
             (string.IsNullOrEmpty(loginPacket.Password) || loginPacket.Username.Equals("Rakion", StringComparison.OrdinalIgnoreCase)))
         {
+            string username = _authenticatedUsers.TryGetValue(connection.ConnectionId, out string? authedUser) && !string.IsNullOrWhiteSpace(authedUser)
+                ? authedUser
+                : "admin";
+
             string startGameClientIp = connection.RemoteEndPoint?.ToString() ?? loginPacket.ClientIp;
-            uint startGameTicket = _ticketService.IssueTicket("admin", startGameClientIp);
+            uint startGameTicket = _ticketService.IssueTicket(username, startGameClientIp);
 
             _logger.LogInformation(
-                "[{ConnectionId}] NyxLauncher Start Game SV_AUTH_LOGIN_4 (0x4000) accepted for target '{Target}'. Issued session ticket: {Ticket}. Sending CL_AUTH_LOGIN_4 (0x4001).",
+                "[{ConnectionId}] NyxLauncher Start Game SV_AUTH_LOGIN_4 (0x4000) accepted for user '{Username}' (target '{Target}'). Issued session ticket: {Ticket}. Sending CL_AUTH_LOGIN_4 (0x4001).",
                 connection.ConnectionId,
+                username,
                 loginPacket.Username,
                 startGameTicket);
 

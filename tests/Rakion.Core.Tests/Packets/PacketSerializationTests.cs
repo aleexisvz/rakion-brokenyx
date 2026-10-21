@@ -1,5 +1,6 @@
 using System.Net;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
@@ -103,8 +104,28 @@ public sealed class PacketSerializationTests
 
         Assert.IsTrue(success);
         Assert.AreEqual("admin", parsed.Username);
+        Assert.AreEqual(41u, parsed.LauncherSalt);
         Assert.AreEqual((ushort)0x1310, parsed.SubOpcode);
         Assert.IsTrue(parsed.IsLauncherHandshake);
+        Assert.IsNotNull(parsed.LauncherCiphertext);
+        Assert.HasCount(32, parsed.LauncherCiphertext);
+    }
+
+    [TestMethod]
+    public void LoginRequest_NyxLauncherCryptoBuildPacket_ParsesDynamicUsernameAndSalt()
+    {
+        byte[] packet = NyxLauncherCrypto.BuildPacket("PlayerOne", "mypassword123", salt: 0x99887766, clientVersion: 1026);
+
+        // Header is 4 bytes (len=70, opcode=0), payload starts at offset 4
+        bool success = LoginRequestPacket.TryParse(packet.AsSpan(PacketHeader.HeaderSize), (ushort)RakionOpcode.None, out var parsed);
+
+        Assert.IsTrue(success);
+        Assert.AreEqual("PlayerOne", parsed.Username);
+        Assert.AreEqual(0x99887766u, parsed.LauncherSalt);
+        Assert.AreEqual((ushort)0x1310, parsed.SubOpcode);
+        Assert.IsTrue(parsed.IsLauncherHandshake);
+        Assert.IsNotNull(parsed.LauncherCiphertext);
+        Assert.HasCount(32, parsed.LauncherCiphertext);
     }
 
     [TestMethod]

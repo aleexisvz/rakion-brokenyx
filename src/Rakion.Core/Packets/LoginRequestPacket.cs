@@ -1,3 +1,4 @@
+using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Protocol;
 
@@ -14,7 +15,9 @@ public sealed record LoginRequestPacket(
     string ClientIp = "127.0.0.1",
     byte Flag = 0,
     ushort SubOpcode = (ushort)RakionOpcode.Login,
-    bool IsLauncherHandshake = false) : IPacket
+    bool IsLauncherHandshake = false,
+    uint LauncherSalt = 0,
+    byte[]? LauncherCiphertext = null) : IPacket
 {
     public ushort Opcode => SubOpcode;
 
@@ -42,16 +45,48 @@ public sealed record LoginRequestPacket(
         ushort resolvedSubOpcode = headerOpcode;
         ReadOnlySpan<byte> data = payload;
 
-        // If header opcode is None (0x0000), the sub-opcode (0x1310, 0x3000, 0x4000, 0x5000) is the first UInt16
-        if (headerOpcode == (ushort)RakionOpcode.None && data.Length >= 2)
+        // Check if the payload embeds a recognized sub-opcode (0x1310, 0x3000, 0x4000, 0x5000),
+        // regardless of the framing header opcode (e.g. 0x0000, 0xCDDF, or 0x650D during retry)
+        if (data.Length >= 2)
         {
-            resolvedSubOpcode = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data[..2]);
-            data = data[2..];
+            ushort embeddedSubOpcode = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data[..2]);
+            if (embeddedSubOpcode is (ushort)RakionOpcode.Login
+                or (ushort)RakionOpcode.LoginAlt2
+                or (ushort)RakionOpcode.LoginAlt3
+                or (ushort)RakionOpcode.LoginAlt4)
+            {
+                resolvedSubOpcode = embeddedSubOpcode;
+                data = data[2..];
+            }
         }
 
         // Fixed 70-byte packet from NyxLauncher (4-byte header + 2-byte sub-opcode 0x1310 + 64-byte payload)
-        if (headerOpcode == (ushort)RakionOpcode.None && resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
+        if (resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
         {
+            if (NyxLauncherCrypto.TryDecryptPart1(data[..32], out string decUser, out uint decSalt))
+            {
+                string password = string.Empty;
+                ushort clientVer = 1026;
+                if (NyxLauncherCrypto.TryDecryptPart2Direct(data[32..], out string directPass, out ushort directVer))
+                {
+                    password = directPass;
+                    clientVer = directVer;
+                }
+
+                packet = new LoginRequestPacket(
+                    Username: decUser,
+                    Password: password,
+                    ClientVersion: clientVer,
+                    ClientIp: "127.0.0.1",
+                    Flag: 0,
+                    SubOpcode: resolvedSubOpcode,
+                    IsLauncherHandshake: true,
+                    LauncherSalt: decSalt,
+                    LauncherCiphertext: data[32..].ToArray());
+                return true;
+            }
+
+            // Fallback for mock/unencrypted legacy test frames
             string username = "admin";
             if (data[0] == 0 && data[8] != 0)
             {
@@ -71,7 +106,9 @@ public sealed record LoginRequestPacket(
                 ClientIp: "127.0.0.1",
                 Flag: 0,
                 SubOpcode: resolvedSubOpcode,
-                IsLauncherHandshake: true);
+                IsLauncherHandshake: true,
+                LauncherSalt: 0,
+                LauncherCiphertext: null);
             return true;
         }
 

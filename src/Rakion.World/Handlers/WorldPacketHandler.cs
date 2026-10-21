@@ -143,6 +143,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 await HandleCharacterSelectAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
+            case RakionOpcode.CharacterChangeBuddyName:
+                await HandleCharacterChangeBuddyNameAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
             case RakionOpcode.CharacterTutorialClear:
                 _logger.LogInformation(
                     "[{ConnectionId}] Character tutorial clear notification received for user '{Username}'.",
@@ -474,28 +478,37 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         if (!CharacterDeleteRequestPacket.TryParse(payload.Span, out var req))
         {
+            _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: malformed request packet.", session.Connection.ConnectionId);
             await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 1, 0), cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        var ch = await _characterRepository.GetCharacterByIdAsync((int)req.CharacterId, cancellationToken).ConfigureAwait(false);
-        if (ch is null || ch.UserId != session.User.Id)
+        try
         {
-            _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: character {CharId} does not belong to user.", session.Connection.ConnectionId, req.CharacterId);
-            await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 2, req.CharacterId), cancellationToken).ConfigureAwait(false);
-            return;
-        }
+            var ch = await _characterRepository.GetCharacterByIdAsync((int)req.CharacterId, cancellationToken).ConfigureAwait(false);
+            if (ch is null || ch.UserId != session.User.Id)
+            {
+                _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: character {CharId} does not belong to user.", session.Connection.ConnectionId, req.CharacterId);
+                await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 2, req.CharacterId), cancellationToken).ConfigureAwait(false);
+                return;
+            }
 
-        bool deleted = await _characterRepository.DeleteCharacterAsync((int)req.CharacterId, req.DeleteKey, cancellationToken).ConfigureAwait(false);
-        if (!deleted)
+            bool deleted = await _characterRepository.DeleteCharacterAsync((int)req.CharacterId, req.DeleteKey, cancellationToken).ConfigureAwait(false);
+            if (!deleted)
+            {
+                _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: invalid delete key for character {CharId}.", session.Connection.ConnectionId, req.CharacterId);
+                await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 1, req.CharacterId), cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
+            _logger.LogInformation("[{ConnectionId}] Character {CharId} ('{Name}') deleted successfully.", session.Connection.ConnectionId, req.CharacterId, ch.Name);
+            await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
         {
-            _logger.LogWarning("[{ConnectionId}] CharacterDelete failed: invalid delete key for character {CharId}.", session.Connection.ConnectionId, req.CharacterId);
+            _logger.LogError(ex, "[{ConnectionId}] Unexpected error deleting character {CharId}.", session.Connection.ConnectionId, req.CharacterId);
             await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 1, req.CharacterId), cancellationToken).ConfigureAwait(false);
-            return;
         }
-
-        _logger.LogInformation("[{ConnectionId}] Character {CharId} deleted successfully.", session.Connection.ConnectionId, req.CharacterId);
-        await SendPacketAsync(session, new CharacterDeleteResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleCharacterSelectAsync(
@@ -525,6 +538,32 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         session.ActiveCharacter = ch;
         _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id);
         await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleCharacterChangeBuddyNameAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.User is null)
+        {
+            return;
+        }
+
+        string charName = string.Empty;
+        if (CharacterChangeBuddyNameRequestPacket.TryParse(payload.Span, out var req))
+        {
+            charName = req.CharacterName;
+        }
+
+        _logger.LogInformation(
+            "[{ConnectionId}] CharacterChangeBuddyName (0x0015) received for user '{Username}' (Character: '{Name}'). Responding with success to complete client creation notice.",
+            session.Connection.ConnectionId,
+            session.User.Username,
+            charName);
+
+        // Confirmation packet: ResultCode = 0 (Success), CharacterName
+        await SendPacketAsync(session, new CharacterChangeBuddyNameResponsePacket(ResultCode: 0, charName), cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken)
