@@ -9,8 +9,8 @@ Servidor de Handshake, Autenticación y Lista de Servidores para el emulador `ra
 1. **Listener TCP en puerto 40706:** Punto de entrada de red inicial cuando el cliente `rakion.bin` arranca.
 2. **Entrega de Lista de Servidores (Opcode `0xCDDF` -> `0x0101`):** Retorna la lista estructurada de mundos disponibles (`GameServers`), direcciones IP dinámicas, puertos (`40708`), salas en uso y límites de jugadores.
 3. **Autenticación Limpia de Usuarios (Opcode `0x1310` / `0x3000` / `0x4000`):**
-   - Descifra dinámicamente las credenciales reales enviadas por `NyxLauncher.exe` (AES-128-ECB con clave estática `0x464FA0` y verificación de desafío `SHA1`).
-   - Valida el hash seguro contra la base de datos MySQL/MariaDB (`user` / `BCrypt` o contraseñas migradas) y comprueba el estado de baneo (`bandate`).
+   - Descifra dinámicamente el usuario real enviado por `NyxLauncher.exe` (AES-128-ECB con clave estática `0x464FA0`).
+   - Valida la existencia de la cuenta contra la base de datos MySQL/MariaDB (`user`) y comprueba el estado de baneo (`bandate` / `user_game_info.is_banned`). Si se provee contraseña directa, la valida con `BCrypt`.
    - Vincula el usuario autenticado a la conexión TCP para que el posterior paquete `0x4000` ("Start Game") emita el Session Ticket al usuario real (no fijado a `"admin"`).
    - Responde con el código de resultado correspondiente (`LoginResultCode.Success`, `InvalidCredentials`, `AccountBanned`).
 4. **Gestor de Tickets de Sesión (`ISessionTicketService`):**
