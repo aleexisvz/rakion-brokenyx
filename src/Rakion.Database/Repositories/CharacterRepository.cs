@@ -209,18 +209,38 @@ public sealed class CharacterRepository : ICharacterRepository
 
     public async Task<bool> DeleteCharacterAsync(int characterId, string deleteKey, CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(deleteKey);
-
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+
+        var character = await GetCharacterByIdAsync(characterId, ct).ConfigureAwait(false);
+        if (character is null || !character.IsUsed)
+        {
+            return false;
+        }
+
+        // A deleteKey is valid if:
+        // 1. It matches the stored DeleteKey exactly, OR
+        // 2. The client supplied empty/whitespace and the character has the default "sirmaster" key, OR
+        // 3. The client supplied "sirmaster" (the master bypass key), OR
+        // 4. The stored DeleteKey itself is empty/null/whitespace.
+        bool keyMatches = string.Equals(character.DeleteKey, deleteKey, StringComparison.Ordinal)
+            || (string.IsNullOrWhiteSpace(deleteKey) && string.Equals(character.DeleteKey, "sirmaster", StringComparison.OrdinalIgnoreCase))
+            || string.Equals(deleteKey, "sirmaster", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(character.DeleteKey);
+
+        if (!keyMatches)
+        {
+            return false;
+        }
+
         const string sql = """
             UPDATE characters
             SET is_used = 0, change_time = @ChangeTime
-            WHERE id = @Id AND delete_key = @DeleteKey AND is_used = 1;
+            WHERE id = @Id AND is_used = 1;
             """;
 
         int affected = await connection.ExecuteAsync(new CommandDefinition(
             sql,
-            new { Id = characterId, DeleteKey = deleteKey, ChangeTime = DateTime.UtcNow },
+            new { Id = characterId, ChangeTime = DateTime.UtcNow },
             cancellationToken: ct));
 
         return affected > 0;

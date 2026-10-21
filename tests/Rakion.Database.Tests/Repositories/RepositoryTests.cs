@@ -132,6 +132,14 @@ public sealed class RepositoryTests
         // Should no longer appear in active characters
         var chars = await _charRepo.GetCharactersByUserIdAsync(userId);
         Assert.IsEmpty(chars);
+
+        // Empty delete key should also succeed on default sirmaster character
+        var archer = await _charRepo.CreateCharacterAsync(userId, "ToKillEmpty", CharacterClass.Archer, slotIndex: 1);
+        bool deletedEmpty = await _charRepo.DeleteCharacterAsync(archer.Id, "");
+        Assert.IsTrue(deletedEmpty);
+
+        var charsAfterEmpty = await _charRepo.GetCharactersByUserIdAsync(userId);
+        Assert.IsEmpty(charsAfterEmpty);
     }
 
     [TestMethod]

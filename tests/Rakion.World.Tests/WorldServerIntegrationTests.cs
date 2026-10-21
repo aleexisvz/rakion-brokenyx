@@ -335,6 +335,37 @@ public sealed class WorldServerIntegrationTests
         Assert.IsEmpty(characters);
     }
 
+    [TestMethod]
+    public async Task CharacterDelete_EmptyKey_DeletesDefaultCharacter()
+    {
+        // Arrange
+        var user = await CreateUserAsync("PlayerDeleteEmpty");
+        var ch = await _characterRepository.CreateCharacterAsync(user.Id, "DelEmpty", CharacterClass.Swordman, 0);
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        await SendPacketAsync(stream, new WorldLoginRequestPacket(ticket, user.Username));
+        await ReadPacketAsync(stream);
+
+        // Act: Delete character with empty key (retail client behavior without security pin)
+        var deleteReq = new CharacterDeleteRequestPacket((uint)ch.Id, "");
+        await SendPacketAsync(stream, deleteReq);
+
+        var (header, payload) = await ReadPacketAsync(stream);
+
+        // Assert: Opcode 0x0013 / CharacterDeleteResponse
+        Assert.AreEqual((ushort)RakionOpcode.CharacterDeleteResponse, header.Opcode);
+        Assert.IsTrue(CharacterDeleteResponsePacket.TryParse(payload, out var deleteResp));
+        Assert.AreEqual(0, deleteResp.ResultCode);
+        Assert.AreEqual((uint)ch.Id, deleteResp.CharacterId);
+
+        // Verify character is removed from active roster
+        var characters = await _characterRepository.GetCharactersByUserIdAsync(user.Id);
+        Assert.IsEmpty(characters);
+    }
+
     private async Task<UserEntity> CreateUserAsync(string username)
     {
         var user = new UserEntity
