@@ -240,15 +240,12 @@ public sealed class WorldServerIntegrationTests
         Assert.AreEqual((ushort)RakionOpcode.CharacterCreate, header.Opcode);
         Assert.IsTrue(CharacterCreateResponsePacket.TryParse(payload, out var createResp));
         Assert.AreEqual(0, createResp.ResultCode);
-        Assert.IsNotNull(createResp.Character);
-        Assert.AreEqual("Excalibur", createResp.Character.Name);
-        Assert.AreEqual(CharacterClass.Swordman, createResp.Character.Class);
-        Assert.AreEqual(0, createResp.Character.Slot);
 
         // Verify in database
         var characters = await _characterRepository.GetCharactersByUserIdAsync(user.Id);
         Assert.HasCount(1, characters);
         Assert.AreEqual("Excalibur", characters[0].Name);
+        Assert.AreEqual((uint)characters[0].Id, createResp.CharacterId);
     }
 
     [TestMethod]
@@ -337,6 +334,34 @@ public sealed class WorldServerIntegrationTests
         Assert.IsTrue(CharacterSelectResponsePacket.TryParse(payload, out var selectResp));
         Assert.AreEqual(0, selectResp.ResultCode);
         Assert.AreEqual((uint)ch.Id, selectResp.CharacterId);
+    }
+
+    [TestMethod]
+    public async Task CharacterSelect_CompositeIdFallback_ResolvesCharacterSuccessfully()
+    {
+        // Arrange: User with character at slot 2 with Id 7
+        var user = await CreateUserAsync("PlayerComposite");
+        var ch = await _characterRepository.CreateCharacterAsync(user.Id, "NinjaHero", CharacterClass.Ninja, 2);
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        await SendPacketAsync(stream, new WorldLoginRequestPacket(ticket, user.Username));
+        await ReadPacketAsync(stream);
+
+        // Act: Client sends composite ID: (ch.Id << 8) | ch.SlotIndex
+        uint compositeId = ((uint)ch.Id << 8) | (uint)ch.SlotIndex;
+        var selectReq = new CharacterSelectRequestPacket(compositeId);
+        await SendPacketAsync(stream, selectReq);
+
+        var (header, payload) = await ReadPacketAsync(stream);
+
+        // Assert: Opcode 0x0014 / CharacterSelectResponse succeeds
+        Assert.AreEqual((ushort)RakionOpcode.CharacterSelectResponse, header.Opcode);
+        Assert.IsTrue(CharacterSelectResponsePacket.TryParse(payload, out var selectResp));
+        Assert.AreEqual(0, selectResp.ResultCode);
+        Assert.AreEqual(compositeId, selectResp.CharacterId);
     }
 
     [TestMethod]

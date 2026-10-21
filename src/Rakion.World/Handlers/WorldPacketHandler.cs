@@ -503,8 +503,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             AttackSpeed: 100, Speed: 100, MaxCp: 100,
             (uint)newChar.WinCount, (uint)newChar.LossCount, (uint)newChar.DrawCount);
 
-        _logger.LogInformation("[{ConnectionId}] Character '{Name}' (Class: {Class}, Slot: {Slot}) created successfully.", session.Connection.ConnectionId, newChar.Name, newChar.Class, newChar.SlotIndex);
-        await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 0, summary), cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("[{ConnectionId}] Character '{Name}' (Class: {Class}, Slot: {Slot}) created successfully (Id={Id}).", session.Connection.ConnectionId, newChar.Name, newChar.Class, newChar.SlotIndex, newChar.Id);
+        await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 0, (uint)newChar.Id), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleCharacterDeleteAsync(
@@ -569,6 +569,22 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         var ch = await _characterRepository.GetCharacterByIdAsync((int)req.CharacterId, cancellationToken).ConfigureAwait(false);
+
+        // Fallback 1: Client previously received composite (CharacterId << 8) | SlotIndex (e.g. 0x0702 = 1794)
+        if ((ch is null || ch.UserId != session.User.Id) && req.CharacterId > 255)
+        {
+            uint extractedId = req.CharacterId >> 8;
+            ch = await _characterRepository.GetCharacterByIdAsync((int)extractedId, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Fallback 2: Check by slot index or match across user's active characters
+        if (ch is null || ch.UserId != session.User.Id)
+        {
+            var userChars = await _characterRepository.GetCharactersByUserIdAsync(session.User.Id, cancellationToken).ConfigureAwait(false);
+            byte targetSlot = (byte)(req.CharacterId & 0xFF);
+            ch = userChars.FirstOrDefault(c => c.SlotIndex == targetSlot || c.Id == (int)req.CharacterId);
+        }
+
         if (ch is null || ch.UserId != session.User.Id)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterSelect failed: character {CharId} does not belong to user.", session.Connection.ConnectionId, req.CharacterId);
@@ -577,7 +593,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         session.ActiveCharacter = ch;
-        _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id);
+        _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}, Slot: {Slot}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id, ch.SlotIndex);
         await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
     }
 
