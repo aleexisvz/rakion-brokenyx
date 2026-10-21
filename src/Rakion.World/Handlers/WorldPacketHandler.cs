@@ -163,10 +163,19 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 break;
 
             case RakionOpcode.CharacterTutorialClear:
-                _logger.LogInformation(
-                    "[{ConnectionId}] Character tutorial clear notification received for user '{Username}'.",
-                    connection.ConnectionId,
-                    session.User?.Username ?? "Unknown");
+                if (session.User is not null)
+                {
+                    await _userRepository.SetTutorialCompletedAsync(session.User.Id, true, cancellationToken).ConfigureAwait(false);
+                    if (session.GameInfo is not null)
+                    {
+                        session.GameInfo.TutorialCompleted = true;
+                    }
+
+                    _logger.LogInformation(
+                        "[{ConnectionId}] Character tutorial clear notification received and saved for user '{Username}'.",
+                        connection.ConnectionId,
+                        session.User.Username);
+                }
                 break;
 
             case RakionOpcode.ChannelList:
@@ -594,7 +603,44 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         session.ActiveCharacter = ch;
         _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}, Slot: {Slot}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id, ch.SlotIndex);
+
+        // 1. Confirm character selection (Opcode 0x0014) to confirm active character selection and trigger stat computation
         await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+
+        // 2. Automatically assign character to appropriate channel (Beginner if level <= 15, otherwise Free)
+        byte targetChannelIndex = ch.Level <= 15 ? (byte)0 : (byte)1;
+        if (!_channelManager.TryEnterChannel(targetChannelIndex, session, string.Empty, out _))
+        {
+            _channelManager.TryEnterChannel(1, session, string.Empty, out _);
+        }
+
+        if (session.ActiveChannel is not null)
+        {
+            var activeCh = session.ActiveChannel;
+            var enterResp = new ChannelEnterResponsePacket(
+                ResultCode: 0,
+                ChannelIndex: activeCh.Index,
+                ServerId: 0,
+                ChannelName: activeCh.Name,
+                ChannelType: (byte)activeCh.Type,
+                MaxPlayers: activeCh.MaxPlayers,
+                Flags: 0);
+
+            // 3. Send ChannelEnter response (Opcode 0x001F) to transition client from CharacterSelectDialog to ChannelSelectDialog (Lobby)
+            await SendPacketAsync(session, enterResp, cancellationToken).ConfigureAwait(false);
+
+            // 4. Send ChannelCharacters response (Opcode 0x001E)
+            await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
+
+            // 5. Broadcast user entrance to other players in this channel
+            foreach (var member in activeCh.Sessions.Values)
+            {
+                if (member.Connection.ConnectionId != session.Connection.ConnectionId)
+                {
+                    await SendPacketAsync(member, enterResp, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     private async ValueTask HandleCharacterChangeBuddyNameAsync(
@@ -671,13 +717,25 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var resp = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: ch.Index,
-                Port: (ushort)_options.Value.Port,
+                ServerId: 0,
                 ChannelName: ch.Name,
                 ChannelType: (byte)ch.Type,
                 MaxPlayers: ch.MaxPlayers,
                 Flags: 0);
 
             await SendPacketAsync(session, resp, cancellationToken).ConfigureAwait(false);
+
+            // Broadcast entrance to other players in the newly entered channel
+            foreach (var member in ch.Sessions.Values)
+            {
+                if (member.Connection.ConnectionId != session.Connection.ConnectionId)
+                {
+                    await SendPacketAsync(member, resp, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            // Send channel character roster
+            await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
         }
         else
         {

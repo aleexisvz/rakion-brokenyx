@@ -152,6 +152,15 @@ public sealed class ChannelIntegrationTests
         Assert.IsTrue(CharacterSelectResponsePacket.TryParse(selPayload, out var selResp));
         Assert.AreEqual((byte)0, selResp.ResultCode);
 
+        // Character selection automatically initiates lobby entrance (Opcode 0x001F and 0x001E)
+        var (autoEnterOp, autoEnterPayload) = await ReadServerPacketAsync(stream);
+        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, autoEnterOp);
+        Assert.IsTrue(ChannelEnterResponsePacket.TryParse(autoEnterPayload, out var autoEnterResp));
+        Assert.AreEqual((byte)0, autoEnterResp.ResultCode);
+
+        var (autoCharsOp, _) = await ReadServerPacketAsync(stream);
+        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, autoCharsOp);
+
         // 3. Request Channel List (0x001D)
         var listReq = new ChannelListRequestPacket();
         await SendClientPacketAsync(stream, 3, listReq.Opcode, listReq);
@@ -175,7 +184,11 @@ public sealed class ChannelIntegrationTests
         Assert.AreEqual((byte)0, enterResp.ChannelIndex);
         Assert.AreEqual("Beginner 01", enterResp.ChannelName);
 
-        // 5. Request Channel Characters (0x001E)
+        // Server delivers initial ChannelCharacters (0x001E) upon channel entrance
+        var (autoEnterCharsOp, _) = await ReadServerPacketAsync(stream);
+        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, autoEnterCharsOp);
+
+        // 5. Request Channel Characters (0x001E) explicitly
         var charReq = new ChannelCharactersRequestPacket();
         await SendClientPacketAsync(stream, 5, charReq.Opcode, charReq);
 
@@ -225,21 +238,33 @@ public sealed class ChannelIntegrationTests
         await ReadServerPacketAsync(stream1); // login resp
         await ReadServerPacketAsync(stream1); // login2
         await SendClientPacketAsync(stream1, 2, (ushort)RakionOpcode.CharacterSelect, new CharacterSelectRequestPacket((uint)char1));
-        await ReadServerPacketAsync(stream1); // char select resp
+        await ReadServerPacketAsync(stream1); // char select resp (0x0014)
+        await ReadServerPacketAsync(stream1); // auto channel enter resp (0x001F)
+        await ReadServerPacketAsync(stream1); // auto channel chars resp (0x001E)
 
         // Login & select Bob
         await SendClientPacketAsync(stream2, 1, (ushort)RakionOpcode.WorldLogin, new WorldLoginRequestPacket(SessionTicket: 0, Username: "user2"));
         await ReadServerPacketAsync(stream2); // login resp
         await ReadServerPacketAsync(stream2); // login2
         await SendClientPacketAsync(stream2, 2, (ushort)RakionOpcode.CharacterSelect, new CharacterSelectRequestPacket((uint)char2));
-        await ReadServerPacketAsync(stream2); // char select resp
+        await ReadServerPacketAsync(stream2); // char select resp (0x0014)
+        await ReadServerPacketAsync(stream2); // auto channel enter resp (0x001F)
+        await ReadServerPacketAsync(stream2); // auto channel chars resp (0x001E)
+
+        // Alice receives broadcast of Bob entering channel 0
+        await ReadServerPacketAsync(stream1);
 
         // Both enter Free Channel (1)
         await SendClientPacketAsync(stream1, 3, (ushort)RakionOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
-        await ReadServerPacketAsync(stream1);
+        await ReadServerPacketAsync(stream1); // enter resp (0x001F)
+        await ReadServerPacketAsync(stream1); // channel chars (0x001E)
 
         await SendClientPacketAsync(stream2, 3, (ushort)RakionOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
-        await ReadServerPacketAsync(stream2);
+        await ReadServerPacketAsync(stream2); // enter resp (0x001F)
+        await ReadServerPacketAsync(stream2); // channel chars (0x001E)
+
+        // Alice receives broadcast of Bob entering Free Channel 1
+        await ReadServerPacketAsync(stream1);
 
         // 1. Channel Chat: Alice sends chat message
         await SendClientPacketAsync(stream1, 4, (ushort)RakionOpcode.ChannelChat, new ChannelChatRequestPacket("Hello Bob!"));

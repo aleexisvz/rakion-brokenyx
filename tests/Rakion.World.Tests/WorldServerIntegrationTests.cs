@@ -329,11 +329,23 @@ public sealed class WorldServerIntegrationTests
 
         var (header, payload) = await ReadPacketAsync(stream);
 
-        // Assert: Opcode 0x002E
+        // Assert: Opcode 0x0014 / CharacterSelectResponse
         Assert.AreEqual((ushort)RakionOpcode.CharacterSelectResponse, header.Opcode);
         Assert.IsTrue(CharacterSelectResponsePacket.TryParse(payload, out var selectResp));
         Assert.AreEqual(0, selectResp.ResultCode);
         Assert.AreEqual((uint)ch.Id, selectResp.CharacterId);
+
+        // Assert: Opcode 0x001F / ChannelEnterResponse (Lobby transition packet matching engine.dll 0x361933F0 and rakion.bin 0x00473DA0)
+        var (enterHeader, enterPayload) = await ReadPacketAsync(stream);
+        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, enterHeader.Opcode);
+        Assert.IsTrue(ChannelEnterResponsePacket.TryParse(enterPayload, out var enterResp));
+        Assert.AreEqual((byte)0, enterResp.ResultCode);
+        Assert.AreEqual((byte)0, enterResp.ChannelIndex);
+        Assert.AreEqual((ushort)0, enterResp.ServerId);
+
+        // Assert: Opcode 0x001E / ChannelCharactersResponse
+        var (charsHeader, _) = await ReadPacketAsync(stream);
+        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, charsHeader.Opcode);
     }
 
     [TestMethod]
@@ -393,6 +405,37 @@ public sealed class WorldServerIntegrationTests
         // Verify character is removed from active roster
         var characters = await _characterRepository.GetCharactersByUserIdAsync(user.Id);
         Assert.IsEmpty(characters);
+    }
+
+    [TestMethod]
+    public async Task CharacterTutorialClear_SetsTutorialCompletedInDatabase()
+    {
+        // Arrange
+        var user = await CreateUserAsync("PlayerTutorial");
+        uint ticket = _ticketService.IssueTicket(user.Username, "127.0.0.1");
+
+        using var client = await ConnectClientAsync();
+        var stream = client.GetStream();
+
+        await SendPacketAsync(stream, new WorldLoginRequestPacket(ticket, user.Username));
+        await ReadPacketAsync(stream);
+
+        // Verify initially false
+        var infoBefore = await _userRepository.GetGameInfoByUserIdAsync(user.Id);
+        Assert.IsNotNull(infoBefore);
+        Assert.IsFalse(infoBefore.TutorialCompleted);
+
+        // Act: Client completes tutorial and sends 0x001A (CharacterTutorialClear)
+        using var writer = new PacketWriter((ushort)RakionOpcode.CharacterTutorialClear);
+        await stream.WriteAsync(writer.Build());
+
+        // Allow handler a moment to process async database write
+        await Task.Delay(100);
+
+        // Assert: Database updated
+        var infoAfter = await _userRepository.GetGameInfoByUserIdAsync(user.Id);
+        Assert.IsNotNull(infoAfter);
+        Assert.IsTrue(infoAfter.TutorialCompleted);
     }
 
     [TestMethod]
