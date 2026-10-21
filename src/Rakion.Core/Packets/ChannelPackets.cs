@@ -127,13 +127,21 @@ public sealed record ChannelEnterRequestPacket(
 }
 
 /// <summary>
-/// Server response to channel enter request.
-/// Evidence: Observed in engine.dll OnRecvChannelEnter (0x361933F0, Opcode 0x001F).
+/// Server response to channel enter request (also sent as lobby transition confirmation upon character select).
+/// Evidence: Observed in engine.dll OnRecvChannelEnter (0x361933F0, Opcode 0x001F) and rakion.bin (0x00473DA0).
+/// Wire layout:
+///   [0]      ResultCode (byte, 0 = success)
+///   [1]      ChannelIndex (byte, 0 = Beginner, 1 = Free, etc.)
+///   [2..3]   ServerId (ushort, must match client's WorldNet ServerId [WorldNet + 0x14], e.g. 0)
+///   [4..]    ChannelName (null-terminated string)
+///   [4+len+1] ChannelType (byte: 0 = Beginner, 1 = Free, 2 = Clan)
+///   [4+len+2] MaxPlayers (byte: e.g. 100)
+///   [4+len+3..6] Flags (uint32: e.g. 0)
 /// </summary>
 public sealed record ChannelEnterResponsePacket(
     byte ResultCode,
     byte ChannelIndex = 0,
-    ushort Port = 40708,
+    ushort ServerId = 0,
     string ChannelName = "",
     byte ChannelType = 0,
     byte MaxPlayers = 100,
@@ -147,7 +155,7 @@ public sealed record ChannelEnterResponsePacket(
         if (ResultCode == 0)
         {
             writer.WriteByte(ChannelIndex);
-            writer.WriteUInt16(Port);
+            writer.WriteUInt16(ServerId);
             writer.WriteNullTerminatedString(ChannelName);
             writer.WriteByte(ChannelType);
             writer.WriteByte(MaxPlayers);
@@ -177,7 +185,7 @@ public sealed record ChannelEnterResponsePacket(
         }
 
         byte index = reader.ReadByte();
-        ushort port = reader.ReadUInt16();
+        ushort serverId = reader.ReadUInt16();
         string name = reader.ReadNullTerminatedString();
 
         if (reader.Remaining < 6)
@@ -189,7 +197,7 @@ public sealed record ChannelEnterResponsePacket(
         byte max = reader.ReadByte();
         uint flags = reader.ReadUInt32();
 
-        packet = new ChannelEnterResponsePacket(result, index, port, name, type, max, flags);
+        packet = new ChannelEnterResponsePacket(result, index, serverId, name, type, max, flags);
         return true;
     }
 }

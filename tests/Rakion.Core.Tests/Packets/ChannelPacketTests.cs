@@ -78,7 +78,7 @@ public sealed class ChannelPacketTests
         var packet = new ChannelEnterResponsePacket(
             ResultCode: 0,
             ChannelIndex: 1,
-            Port: 40708,
+            ServerId: 0,
             ChannelName: "Free 01",
             ChannelType: 1,
             MaxPlayers: 100,
@@ -93,7 +93,7 @@ public sealed class ChannelPacketTests
         Assert.IsTrue(success);
         Assert.AreEqual((byte)0, parsed.ResultCode);
         Assert.AreEqual((byte)1, parsed.ChannelIndex);
-        Assert.AreEqual((ushort)40708, parsed.Port);
+        Assert.AreEqual((ushort)0, parsed.ServerId);
         Assert.AreEqual("Free 01", parsed.ChannelName);
         Assert.AreEqual((byte)1, parsed.ChannelType);
         Assert.AreEqual((byte)100, parsed.MaxPlayers);
