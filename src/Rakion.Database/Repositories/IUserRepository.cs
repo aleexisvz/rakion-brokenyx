@@ -13,5 +13,6 @@ public interface IUserRepository
     Task UpdatePasswordHashAsync(int userId, string newHash, CancellationToken ct = default);
     Task<UserGameInfoEntity?> GetGameInfoByUserIdAsync(int userId, CancellationToken ct = default);
     Task UpdateLastConnectAsync(int userId, DateTime connectTime, CancellationToken ct = default);
+    Task SetTutorialCompletedAsync(int userId, bool completed = true, CancellationToken ct = default);
 }
 
