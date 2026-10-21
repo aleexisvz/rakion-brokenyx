@@ -87,6 +87,20 @@ public sealed class NyxLauncherCryptoTests
     }
 
     [TestMethod]
+    public void TryDecryptPart1_WithCapturedNyxLauncherPacket_DecodesUsernameAndSalt()
+    {
+        // Real packet captured live from NyxLauncher.exe (64 bytes payload)
+        byte[] payload = Convert.FromHexString(
+            "A41302F43298A2CC6E856CAC2F62806179D94F40C03757CE15EEF7F3042D336EA1FF79DABFCD6EC2B1DD0AEDDD6E17C1AAA4D4880DA1CD12B1AF1273876B42CF");
+
+        bool success = NyxLauncherCrypto.TryDecryptPart1(payload.AsSpan(0, 32), out string username, out uint salt);
+
+        Assert.IsTrue(success);
+        Assert.AreEqual("admin", username);
+        Assert.AreEqual(0x29u, salt);
+    }
+
+    [TestMethod]
     public void TryDecryptPart1_BufferTooShort_ReturnsFalse()
     {
         byte[] shortBuffer = new byte[16];

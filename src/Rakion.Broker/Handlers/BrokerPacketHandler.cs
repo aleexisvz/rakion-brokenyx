@@ -195,70 +195,22 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
                 return;
             }
 
-            // Verify credentials (password)
-            bool passwordVerified = false;
+            // If a plaintext or direct password was extracted/supplied, verify it
             if (!string.IsNullOrEmpty(loginPacket.Password))
             {
-                if (_passwordHasher.VerifyPassword(loginPacket.Password, launcherUser.PasswordHash, out bool launcherNeedsRehash))
+                if (!_passwordHasher.VerifyPassword(loginPacket.Password, launcherUser.PasswordHash, out bool launcherNeedsRehash))
                 {
-                    passwordVerified = true;
-                    if (launcherNeedsRehash)
-                    {
-                        string upgradedHash = _passwordHasher.HashPassword(loginPacket.Password);
-                        await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, upgradedHash, cancellationToken).ConfigureAwait(false);
-                        _logger.LogInformation("[{ConnectionId}] Upgraded legacy password hash to BCrypt for user '{Username}'.", connection.ConnectionId, launcherUser.Username);
-                    }
-                }
-            }
-            else if (loginPacket.LauncherCiphertext is { Length: 32 } ciphertext)
-            {
-                bool isAllZeros = true;
-                for (int i = 0; i < ciphertext.Length; i++)
-                {
-                    if (ciphertext[i] != 0)
-                    {
-                        isAllZeros = false;
-                        break;
-                    }
+                    _logger.LogWarning("[{ConnectionId}] Launcher login failed: invalid password for user '{Username}'.", connection.ConnectionId, loginPacket.Username);
+                    await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
+                    return;
                 }
 
-                if (isAllZeros)
+                if (launcherNeedsRehash)
                 {
-                    // Mock test bypass with unencrypted zeroed payload
-                    passwordVerified = true;
+                    string upgradedHash = _passwordHasher.HashPassword(loginPacket.Password);
+                    await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, upgradedHash, cancellationToken).ConfigureAwait(false);
+                    _logger.LogInformation("[{ConnectionId}] Upgraded legacy password hash to BCrypt for user '{Username}'.", connection.ConnectionId, launcherUser.Username);
                 }
-                else
-                {
-                    // Check directly if password in DB is legacy plaintext matching the challenge
-                    if (NyxLauncherCrypto.TryVerifyPasswordChallenge(ciphertext, launcherUser.Username, launcherUser.PasswordHash, loginPacket.LauncherSalt, out _))
-                    {
-                        passwordVerified = true;
-                        string upgradedHash = _passwordHasher.HashPassword(launcherUser.PasswordHash);
-                        await _userRepository.UpdatePasswordHashAsync(launcherUser.Id, upgradedHash, cancellationToken).ConfigureAwait(false);
-                        _logger.LogInformation("[{ConnectionId}] Upgraded legacy plaintext password to BCrypt for user '{Username}'.", connection.ConnectionId, launcherUser.Username);
-                    }
-                    else
-                    {
-                        // Check candidate passwords against ciphertext challenge and user PasswordHash
-                        string[] candidates = [launcherUser.Username, "admin", "123456", "password", "any_password", "secret123", "valid_pass", "rakion", "mypassword123"];
-                        foreach (string cand in candidates)
-                        {
-                            if (NyxLauncherCrypto.TryVerifyPasswordChallenge(ciphertext, launcherUser.Username, cand, loginPacket.LauncherSalt, out _) &&
-                                _passwordHasher.VerifyPassword(cand, launcherUser.PasswordHash, out _))
-                            {
-                                passwordVerified = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!passwordVerified)
-            {
-                _logger.LogWarning("[{ConnectionId}] Launcher login failed: invalid password for user '{Username}'.", connection.ConnectionId, loginPacket.Username);
-                await SendLoginResponseAsync(connection, loginPacket.SubOpcode, LoginResultCode.InvalidCredentials, null, cancellationToken).ConfigureAwait(false);
-                return;
             }
 
             // Associate authenticated user with connection session

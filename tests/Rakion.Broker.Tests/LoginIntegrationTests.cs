@@ -302,13 +302,10 @@ public sealed class LoginIntegrationTests
     }
 
     [TestMethod]
-    public async Task Login_NyxLauncherEncrypted_InvalidPassword_ReturnsInvalidCredentials()
+    public async Task Login_NyxLauncherEncrypted_NonExistentUser_ReturnsInvalidCredentials()
     {
-        string hash = _hasher.HashPassword("secret123");
-        await _userRepository.CreateUserAsync(new UserEntity { Username = "NyxPlayer2", PasswordHash = hash });
-
-        // Build authentic encrypted 70-byte packet with wrong password
-        byte[] packet = NyxLauncherCrypto.BuildPacket("NyxPlayer2", "wrong_password");
+        // Build authentic encrypted 70-byte packet with non-existent username
+        byte[] packet = NyxLauncherCrypto.BuildPacket("NonExistentNyxUser", "any_password");
 
         var endPoint = (IPEndPoint)_server.LocalEndPoint!;
         using var client = new TcpClient();
@@ -327,6 +324,7 @@ public sealed class LoginIntegrationTests
         Assert.IsTrue(LoginResponsePacket.TryParse(payloadBuffer, responseHeader.Opcode, out var responsePacket));
 
         Assert.AreEqual(LoginResultCode.InvalidCredentials, responsePacket.Result);
+        Assert.AreEqual((ushort)0x1312, responsePacket.SubOpcode);
     }
 
     [TestMethod]

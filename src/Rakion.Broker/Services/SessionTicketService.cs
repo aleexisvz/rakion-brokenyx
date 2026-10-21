@@ -15,8 +15,16 @@ public sealed class SessionTicketService : ISessionTicketService
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
 
-        // Purge expired tickets periodically
+        // Purge expired tickets periodically and invalidate prior tickets for this user
         PurgeExpired();
+
+        foreach (var (oldTicket, item) in _tickets)
+        {
+            if (string.Equals(item.Username, username, StringComparison.OrdinalIgnoreCase))
+            {
+                _tickets.TryRemove(oldTicket, out _);
+            }
+        }
 
         uint ticket;
         do
