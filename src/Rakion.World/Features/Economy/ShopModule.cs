@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
+using Rakion.Core.Utilities;
 using Rakion.Database.Entities;
 using Rakion.Database.Repositories;
 using Rakion.World.Modules;
@@ -28,6 +29,7 @@ public sealed class ShopModule : IWorldOpcodeModule
     private readonly IInventoryRepository _inventoryRepository;
     private readonly IAccountBalanceRepository _balanceRepository;
     private readonly IUserRepository _userRepository;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<ShopModule> _logger;
 
     public ShopModule(
@@ -35,12 +37,14 @@ public sealed class ShopModule : IWorldOpcodeModule
         IInventoryRepository inventoryRepository,
         IAccountBalanceRepository balanceRepository,
         IUserRepository userRepository,
+        TimeProvider timeProvider,
         ILogger<ShopModule> logger)
     {
         _sender = sender;
         _inventoryRepository = inventoryRepository;
         _balanceRepository = balanceRepository;
         _userRepository = userRepository;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -92,7 +96,10 @@ public sealed class ShopModule : IWorldOpcodeModule
         else
         {
             template = await _inventoryRepository.GetItemTemplateAsync(request.ItemId, cancellationToken).ConfigureAwait(false);
-            string? reason = RejectionReason(template, request.PayWithGold);
+            var buyerInfo = await _userRepository.GetGameInfoByUserIdAsync(userId, cancellationToken).ConfigureAwait(false);
+            long now = LegacyGameClock.ToMinutes(_timeProvider.GetLocalNow().DateTime);
+            bool isPowerUser = buyerInfo is not null && buyerInfo.PowerTime > now;
+            string? reason = RejectionReason(template, request.PayWithGold, isPowerUser);
             if (reason is not null)
             {
                 _logger.LogInformation("[{ConnectionId}] InventoryBuy {ItemId} rejected: {Reason}.", view.ConnectionId, request.ItemId, reason);
@@ -239,7 +246,7 @@ public sealed class ShopModule : IWorldOpcodeModule
 
     // Same rules as the legacy price check (RakionWorldServ.exe 0x40A6C0): shop 1 = gold only,
     // 2 = cash only, 3 = both, anything else is not sold.
-    private static string? RejectionReason(ItemEntity? template, bool payWithGold)
+    private static string? RejectionReason(ItemEntity? template, bool payWithGold, bool isPowerUser)
     {
         if (template is null || template.Id is <= 0 or > ushort.MaxValue)
         {
@@ -261,10 +268,11 @@ public sealed class ShopModule : IWorldOpcodeModule
             return "packages are not supported yet";
         }
 
-        // UNKNOWN: a non-zero power flag makes the legacy check depend on the player's PowerUser state.
-        if (template.Power != 0)
+        // Legacy 0x40A6C0: a template with the power flag set (+0x1C) is only sold while the buyer's
+        // PowerUser state is active (Observed check; the flag's meaning Derived).
+        if (template.Power != 0 && !isPowerUser)
         {
-            return "PowerUser items are not supported yet";
+            return "PowerUser-only item and the buyer has no active PowerUser";
         }
 
         return null;

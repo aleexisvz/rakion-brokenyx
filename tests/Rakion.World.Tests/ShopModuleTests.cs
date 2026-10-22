@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
+using Rakion.Core.Utilities;
 using Rakion.Database.Entities;
 using Rakion.Database.Repositories;
 using Rakion.Database.Tests.TestUtilities;
@@ -16,6 +17,8 @@ namespace Rakion.World.Tests;
 [TestClass]
 public sealed class ShopModuleTests
 {
+    private static readonly DateTime Now = new(2026, 10, 22, 12, 0, 0);
+
     private SqliteTestConnectionFactory _dbFactory = null!;
     private InventoryRepository _inventoryRepository = null!;
     private AccountBalanceRepository _balanceRepository = null!;
@@ -33,7 +36,7 @@ public sealed class ShopModuleTests
         _userRepository = new UserRepository(_dbFactory);
         _sender = new RecordingSender();
         _registry = new WorldOpcodeRegistry();
-        new ShopModule(_sender, _inventoryRepository, _balanceRepository, _userRepository, NullLogger<ShopModule>.Instance).Register(_registry);
+        new ShopModule(_sender, _inventoryRepository, _balanceRepository, _userRepository, new FixedTimeProvider(Now), NullLogger<ShopModule>.Instance).Register(_registry);
 
         _userId = await _userRepository.CreateUserAsync(new UserEntity { Username = "shopper", PasswordHash = "x", Email = "s@test" }, initialGold: 5000, initialCash: 600);
         await _inventoryRepository.UpsertItemTemplatesAsync(
@@ -42,6 +45,7 @@ public sealed class ShopModuleTests
             new ItemEntity { Id = 12000, Shop = 2, CashPrice = 500 },
             new ItemEntity { Id = 9000, Shop = 0, GoldPrice = 1 },
             new ItemEntity { Id = 9100, Type = 10, Shop = 3, GoldPrice = 1 },
+            new ItemEntity { Id = 9200, Shop = 1, GoldPrice = 100, Power = 1 },
         ]);
     }
 
@@ -89,6 +93,24 @@ public sealed class ShopModuleTests
         Assert.AreEqual(5000u, response.Gold);
         Assert.AreEqual(600u, response.Cash);
         Assert.IsEmpty(await _inventoryRepository.GetUserItemsAsync(_userId));
+    }
+
+    [TestMethod]
+    public async Task Buy_PowerUserItem_RequiresActivePowerUser()
+    {
+        var withoutPowerUser = await BuyAsync(new InventoryBuyRequestPacket(9200, PayWithGold: true));
+        await using (var connection = await _dbFactory.CreateConnectionAsync())
+        {
+            await Dapper.SqlMapper.ExecuteAsync(
+                connection,
+                "UPDATE user_game_info SET power_time = @Expiry WHERE user_id = @Id",
+                new { Expiry = (long)LegacyGameClock.ToMinutes(Now) + 60, Id = _userId });
+        }
+
+        var withPowerUser = await BuyAsync(new InventoryBuyRequestPacket(9200, PayWithGold: true));
+
+        Assert.AreEqual(InventoryBuyResponsePacket.ResultNotBuyable, withoutPowerUser.Result);
+        Assert.AreEqual(InventoryBuyResponsePacket.ResultSuccess, withPowerUser.Result);
     }
 
     [TestMethod]
@@ -202,6 +224,13 @@ public sealed class ShopModuleTests
         Assert.IsTrue(_registry.TryGetHandler((ushort)ClientOpcode.InventoryBuy, out var handler));
         await handler(session, payload, CancellationToken.None);
         return (InventoryBuyResponsePacket)_sender.Sent.Last().Packet;
+    }
+
+    private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
+    {
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+
+        public override DateTimeOffset GetUtcNow() => new(utcNow, TimeSpan.Zero);
     }
 
     private sealed class RecordingSender : ISessionSender
