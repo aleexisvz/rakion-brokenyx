@@ -26,7 +26,7 @@ public sealed record InventoryEnterRequestPacket : IPacket
 /// <summary>
 /// Client notification that the inventory screen was closed. The client sends the opcode only.
 /// Evidence: Observed in engine.dll ?SendInventoryLeave@IScavengerWorldNet@@UAEXXZ
-/// (opcode 0x002D, 2-byte message).
+/// (opcode 0x002D, 2-byte message). The server answers with <see cref="InventoryLeaveResponsePacket"/>.
 /// </summary>
 public sealed record InventoryLeaveRequestPacket : IPacket
 {
@@ -92,12 +92,14 @@ public readonly record struct AccountBoxSlot(ushort ItemId, byte Level, uint Exp
 /// Account item box sent at the end of WorldLoginPart2 (0x000D).
 /// Wire layout, Observed in the client parser (engine.dll 0x36196B41..0x36196C71):
 ///   u8 N, N x u16          expired item ids (Derived: legacy server collects rows whose limittime passed)
-///   u8                     UNKNOWN: purpose not yet verified (sent as 0)
+///   u8                     BagCount: unlocked bags, 40 slots each (Derived, see below)
 ///   120 x u16              ItemId per slot
 ///   120 x u8               Level per slot
 ///   120 x u32              Exp per slot
 ///   120 x u32              LimitTime per slot (LegacyGameClock minutes, 0 = permanent; Inferred)
 ///   u32                    UNKNOWN: purpose not yet verified (sent as 0)
+/// BagCount: rakion.bin 0x47E75A stores this byte at listener+0x80, the same field the BuyBag reply
+/// (rakion.bin 0x475283) updates as the account's bag count. Observed offsets; meaning Derived.
 /// </summary>
 public sealed record AccountBoxBlock
 {
@@ -109,7 +111,7 @@ public sealed record AccountBoxBlock
     private readonly AccountBoxSlot[] _slots;
     private readonly ushort[] _expiredItemIds;
 
-    public AccountBoxBlock(IReadOnlyList<AccountBoxSlot>? slots = null, IReadOnlyList<ushort>? expiredItemIds = null)
+    public AccountBoxBlock(IReadOnlyList<AccountBoxSlot>? slots = null, IReadOnlyList<ushort>? expiredItemIds = null, byte bagCount = 0)
     {
         if (slots is not null && slots.Count > SlotCount)
         {
@@ -131,12 +133,14 @@ public sealed record AccountBoxBlock
         }
 
         _expiredItemIds = expiredItemIds?.ToArray() ?? [];
+        BagCount = bagCount;
     }
 
     public static AccountBoxBlock Empty { get; } = new();
 
     public IReadOnlyList<AccountBoxSlot> Slots => _slots;
     public IReadOnlyList<ushort> ExpiredItemIds => _expiredItemIds;
+    public byte BagCount { get; }
 
     public void Serialize(PacketWriter writer)
     {
@@ -146,7 +150,7 @@ public sealed record AccountBoxBlock
             writer.WriteUInt16(itemId);
         }
 
-        writer.WriteByte(0); // UNKNOWN: purpose not yet verified.
+        writer.WriteByte(BagCount);
 
         foreach (var slot in _slots)
         {
@@ -192,7 +196,7 @@ public sealed record AccountBoxBlock
             expired[i] = reader.ReadUInt16();
         }
 
-        reader.Skip(1);
+        byte bagCount = reader.ReadByte();
 
         var itemIds = new ushort[SlotCount];
         var levels = new byte[SlotCount];
@@ -219,7 +223,36 @@ public sealed record AccountBoxBlock
         }
 
         reader.Skip(4);
-        block = new AccountBoxBlock(slots, expired);
+        block = new AccountBoxBlock(slots, expired, bagCount);
+        return true;
+    }
+}
+
+/// <summary>
+/// Server result for <see cref="InventoryLeaveRequestPacket"/>: [u8 Result].
+/// Evidence: Observed in engine.dll 0x36193680 (opcode 0x2D reads one byte). Without it the client stays
+/// on "leaving inventory". Inferred: 0 = success, matching the other inventory results.
+/// </summary>
+public sealed record InventoryLeaveResponsePacket(byte Result) : IPacket
+{
+    public const byte ResultSuccess = 0;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventoryLeave;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryLeaveResponsePacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        packet = new InventoryLeaveResponsePacket(span[0]);
         return true;
     }
 }

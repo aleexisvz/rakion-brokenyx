@@ -10,6 +10,9 @@ namespace Rakion.Core.Enums;
 /// Not listed because they collide with retail v258 channel opcodes: the legacy
 /// RakionWorldServ login result (0x001E, Observed at 0x4286fd) and character list
 /// (0x001F, Observed at 0x428832). The v258 client uses 0x000C / 0x000D instead.
+/// Likewise the legacy character delete (0x002D) and select (0x002E) confirmations are not listed:
+/// in v258 those values are the inventory leave / buy replies, and the client confirms delete and
+/// select on 0x0013 / 0x0014.
 /// </remarks>
 public enum ServerOpcode : ushort
 {
@@ -77,24 +80,18 @@ public enum ServerOpcode : ushort
     /// </summary>
     GameGuard = 0x001B,
 
-    /// <summary>
-    /// Legacy character deletion confirmation.
-    /// Evidence: Observed in RakionWorldServ opcode 19 handler (0x002D).
-    /// </summary>
-    CharacterDeleteLegacy = 0x002D,
-
-    /// <summary>
-    /// Legacy character selection confirmation.
-    /// Evidence: Observed in RakionWorldServ opcode 20 handler (0x002E).
-    /// </summary>
-    CharacterSelectLegacy = 0x002E,
-
     // --- Inventory / Shop / Blacksmith ---
     /// <summary>
     /// Inventory enter result: [u8 Result][u32 ServerTimeMinutes].
     /// Evidence: Observed in RakionWorldServ.exe 0x427A9D (7-byte send) and engine.dll 0x36193650 (reads u8 + u32).
     /// </summary>
     InventoryEnter = 0x002C,
+
+    /// <summary>
+    /// Inventory leave result: [u8 Result].
+    /// Evidence: Observed in engine.dll 0x36193680 (reads one byte for opcode 0x2D and forwards it to vtable+0x1D4).
+    /// </summary>
+    InventoryLeave = 0x002D,
 
     // --- Channel / Lobby ---
     /// <summary>
