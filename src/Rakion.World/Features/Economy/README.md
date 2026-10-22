@@ -20,7 +20,8 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**).  | Box: sí. Equipo: pendiente de probar |
 | 4.3 Vender ítems | `InventorySell` `0x002F` (**Observed**) | Venta desde el Box por oro con la fórmula del original; borrado del ítem y abono en una transacción. Rechazadas por ahora: criaturas (8000–8999). | pendiente de probar |
 | 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones, paquetes (tipo 10) e ítems PowerUser. | pendiente de probar |
-| 4.4 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
+| 4.4 Reparto de puntos | `InventoryAllocationPoint` `0x0033` (**Observed**) | Gasta un punto de nivel (o de PowerUser si no quedan) en una de las 10 estadísticas, en una transacción; tope 50 por estadística (**Inferred**). Reseteo (`0x001B`) pendiente. | pendiente de probar |
+| 4.5 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
 
@@ -88,3 +89,12 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Precio del original (0x40CD70 / 0x40A810): tienda 1 → 40 % del precio en oro; tienda 2 → 150 % del precio en
     cash, pagado en oro; resto → 0; ids 12000–12999 → 0. Constantes 0.4 y 1.5 **Observed**; se trunca.
   - Criaturas (8000–8999): el original usa una tabla de precios por nivel aún **Unknown**; se rechazan (resultado 3).
+- Reparto de puntos (`0x0033`):
+  - Petición `[u8 estadística]` (0..9: Hit1–Hit4, Chit, HP, AP, vel. de ataque, velocidad, CP máx.). Respuesta
+    `[u8 resultado][u16 puntos de nivel][u16 puntos PowerUser][u8 estadística][u16 valor nuevo]`. **Observed**
+    (`engine.dll` 0x361938A0, `rakion.bin` 0x47DBB0).
+  - Reglas del original (0x40B3D0): sin puntos → 3; estadística en su tope → 4; índice > 9 → 5; gasta primero un
+    punto de nivel y si no hay uno de PowerUser.
+  - Los campos de estadística del personaje son **contadores de puntos asignados** (el número de la izquierda en
+    "(n/50)"), no totales. El tope real sale de una tabla por clase aún **Unknown**; se usa 50 (**Inferred** de la
+    interfaz).
