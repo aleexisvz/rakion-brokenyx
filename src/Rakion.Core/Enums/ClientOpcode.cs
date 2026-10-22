@@ -374,6 +374,12 @@ public enum ClientOpcode : ushort
     /// </summary>
     FieldGameExit = 0x0046,
 
+    /// <summary>
+    /// Network check towards another room member: (u8 target slot).
+    /// Evidence: Observed in engine.dll ?SendFieldSlotUDP@IScavengerWorldNet@@UAEXE@Z (opcode 0x0062).
+    /// </summary>
+    FieldSlotUdp = 0x0062,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch probe / keep-alive sent to UDP Port 1 (40708).

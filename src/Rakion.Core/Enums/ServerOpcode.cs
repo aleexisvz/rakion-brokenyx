@@ -168,6 +168,12 @@ public enum ServerOpcode : ushort
     FieldInfo = 0x0037,
 
     /// <summary>
+    /// Network check relayed between room members: [u8 SenderSlot].
+    /// Evidence: Observed in engine.dll jump table opcode 0x62 (0x36197817 -> 0x36194510) and RakionWorldServ 0x406930.
+    /// </summary>
+    FieldSlotUdp = 0x0062,
+
+    /// <summary>
     /// Quick enter failed (no room). No payload.
     /// Evidence: Observed in engine.dll jump table opcode 0x39 (0x36197603 -> 0x36193a60) and RakionWorldServ 0x423436.
     /// </summary>

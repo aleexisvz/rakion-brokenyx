@@ -223,6 +223,34 @@ public sealed record FieldInfoPacket(
 }
 
 /// <summary>
+/// Network check between room members: [u8 Slot]. The client sends the slot of the member it wants to reach; the
+/// server relays the message to that member with the sender's slot instead.
+/// Evidence: Observed in engine.dll ?SendFieldSlotUDP@IScavengerWorldNet@@UAEXE@Z (0x36192560, opcode 0x0062),
+/// engine.dll 0x36194510 (reader, one byte) and RakionWorldServ.exe 0x406930 (relay, 3-byte send).
+/// </summary>
+public sealed record FieldSlotUdpPacket(byte SlotIndex) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldSlotUdp;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(SlotIndex);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldSlotUdpPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        packet = new FieldSlotUdpPacket(span[0]);
+        return true;
+    }
+}
+
+/// <summary>
 /// Quick enter found no room. No payload; a successful quick enter is answered like a normal enter.
 /// Evidence: Observed in RakionWorldServ.exe 0x423436 (2-byte send) and engine.dll 0x36193A60 (no read).
 /// </summary>

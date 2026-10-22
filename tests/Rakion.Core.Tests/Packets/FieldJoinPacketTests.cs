@@ -43,6 +43,17 @@ public sealed class FieldJoinPacketTests
     }
 
     [TestMethod]
+    public void SlotUdp_IsOneSlotByte()
+    {
+        var packet = new FieldSlotUdpPacket(10);
+
+        CollectionAssert.AreEqual(new byte[] { 10 }, PayloadOf(packet));
+        Assert.IsTrue(FieldSlotUdpPacket.TryParse([3], out var parsed));
+        Assert.AreEqual((byte)3, parsed.SlotIndex);
+        Assert.AreEqual((ushort)0x0062, packet.Opcode);
+    }
+
+    [TestMethod]
     public void PlayerEnter_Failure_IsOnlyTheResult()
     {
         CollectionAssert.AreEqual(new byte[] { 7 }, PayloadOf(new FieldPlayerEnterPacket(FieldPlayerEnterPacket.LevelOutOfRange)));

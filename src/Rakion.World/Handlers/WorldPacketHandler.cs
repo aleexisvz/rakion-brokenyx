@@ -206,6 +206,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameStart, HandleFieldGameStartAsync);
         _registry.Map(ClientOpcode.FieldGameEnter, HandleFieldGameEnterAsync);
         _registry.Map(ClientOpcode.FieldGameExit, HandleFieldGameExitAsync);
+        _registry.Map(ClientOpcode.FieldSlotUdp, HandleFieldSlotUdpAsync);
     }
 
     private async ValueTask HandleCharacterTutorialClearAsync(WorldSession session, CancellationToken cancellationToken)
@@ -1502,6 +1503,33 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async ValueTask HandleFieldSlotUdpAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldSlotUdpPacket.TryParse(payload.Span, out var req))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldSlotUdp request packet.", session.Connection.ConnectionId);
+            return;
+        }
+
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var sender) is not true ||
+            field is null || sender is null)
+        {
+            return;
+        }
+
+        var target = field.Players.FirstOrDefault(p => p.SlotIndex == req.SlotIndex);
+        if (target is null)
+        {
+            _logger.LogDebug("[{ConnectionId}] FieldSlotUdp to empty slot {Slot} in room #{Number} ignored.", session.Connection.ConnectionId, req.SlotIndex, field.Number);
+            return;
+        }
+
+        await SendPacketAsync(target.Session, new FieldSlotUdpPacket(sender.SlotIndex), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask EndFieldGameAsync(GameField field, CancellationToken cancellationToken)
