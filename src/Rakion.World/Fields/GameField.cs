@@ -66,18 +66,8 @@ public sealed class GameField
         LevelLimit = levelLimit;
         IsInProgress = false;
 
-        // Initialize default closed slots outside the requested MaxPlayers capacity
-        int halfCapacity = Math.Clamp(MaxPlayers / 2, 1, 10);
-        for (int i = halfCapacity; i < 10; i++)
-        {
-            _isSlotClosed[i] = true;
-        }
-
-        for (int i = 10 + halfCapacity; i < 20; i++)
-        {
-            _isSlotClosed[i] = true;
-        }
-
+        // Every slot starts open, as the host's client draws a new room (Observed in the client); MaxPlayers holds the
+        // mode byte (see FieldRules), so it does not size the room.
         HostUserId = (uint)(hostSession.User?.Id ?? 0);
         HostLevel = (ushort)(hostSession.ActiveCharacter?.Level ?? 1);
         HostCharacterName = hostSession.ActiveCharacter?.Name ?? string.Empty;
@@ -119,7 +109,9 @@ public sealed class GameField
         : player.IsReady && !player.IsMaster ? FieldSlotInfo.Ready
         : FieldSlotInfo.Waiting;
 
-    public byte MasterSlot => _playersBySession.Values.FirstOrDefault(p => p.IsMaster)?.SlotIndex ?? 0;
+    public FieldPlayer? Master => _playersBySession.Values.FirstOrDefault(p => p.IsMaster);
+
+    public byte MasterSlot => Master?.SlotIndex ?? 0;
 
     public bool TryGetPlayer(Guid connectionId, out FieldPlayer? player) =>
         _playersBySession.TryGetValue(connectionId, out player);
@@ -448,7 +440,7 @@ public sealed class GameField
         }
     }
 
-    public FieldListEntry ToFieldListEntry()
+    public FieldListEntry ToFieldListEntry(UdpEndpoints hostEndpoints = default)
     {
         byte openSlots;
         lock (_lock)
@@ -469,6 +461,10 @@ public sealed class GameField
             Option: Rules.Option,
             CurrentPlayers: PlayerCount,
             MaxPlayers: openSlots,
-            RoomName: Name);
+            RoomName: Name,
+            HostValue1: hostEndpoints.Ip1,
+            HostValue2: hostEndpoints.Port1,
+            HostValue3: hostEndpoints.Ip2,
+            HostValue4: hostEndpoints.Port2);
     }
 }

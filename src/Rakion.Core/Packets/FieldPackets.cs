@@ -8,7 +8,8 @@ namespace Rakion.Core.Packets;
 /// a trailing u16.
 /// Evidence: Observed in RakionWorldServ.exe 0x405790 (writer) and engine.dll 0x36193900 (reader: 1 + 2 + 11 + 12
 /// bytes, then the name and a u16). Each byte is named after the legacy room field it copies (see FieldRules in
-/// World); the host block comes from a helper on the host user (0x40ABE0) and is UNKNOWN.
+/// World); the host block is the host's two UDP endpoints (ip, port, ip, port) read by the helper 0x40ABE0, the same
+/// values as in the room player record (Inferred: the list's network column).
 /// </summary>
 public sealed record FieldListEntry(
     ushort RoomNumber,

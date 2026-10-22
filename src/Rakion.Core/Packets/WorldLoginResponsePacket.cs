@@ -45,7 +45,9 @@ public sealed record WorldLoginResponsePacket(
     uint ServerTimeMinutes = 0,
     uint PowerUserExpiry = 0,
     ushort PowerUserPoints = 0,
-    ushort ResponseOpcode = (ushort)ServerOpcode.WorldLogin) : IPacket
+    ushort ResponseOpcode = (ushort)ServerOpcode.WorldLogin,
+    ushort UdpIndex = 0,
+    uint? UdpKey = null) : IPacket
 {
     public ushort Opcode => ResponseOpcode;
 
@@ -60,15 +62,16 @@ public sealed record WorldLoginResponsePacket(
 
         // Retail v258 client layout:
         // [1..4]   UserId (uint)
-        // [5..6]   Country (ushort = 0)
-        // [7..10]  uint (sent as Gold; UNKNOWN: engine.dll passes it on, rakion.bin stores it at listener+0x18)
+        // [5..6]   UDP user index and [7..10] UDP key: the client echoes both in its UDP probes (Observed in the
+        //          probes), and the legacy probe handler RakionWorldServ.exe 0x425D80 uses them as the user slot and
+        //          the key at user + 0x1464 (Observed). Gold is still sent in [7..10] when no key is given.
         // [11..14] ServerTimeMinutes (uint, LegacyGameClock): rakion.bin 0x47E1C9 hands it to the clock setter
         //          0x4733D0 used for PowerUser time left (offsets Observed; meaning Derived)
         // [15..18] RankGrade (uint = 0)
         // [19..]   Username (null-terminated string)
         writer.WriteUInt32(UserId);
-        writer.WriteUInt16(0); // Country (engine.dll 0x36195F6C)
-        writer.WriteUInt32(Gold); // [7..10] Gold (engine.dll 0x36195F1F -> [esp + 0x30])
+        writer.WriteUInt16(UdpIndex); // [5..6] (engine.dll 0x36195F6C)
+        writer.WriteUInt32(UdpKey ?? Gold); // [7..10] (engine.dll 0x36195F1F -> [esp + 0x30])
         writer.WriteUInt32(ServerTimeMinutes); // [11..14] Server time (engine.dll 0x36195F30, callback arg 5)
         writer.WriteUInt32(0); // [15..18] RankGrade (engine.dll 0x36195F43)
         writer.WriteNullTerminatedString(Username ?? string.Empty);

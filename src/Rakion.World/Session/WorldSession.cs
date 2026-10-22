@@ -22,6 +22,11 @@ public sealed class WorldSession : IWorldSessionView
     public ushort SequenceId { get; set; }
     public bool IsInField { get; set; }
 
+    /// <summary>UDP probe identity given at WorldLogin (see <see cref="UdpEndpointRegistry"/>); 0 when none.</summary>
+    public ushort UdpIndex { get; set; }
+
+    public uint UdpKey { get; set; }
+
     Guid IWorldSessionView.ConnectionId => Connection.ConnectionId;
     int? IWorldSessionView.UserId => User?.Id;
     string? IWorldSessionView.Username => User?.Username;

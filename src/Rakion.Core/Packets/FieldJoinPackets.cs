@@ -15,17 +15,21 @@ public sealed record FieldPlayerRecord(
     string Guild,
     byte Class,
     byte Level,
-    IReadOnlyList<ItemSlot>? Equipment)
+    IReadOnlyList<ItemSlot>? Equipment,
+    uint Ip1 = 0,
+    ushort Port1 = 0,
+    uint Ip2 = 0,
+    ushort Port2 = 0)
 {
     public void Serialize(PacketWriter writer)
     {
         writer.WriteNullTerminatedString(Name);   // user + 0x14A8 (Inferred: character name)
         writer.WriteNullTerminatedString(Guild);  // user + 0x14C2 (Inferred: guild name)
         writer.WriteByte(0);                      // user + 0x1478, UNKNOWN
-        writer.WriteUInt32(0);                    // user + 0x1450, UNKNOWN
-        writer.WriteUInt16(0);                    // user + 0x1458, UNKNOWN
-        writer.WriteUInt32(0);                    // user + 0x1454, UNKNOWN
-        writer.WriteUInt16(0);                    // user + 0x145A, UNKNOWN
+        writer.WriteUInt32(Ip1);                  // user + 0x1450 (Inferred: UDP endpoint 1, peers reach the player here)
+        writer.WriteUInt16(Port1);                // user + 0x1458
+        writer.WriteUInt32(Ip2);                  // user + 0x1454 (Inferred: UDP endpoint 2)
+        writer.WriteUInt16(Port2);                // user + 0x145A
         writer.WriteByte(Class);                  // user + 0x1530 (Inferred: class)
         writer.WriteByte(Level);                  // user + 0x1531
         writer.WriteByte(0);                      // user + 0x1473, UNKNOWN
@@ -53,10 +57,10 @@ public sealed record FieldPlayerRecord(
         }
 
         reader.ReadByte();
-        reader.ReadUInt32();
-        reader.ReadUInt16();
-        reader.ReadUInt32();
-        reader.ReadUInt16();
+        uint ip1 = reader.ReadUInt32();
+        ushort port1 = reader.ReadUInt16();
+        uint ip2 = reader.ReadUInt32();
+        ushort port2 = reader.ReadUInt16();
         byte cls = reader.ReadByte();
         byte level = reader.ReadByte();
         reader.ReadByte();
@@ -72,7 +76,7 @@ public sealed record FieldPlayerRecord(
             slots[i] = slots[i] with { Level = reader.ReadByte() };
         }
 
-        record = new FieldPlayerRecord(name, guild, cls, level, slots);
+        record = new FieldPlayerRecord(name, guild, cls, level, slots, ip1, port1, ip2, port2);
         return true;
     }
 
