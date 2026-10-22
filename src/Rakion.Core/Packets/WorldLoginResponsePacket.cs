@@ -65,7 +65,8 @@ public sealed record WorldLoginResponsePacket(
         // [5..6]   UDP user index and [7..10] UDP key: the client echoes both in its UDP probes (Observed in the
         //          probes), and the legacy probe handler RakionWorldServ.exe 0x425D80 uses them as the user slot and
         //          the key at user + 0x1464 (Observed). Gold is still sent in [7..10] when no key is given.
-        //          World sends 0 in [5..6]: a non-zero index kept the client in character select (client test).
+        //          [5..6] is also the client's own user id (rakion.bin listener + 0x14): ChannelEnter and the room
+        //          player records must carry the same value for the client to recognise itself.
         // [11..14] ServerTimeMinutes (uint, LegacyGameClock): rakion.bin 0x47E1C9 hands it to the clock setter
         //          0x4733D0 used for PowerUser time left (offsets Observed; meaning Derived)
         // [15..18] RankGrade (uint = 0)

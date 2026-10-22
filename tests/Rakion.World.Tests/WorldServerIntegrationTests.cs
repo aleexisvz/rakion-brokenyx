@@ -341,7 +341,7 @@ public sealed class WorldServerIntegrationTests
         Assert.IsTrue(ChannelEnterResponsePacket.TryParse(enterPayload, out var enterResp));
         Assert.AreEqual((byte)0, enterResp.ResultCode);
         Assert.AreEqual((byte)0, enterResp.ChannelIndex);
-        Assert.AreEqual((ushort)0, enterResp.ServerId);
+        Assert.AreNotEqual((ushort)0, enterResp.ServerId, "carries the entering user's id from WorldLogin [5..6]");
 
         // Assert: Opcode 0x001E / ChannelCharactersResponse
         var (charsHeader, _) = await ReadPacketAsync(stream);

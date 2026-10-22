@@ -47,7 +47,8 @@ public sealed class UdpEndpointRegistry
     /// <summary>
     /// Stores the endpoint of a probe to World UDP port 1 or 2, found by its key; ignored for an unknown key.
     /// The probe's u16 index is not used: WorldLogin bytes [5..6] stay 0 because a non-zero value kept the client
-    /// from leaving character select (Observed in a client test).
+    /// from leaving character select (Observed in a client test). Superseded: that came from ChannelEnter carrying 0
+    /// as the entering user's id; World now sends the index in both, and the key alone still identifies the probe.
     /// </summary>
     public bool TryRecord(uint key, bool secondPort, uint ip, ushort port)
     {

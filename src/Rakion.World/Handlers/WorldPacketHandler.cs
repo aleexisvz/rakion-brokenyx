@@ -422,6 +422,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             ServerTimeMinutes: LegacyGameClock.ToMinutes(DateTime.Now),
             PowerUserExpiry: (uint)Math.Clamp(gameInfo?.PowerTime ?? 0, 0, uint.MaxValue),
             PowerUserPoints: (ushort)Math.Clamp(gameInfo?.PowerLevelPoint ?? 0, 0, ushort.MaxValue),
+            UdpIndex: session.UdpIndex,
             UdpKey: session.UdpKey);
 
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
@@ -658,7 +659,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var enterResp = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: activeCh.Index,
-                ServerId: 0,
+                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
                 ChannelName: activeCh.Name,
                 ChannelType: (byte)activeCh.Type,
                 MaxPlayers: activeCh.MaxPlayers,
@@ -755,7 +756,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var resp = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: ch.Index,
-                ServerId: 0,
+                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
                 ChannelName: ch.Name,
                 ChannelType: (byte)ch.Type,
                 MaxPlayers: ch.MaxPlayers,
@@ -1168,14 +1169,11 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         field.ToFieldListEntry(field.Master is { } master ? _udpEndpoints.Get(master.Session.UdpIndex) : default);
 
     /// <summary>
-    /// Room player id of <paramref name="member"/> as <paramref name="recipient"/> must see it. The client finds its
-    /// own entry by comparing this id with its own id from WorldLogin bytes [5..6] (rakion.bin 0x47A170 against
-    /// listener + 0x14 via 0x472B00, Observed). World sends 0 there (a non-zero value kept the client in character
-    /// select), so the recipient's own entry carries 0 and every other member its session index (Inferred
-    /// workaround; the legacy id is the user's server slot index for everyone).
+    /// Room player id: the user's id from WorldLogin bytes [5..6], the same for every recipient. The client finds its
+    /// own room entry by comparing it with its own id (rakion.bin 0x47A170 against listener + 0x14 via 0x472B00,
+    /// Observed).
     /// </summary>
-    private static ushort PlayerIdOf(WorldSession member, WorldSession recipient) =>
-        ReferenceEquals(member, recipient) ? (ushort)0 : member.UdpIndex;
+    private static ushort PlayerIdOf(WorldSession member, WorldSession recipient) => member.UdpIndex;
 
     /// <summary>
     /// Removes the session from its room and tells the remaining members (FieldExit with the freed slot). Returns
@@ -1264,7 +1262,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var reenter = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: channel.Index,
-                ServerId: 0,
+                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
                 ChannelName: channel.Name,
                 ChannelType: (byte)channel.Type,
                 MaxPlayers: channel.MaxPlayers,
