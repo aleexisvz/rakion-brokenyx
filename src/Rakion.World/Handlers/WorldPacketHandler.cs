@@ -13,6 +13,7 @@ using Rakion.Database.Repositories;
 using Rakion.Network.Tcp;
 using Rakion.World.Channels;
 using Rakion.World.Configuration;
+using Rakion.World.Modules;
 using Rakion.World.Session;
 
 namespace Rakion.World.Handlers;
@@ -31,6 +32,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly IChannelManager _channelManager;
     private readonly ILogger<WorldPacketHandler> _logger;
 
+    private readonly WorldOpcodeRegistry _registry = new();
+
     private readonly ConcurrentDictionary<Guid, WorldSession> _sessions = new();
 
     public WorldPacketHandler(
@@ -40,6 +43,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         IAccountBalanceRepository balanceRepository,
         ISessionTicketService ticketService,
         IChannelManager channelManager,
+        IEnumerable<IWorldOpcodeModule> modules,
         ILogger<WorldPacketHandler> logger)
     {
         _options = options;
@@ -49,6 +53,24 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _ticketService = ticketService;
         _channelManager = channelManager;
         _logger = logger;
+
+        RegisterBuiltInHandlers();
+        foreach (var module in modules)
+        {
+            module.Register(_registry);
+        }
+    }
+
+    public WorldPacketHandler(
+        IOptions<WorldOptions> options,
+        IUserRepository userRepository,
+        ICharacterRepository characterRepository,
+        IAccountBalanceRepository balanceRepository,
+        ISessionTicketService ticketService,
+        IChannelManager channelManager,
+        ILogger<WorldPacketHandler> logger)
+        : this(options, userRepository, characterRepository, balanceRepository, ticketService, channelManager, [], logger)
+    {
     }
 
     public WorldPacketHandler(
@@ -124,96 +146,64 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             packetPayload = payload;
         }
 
-        switch ((ClientOpcode)opcode)
+        if (_registry.TryGetHandler(opcode, out var handler))
         {
-            case ClientOpcode.WorldLogin:
-            case ClientOpcode.WorldLoginLegacy:
-                await HandleWorldLoginAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.GameGuard:
-                await HandleGameGuardAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.KeepAlive:
-                HandleKeepAlive(session);
-                break;
-
-            case ClientOpcode.UdpSuccess:
-                await HandleUdpSuccessAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.CharacterCreate:
-            case ClientOpcode.CharacterCreateRetail:
-                await HandleCharacterCreateAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.CharacterDelete:
-            case ClientOpcode.CharacterDeleteRetail:
-                await HandleCharacterDeleteAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.CharacterSelect:
-            case ClientOpcode.CharacterSelectRetail:
-                await HandleCharacterSelectAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.CharacterChangeBuddyName:
-                await HandleCharacterChangeBuddyNameAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.CharacterTutorialClear:
-                if (session.User is not null)
-                {
-                    await _userRepository.SetTutorialCompletedAsync(session.User.Id, true, cancellationToken).ConfigureAwait(false);
-                    if (session.GameInfo is not null)
-                    {
-                        session.GameInfo.TutorialCompleted = true;
-                    }
-
-                    _logger.LogInformation(
-                        "[{ConnectionId}] Character tutorial clear notification received and saved for user '{Username}'.",
-                        connection.ConnectionId,
-                        session.User.Username);
-                }
-                break;
-
-            case ClientOpcode.ChannelList:
-                await HandleChannelListAsync(session, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.ChannelEnter:
-                await HandleChannelEnterAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.ChannelExit:
-                await HandleChannelExitAsync(session, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.ChannelCharacters:
-                await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.ChannelChat:
-                await HandleChannelChatAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.CharacterWhisper:
-                await HandleCharacterWhisperAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            case ClientOpcode.FieldList:
-                await HandleFieldListAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
-                break;
-
-            default:
-                _logger.LogWarning(
-                    "[{ConnectionId}] Unhandled WorldServer opcode: 0x{Opcode:X4} (Payload length: {Length} bytes).",
-                    connection.ConnectionId,
-                    opcode,
-                    packetPayload.Length);
-                break;
+            await handler(session, packetPayload, cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        _logger.LogWarning(
+            "[{ConnectionId}] Unhandled WorldServer opcode: 0x{Opcode:X4} (Payload length: {Length} bytes).",
+            connection.ConnectionId,
+            opcode,
+            packetPayload.Length);
+    }
+
+    private void RegisterBuiltInHandlers()
+    {
+        _registry.Map(ClientOpcode.WorldLogin, HandleWorldLoginAsync);
+        _registry.Map(ClientOpcode.WorldLoginLegacy, HandleWorldLoginAsync);
+        _registry.Map(ClientOpcode.GameGuard, HandleGameGuardAsync);
+        _registry.Map(ClientOpcode.KeepAlive, (session, _, _) =>
+        {
+            HandleKeepAlive(session);
+            return ValueTask.CompletedTask;
+        });
+        _registry.Map(ClientOpcode.UdpSuccess, HandleUdpSuccessAsync);
+        _registry.Map(ClientOpcode.CharacterCreate, HandleCharacterCreateAsync);
+        _registry.Map(ClientOpcode.CharacterCreateRetail, HandleCharacterCreateAsync);
+        _registry.Map(ClientOpcode.CharacterDelete, HandleCharacterDeleteAsync);
+        _registry.Map(ClientOpcode.CharacterDeleteRetail, HandleCharacterDeleteAsync);
+        _registry.Map(ClientOpcode.CharacterSelect, HandleCharacterSelectAsync);
+        _registry.Map(ClientOpcode.CharacterSelectRetail, HandleCharacterSelectAsync);
+        _registry.Map(ClientOpcode.CharacterChangeBuddyName, HandleCharacterChangeBuddyNameAsync);
+        _registry.Map(ClientOpcode.CharacterTutorialClear, (session, _, ct) => HandleCharacterTutorialClearAsync(session, ct));
+        _registry.Map(ClientOpcode.ChannelList, (session, _, ct) => HandleChannelListAsync(session, ct));
+        _registry.Map(ClientOpcode.ChannelEnter, HandleChannelEnterAsync);
+        _registry.Map(ClientOpcode.ChannelExit, (session, _, ct) => HandleChannelExitAsync(session, ct));
+        _registry.Map(ClientOpcode.ChannelCharacters, (session, _, ct) => HandleChannelCharactersAsync(session, ct));
+        _registry.Map(ClientOpcode.ChannelChat, HandleChannelChatAsync);
+        _registry.Map(ClientOpcode.CharacterWhisper, HandleCharacterWhisperAsync);
+        _registry.Map(ClientOpcode.FieldList, (session, payload, ct) => new ValueTask(HandleFieldListAsync(session, payload, ct)));
+    }
+
+    private async ValueTask HandleCharacterTutorialClearAsync(WorldSession session, CancellationToken cancellationToken)
+    {
+        if (session.User is null)
+        {
+            return;
+        }
+
+        await _userRepository.SetTutorialCompletedAsync(session.User.Id, true, cancellationToken).ConfigureAwait(false);
+        if (session.GameInfo is not null)
+        {
+            session.GameInfo.TutorialCompleted = true;
+        }
+
+        _logger.LogInformation(
+            "[{ConnectionId}] Character tutorial clear notification received and saved for user '{Username}'.",
+            session.Connection.ConnectionId,
+            session.User.Username);
     }
 
     public ValueTask OnDisconnectedAsync(TcpConnection connection, Exception? exception)

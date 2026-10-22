@@ -38,7 +38,7 @@
 - Gestor concurrente en memoria de canales de juego (`LobbyChannel`).
 - Provee aislamiento de salas de chat y lista de usuarios por canal con soporte para restricciones por nivel y límites de jugadores.
 
-### 4. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
+### 5. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
 - Procesa datagramas UDP enviados por el cliente al entrar a la selección de personaje (`CMenuSelectCharacter`):
   - Recibe `0x0201` en el puerto 40708 (UDP 1) y `0x0202` en el puerto 40709 (UDP 2).
   - Responde con el datagrama de 12 bytes reflejando la Cookie enviada por el cliente y las banderas de puerto correspondientes (`0` para UDP 1, `1` para UDP 2).
