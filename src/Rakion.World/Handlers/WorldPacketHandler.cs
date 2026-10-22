@@ -199,6 +199,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldExit, HandleFieldExitAsync);
         _registry.Map(ClientOpcode.FieldReady, HandleFieldReadyAsync);
         _registry.Map(ClientOpcode.FieldChat, HandleFieldChatAsync);
+        _registry.Map(ClientOpcode.FieldChangeSlotStatus, HandleFieldChangeSlotStatusAsync);
+        _registry.Map(ClientOpcode.FieldChangeTeam, HandleFieldChangeTeamAsync);
+        _registry.Map(ClientOpcode.FieldChangeRule, HandleFieldChangeRuleAsync);
     }
 
     private async ValueTask HandleCharacterTutorialClearAsync(WorldSession session, CancellationToken cancellationToken)
@@ -1147,6 +1150,148 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             foreach (var member in field.Players)
             {
                 await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async ValueTask HandleFieldChangeSlotStatusAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel is null)
+        {
+            return;
+        }
+
+        if (!FieldChangeSlotStatusRequestPacket.TryParse(payload.Span, out var req))
+        {
+            return;
+        }
+
+        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) &&
+            field is not null && player is not null)
+        {
+            if (field.TryChangeSlotStatus(player, req.SlotIndex, req.Status, out byte newStatus))
+            {
+                _logger.LogInformation(
+                    "[{ConnectionId}] Room #{Number} slot {Slot} status changed to {Status} by host '{Host}'.",
+                    session.Connection.ConnectionId,
+                    field.Number,
+                    req.SlotIndex,
+                    newStatus,
+                    session.ActiveCharacter?.Name ?? "Unknown");
+
+                var broadcast = new FieldChangeSlotStatusBroadcastPacket(req.SlotIndex, newStatus);
+                foreach (var member in field.Players)
+                {
+                    await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    private async ValueTask HandleFieldChangeTeamAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel is null)
+        {
+            return;
+        }
+
+        if (!FieldChangeTeamRequestPacket.TryParse(payload.Span, out _))
+        {
+            return;
+        }
+
+        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) &&
+            field is not null && player is not null)
+        {
+            if (field.TryChangeTeam(player, out byte oldSlot, out byte newSlot, out byte result))
+            {
+                _logger.LogInformation(
+                    "[{ConnectionId}] Room #{Number} player '{Player}' switched from slot {OldSlot} to slot {NewSlot} (Team {Team}).",
+                    session.Connection.ConnectionId,
+                    field.Number,
+                    session.ActiveCharacter?.Name ?? "Unknown",
+                    oldSlot,
+                    newSlot,
+                    player.Team);
+
+                var broadcast = new FieldChangeTeamBroadcastPacket(0, oldSlot, newSlot);
+                foreach (var member in field.Players)
+                {
+                    await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "[{ConnectionId}] Room #{Number} player '{Player}' failed to switch team (Result {Result}).",
+                    session.Connection.ConnectionId,
+                    field.Number,
+                    session.ActiveCharacter?.Name ?? "Unknown",
+                    result);
+
+                var reply = new FieldChangeTeamBroadcastPacket(result, oldSlot, oldSlot);
+                await SendPacketAsync(session, reply, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async ValueTask HandleFieldChangeRuleAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel is null)
+        {
+            return;
+        }
+
+        if (!FieldChangeRuleRequestPacket.TryParse(payload.Span, out var req))
+        {
+            return;
+        }
+
+        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) &&
+            field is not null && player is not null)
+        {
+            if (field.TryChangeRule(
+                player,
+                req.RoomName,
+                req.Password,
+                req.Mode,
+                (byte)0,
+                req.MaxPlayers,
+                req.RoundTime,
+                req.Rounds,
+                req.SubMode,
+                req.LevelLimit))
+            {
+                _logger.LogInformation(
+                    "[{ConnectionId}] Room #{Number} rules updated by host '{Host}'.",
+                    session.Connection.ConnectionId,
+                    field.Number,
+                    session.ActiveCharacter?.Name ?? "Unknown");
+
+                var broadcast = new FieldChangeRuleBroadcastPacket(
+                    field.Name,
+                    field.Password,
+                    req.MapName,
+                    field.Mode,
+                    field.MaxPlayers,
+                    field.RoundTime,
+                    field.Rounds,
+                    field.SubMode,
+                    field.LevelLimit);
+
+                foreach (var member in field.Players)
+                {
+                    await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
     }

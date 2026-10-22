@@ -32,7 +32,16 @@
   - **`ChannelCharacters` (`0x001E`):** Entrega la lista de personajes presentes en el lobby del canal actual.
   - **`ChannelChat` (`0x0022`):** Recibe mensajes de chat de lobby y los difunde a todas las sesiones activas en el mismo canal (tolerante al formato cliente que antepone `"{Personaje} : "`).
   - **`CharacterWhisper` (`0x0016`):** Enrutamiento bidireccional de susurros (mensajes privados) entre personajes conectados en el servidor.
-  - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
+  - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket` con paginación real o `.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
+  - **`FieldCreate` (`0x003B`):** Creación de sala por el host (`?SendFieldCreate`). Valida parámetros, instancia `GameField`, asigna la ranura 0 al host y confirma con `0x003B` (`ResultCode = 0`, `RoomNumber`), permitiendo el ingreso inmediato a la sala de espera.
+  - **`FieldQuickEnter` (`0x0039`):** Ingreso rápido a la primera sala disponible del canal sin contraseña que no esté llena ni en partida.
+  - **`FieldEnter` (`0x0038`):** Ingreso a sala específica por número y contraseña.
+  - **`FieldExit` (`0x003A`):** Salida limpia de la sala de espera hacia el lobby del canal, transfiriendo el liderazgo si sale el host o destruyendo la sala si queda vacía.
+  - **`FieldReady` (`0x003D`):** Conmutación del estado Listo (Ready) difundido a todos los miembros de la sala.
+  - **`FieldChat` (`0x0047`):** Chat dentro de la sala de espera transmitido a todos los ocupantes.
+  - **`FieldChangeSlotStatus` (`0x0042`):** Apertura o bloqueo/cierre de ranuras por el host (`?SendFieldChangeSlotStatus`). Difunde `0x0042` (`SlotIndex`, `Status`), cerrando el popup modal *"Changing Status"*.
+  - **`FieldChangeTeam` (`0x003E`):** Cambio de equipo entre Rojo (ranuras 0..9) y Azul (ranuras 10..19) (`?SendFieldChangeTeam`). Busca una ranura libre no cerrada en el equipo opuesto y difunde `0x003E` (`Result`, `OldSlot`, `NewSlot`).
+  - **`FieldChangeRule` (`0x0041`):** Modificación de mapa, modo y reglas de sala por el anfitrión (`?SendFieldChangeRule`), difundido a los miembros con `0x0041`.
 
 ### 3. Registro de opcodes (`Rakion.World.Modules`, contrato C-1)
 - `WorldPacketHandler` ya no usa un `switch`: descifra el paquete y busca el handler en `WorldOpcodeRegistry`, un mapa explícito y tipado `ClientOpcode → WorldOpcodeHandler`.

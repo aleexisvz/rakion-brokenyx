@@ -220,6 +220,105 @@ public sealed class FieldIntegrationTests
         c2.Dispose();
     }
 
+    [TestMethod]
+    public async Task FieldRoomActions_ChangeSlotStatus_And_ChangeTeam_WorksEndToEnd()
+    {
+        // 1. Host creates room
+        var (c1, s1) = await CreateAuthenticatedPlayerAsync("hostUser2", "HostWarrior", 0);
+
+        var createReq = new FieldCreateRequestPacket(
+            RoomName: "TeamBattle",
+            Password: "",
+            MapName: "Underground",
+            Mode: 1,
+            MaxPlayers: 8,
+            RoundTime: 3,
+            Rounds: 5,
+            SubMode: 0,
+            LevelLimit: 0,
+            Extra1: 0,
+            Extra2: 0);
+
+        await SendClientPacketAsync(s1, 10, createReq.Opcode, createReq);
+        var (opCreate, payloadCreate) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldCreate, opCreate);
+        Assert.IsTrue(FieldCreateResponsePacket.TryParse(payloadCreate, out var pCreate));
+        Assert.AreEqual((byte)0, pCreate.ResultCode);
+
+        // 2. Host closes slot 3 (status = 0)
+        var closeSlotReq = new FieldChangeSlotStatusRequestPacket(SlotIndex: 3, Status: 0);
+        await SendClientPacketAsync(s1, 11, closeSlotReq.Opcode, closeSlotReq);
+
+        var (opSlotClose, payloadSlotClose) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeSlotStatus, opSlotClose);
+        Assert.IsTrue(FieldChangeSlotStatusBroadcastPacket.TryParse(payloadSlotClose, out var bSlotClose));
+        Assert.AreEqual((byte)3, bSlotClose.SlotIndex);
+        Assert.AreEqual((byte)0, bSlotClose.Status);
+
+        // 3. Host re-opens slot 3 (status = 1)
+        var openSlotReq = new FieldChangeSlotStatusRequestPacket(SlotIndex: 3, Status: 1);
+        await SendClientPacketAsync(s1, 12, openSlotReq.Opcode, openSlotReq);
+
+        var (opSlotOpen, payloadSlotOpen) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeSlotStatus, opSlotOpen);
+        Assert.IsTrue(FieldChangeSlotStatusBroadcastPacket.TryParse(payloadSlotOpen, out var bSlotOpen));
+        Assert.AreEqual((byte)3, bSlotOpen.SlotIndex);
+        Assert.AreEqual((byte)1, bSlotOpen.Status);
+
+        // 4. Guest joins room (auto-assigned to Team 1, slot 10)
+        var (c2, s2) = await CreateAuthenticatedPlayerAsync("guestUser2", "GuestMage", 0);
+        var (opBroadcastChan, _) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, opBroadcastChan);
+
+        var quickReq = new FieldQuickEnterRequestPacket();
+        await SendClientPacketAsync(s2, 13, quickReq.Opcode, quickReq);
+        var (opQuick, payloadQuick) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldCreate, opQuick);
+
+        // 5. Guest switches team to Team 0 (slot 1)
+        var teamReq = new FieldChangeTeamRequestPacket();
+        await SendClientPacketAsync(s2, 14, teamReq.Opcode, teamReq);
+
+        // Both Host and Guest receive 0x003E broadcast
+        var (opTeamHost, payloadTeamHost) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeTeam, opTeamHost);
+        Assert.IsTrue(FieldChangeTeamBroadcastPacket.TryParse(payloadTeamHost, out var bTeamHost));
+        Assert.AreEqual((byte)0, bTeamHost.Result);
+        Assert.AreEqual((byte)10, bTeamHost.OldSlot);
+        Assert.AreEqual((byte)1, bTeamHost.NewSlot);
+
+        var (opTeamGuest, payloadTeamGuest) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeTeam, opTeamGuest);
+        Assert.IsTrue(FieldChangeTeamBroadcastPacket.TryParse(payloadTeamGuest, out var bTeamGuest));
+        Assert.AreEqual((byte)0, bTeamGuest.Result);
+        Assert.AreEqual((byte)10, bTeamGuest.OldSlot);
+        Assert.AreEqual((byte)1, bTeamGuest.NewSlot);
+
+        // 6. Host updates room rules
+        var ruleReq = new FieldChangeRuleRequestPacket(
+            RoomName: "TeamBattlePro",
+            Password: "",
+            MapName: "Colosseum",
+            Mode: 1,
+            MaxPlayers: 8,
+            RoundTime: 5,
+            Rounds: 7,
+            SubMode: 0,
+            LevelLimit: 0);
+        await SendClientPacketAsync(s1, 15, ruleReq.Opcode, ruleReq);
+
+        var (opRuleHost, payloadRuleHost) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeRule, opRuleHost);
+        Assert.IsTrue(FieldChangeRuleBroadcastPacket.TryParse(payloadRuleHost, out var bRuleHost));
+        Assert.AreEqual("TeamBattlePro", bRuleHost.RoomName);
+
+        var (opRuleGuest, payloadRuleGuest) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeRule, opRuleGuest);
+
+        c1.Dispose();
+        c2.Dispose();
+    }
+
     private static async Task SendClientPacketAsync(NetworkStream stream, ushort sequenceId, ushort opcode, IPacket packet)
     {
         using var writer = new PacketWriter();
