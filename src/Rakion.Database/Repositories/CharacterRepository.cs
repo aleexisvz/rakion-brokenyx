@@ -253,5 +253,104 @@ public sealed class CharacterRepository : ICharacterRepository
             : "SELECT LAST_INSERT_ID();";
         return await conn.ExecuteScalarAsync<int>(new CommandDefinition(query, transaction: tx, cancellationToken: ct));
     }
-}
 
+    private sealed class StatRow
+    {
+        public int LevelPoint { get; set; }
+        public int Value { get; set; }
+    }
+
+    // Fixed column per stat; never built from client input.
+    private static readonly IReadOnlyDictionary<CharacterStat, string> StatColumns = new Dictionary<CharacterStat, string>
+    {
+        [CharacterStat.Hit1] = "hit1",
+        [CharacterStat.Hit2] = "hit2",
+        [CharacterStat.Hit3] = "hit3",
+        [CharacterStat.Hit4] = "hit4",
+        [CharacterStat.Chit] = "chit",
+        [CharacterStat.Hp] = "hp",
+        [CharacterStat.Ap] = "ap",
+        [CharacterStat.AttackSpeed] = "attack_speed",
+        [CharacterStat.Speed] = "speed",
+        [CharacterStat.MaxCp] = "max_cp",
+    };
+
+    public async Task<StatAllocationOutcome> AllocateStatPointAsync(
+        int userId,
+        int characterId,
+        CharacterStat stat,
+        int maxPerStat,
+        CancellationToken ct = default)
+    {
+        if (!StatColumns.TryGetValue(stat, out string? column))
+        {
+            throw new ArgumentOutOfRangeException(nameof(stat), stat, "Unknown stat.");
+        }
+
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            var row = await connection.QuerySingleOrDefaultAsync<StatRow>(new CommandDefinition(
+                $"SELECT level_point AS LevelPoint, {column} AS Value FROM characters WHERE id = @Id AND user_id = @UserId;",
+                new { Id = characterId, UserId = userId },
+                tx,
+                cancellationToken: ct));
+            int powerPoints = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT COALESCE((SELECT power_level_point FROM user_game_info WHERE user_id = @UserId), 0);",
+                new { UserId = userId },
+                tx,
+                cancellationToken: ct));
+
+            if (row is null)
+            {
+                await tx.RollbackAsync(ct);
+                return new StatAllocationOutcome(StatAllocationStatus.CharacterNotFound, 0, powerPoints, 0);
+            }
+
+            int levelPoints = row.LevelPoint;
+            int value = row.Value;
+            StatAllocationStatus? refusal = levelPoints <= 0 && powerPoints <= 0
+                ? StatAllocationStatus.NoPoints
+                : value >= maxPerStat ? StatAllocationStatus.AtMaximum : null;
+            if (refusal is not null)
+            {
+                await tx.RollbackAsync(ct);
+                return new StatAllocationOutcome(refusal.Value, levelPoints, powerPoints, value);
+            }
+
+            if (levelPoints > 0)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    $"UPDATE characters SET level_point = level_point - 1, {column} = {column} + 1 WHERE id = @Id AND user_id = @UserId;",
+                    new { Id = characterId, UserId = userId },
+                    tx,
+                    cancellationToken: ct));
+                levelPoints--;
+            }
+            else
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "UPDATE user_game_info SET power_level_point = power_level_point - 1 WHERE user_id = @UserId;",
+                    new { UserId = userId },
+                    tx,
+                    cancellationToken: ct));
+                await connection.ExecuteAsync(new CommandDefinition(
+                    $"UPDATE characters SET {column} = {column} + 1 WHERE id = @Id AND user_id = @UserId;",
+                    new { Id = characterId, UserId = userId },
+                    tx,
+                    cancellationToken: ct));
+                powerPoints--;
+            }
+
+            await tx.CommitAsync(ct);
+            return new StatAllocationOutcome(StatAllocationStatus.Allocated, levelPoints, powerPoints, value + 1);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+}
