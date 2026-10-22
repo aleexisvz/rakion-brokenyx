@@ -99,6 +99,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryMove = 0x0031,
 
+    /// <summary>
+    /// Shop purchase result: result, gold, cash, bought items, trailing u32 list.
+    /// Evidence: Observed in engine.dll 0x36195640 (reader) and rakion.bin 0x4774E0 (callback).
+    /// </summary>
+    InventoryBuy = 0x002E,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.

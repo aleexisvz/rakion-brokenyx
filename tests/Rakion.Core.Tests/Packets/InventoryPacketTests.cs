@@ -188,6 +188,42 @@ public sealed class InventoryPacketTests
         Assert.AreEqual(3, Enumerable.Range(0, with.Length).Count(i => with[i] != without[i])); // u16 id (2 bytes) + level
     }
 
+    [TestMethod]
+    public void InventoryBuyRequest_RoundTrip_WithAndWithoutCoupon()
+    {
+        var plain = new InventoryBuyRequestPacket(1001, PayWithGold: true);
+        var coupon = new InventoryBuyRequestPacket(12000, PayWithGold: false, UsesCoupon: 1, CouponSlot: 7);
+
+        byte[] plainBytes = Build(plain);
+        byte[] couponBytes = Build(coupon);
+
+        CollectionAssert.AreEqual(new byte[] { 0x08, 0x00, 0x2E, 0x00, 0xE9, 0x03, 0x01, 0x00 }, plainBytes);
+        Assert.HasCount(PacketHeader.HeaderSize + 6, couponBytes);
+        Assert.IsTrue(InventoryBuyRequestPacket.TryParse(plainBytes.AsSpan(PacketHeader.HeaderSize), out var parsedPlain));
+        Assert.IsTrue(InventoryBuyRequestPacket.TryParse(couponBytes.AsSpan(PacketHeader.HeaderSize), out var parsedCoupon));
+        Assert.AreEqual(plain, parsedPlain);
+        Assert.AreEqual(coupon, parsedCoupon);
+        Assert.IsFalse(InventoryBuyRequestPacket.TryParse(couponBytes.AsSpan(PacketHeader.HeaderSize, 4), out _));
+    }
+
+    [TestMethod]
+    public void InventoryBuyResponse_RoundTrip_SuccessAndFailure()
+    {
+        var success = new InventoryBuyResponsePacket(0, 2300, 50, [new BoughtItem(29, 1001, 1)]);
+        var failure = new InventoryBuyResponsePacket(InventoryBuyResponsePacket.ResultBoxFull, 5000, 50, [new BoughtItem(1, 1, 1)]);
+
+        byte[] successBytes = Build(success);
+        byte[] failureBytes = Build(failure);
+
+        Assert.HasCount(PacketHeader.HeaderSize + 15, successBytes); // 10 + 1 slot + 2 id + 1 level + 1 count
+        Assert.HasCount(PacketHeader.HeaderSize + 11, failureBytes); // failures carry no item arrays
+        Assert.IsTrue(InventoryBuyResponsePacket.TryParse(successBytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
+        Assert.AreEqual(2300u, parsed.Gold);
+        Assert.AreEqual(new BoughtItem(29, 1001, 1), parsed.Items!.Single());
+        Assert.IsTrue(InventoryBuyResponsePacket.TryParse(failureBytes.AsSpan(PacketHeader.HeaderSize), out var parsedFailure));
+        Assert.IsEmpty(parsedFailure.Items!);
+    }
+
     private static byte[] Build(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

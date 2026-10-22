@@ -176,6 +176,146 @@ public sealed class InventoryRepository : IInventoryRepository
         }
     }
 
+    public async Task<int> UpsertItemTemplatesAsync(IReadOnlyList<ItemEntity> templates, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(templates);
+
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        // MySQL and SQLite spell upserts differently; REPLACE is avoided because it deletes rows that
+        // user_items may reference.
+        string conflict = IsSqlite(connection)
+            ? """
+              ON CONFLICT(id) DO UPDATE SET type_id = excluded.type_id, class_id = excluded.class_id,
+                required_level = excluded.required_level, shop_type = excluded.shop_type,
+                gold_price = excluded.gold_price, cash_price = excluded.cash_price, hit1 = excluded.hit1,
+                hit2 = excluded.hit2, hit3 = excluded.hit3, hit4 = excluded.hit4, chit = excluded.chit,
+                ap = excluded.ap, hp = excluded.hp, max_cp = excluded.max_cp, power = excluded.power;
+              """
+            : """
+              ON DUPLICATE KEY UPDATE type_id = VALUES(type_id), class_id = VALUES(class_id),
+                required_level = VALUES(required_level), shop_type = VALUES(shop_type),
+                gold_price = VALUES(gold_price), cash_price = VALUES(cash_price), hit1 = VALUES(hit1),
+                hit2 = VALUES(hit2), hit3 = VALUES(hit3), hit4 = VALUES(hit4), chit = VALUES(chit),
+                ap = VALUES(ap), hp = VALUES(hp), max_cp = VALUES(max_cp), power = VALUES(power);
+              """;
+
+        string sql = """
+            INSERT INTO item_templates (id, type_id, class_id, required_level, shop_type, gold_price, cash_price,
+                                        hit1, hit2, hit3, hit4, chit, ap, hp, max_cp, power)
+            VALUES (@Id, @Type, @Class, @RequiredLevel, @Shop, @GoldPrice, @CashPrice,
+                    @Hit1, @Hit2, @Hit3, @Hit4, @Chit, @Ap, @Hp, @MaxCp, @Power)
+            """ + conflict;
+
+        try
+        {
+            foreach (var template in templates)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        template.Id,
+                        template.Type,
+                        Class = (byte)template.Class,
+                        template.RequiredLevel,
+                        template.Shop,
+                        template.GoldPrice,
+                        template.CashPrice,
+                        template.Hit1,
+                        template.Hit2,
+                        template.Hit3,
+                        template.Hit4,
+                        template.Chit,
+                        template.Ap,
+                        template.Hp,
+                        template.MaxCp,
+                        template.Power,
+                    },
+                    tx,
+                    cancellationToken: ct));
+            }
+
+            await tx.CommitAsync(ct);
+            return templates.Count;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<PurchaseOutcome?> PurchaseIntoBoxAsync(
+        int userId,
+        int itemId,
+        bool payWithGold,
+        int price,
+        byte slot,
+        byte level,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(price);
+
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            int occupied = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT COUNT(*) FROM user_items WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot;",
+                new { UserId = userId, Slot = slot },
+                tx,
+                cancellationToken: ct));
+            if (occupied > 0)
+            {
+                await tx.RollbackAsync(ct);
+                return null;
+            }
+
+            string chargeSql = payWithGold
+                ? "UPDATE user_game_info SET gold = gold - @Price WHERE user_id = @UserId AND gold >= @Price;"
+                : "UPDATE cash_balances SET cash_amount = cash_amount - @Price, updated_at = @Now WHERE user_id = @UserId AND cash_amount >= @Price;";
+            int charged = await connection.ExecuteAsync(new CommandDefinition(
+                chargeSql,
+                new { UserId = userId, Price = price, Now = DateTime.UtcNow },
+                tx,
+                cancellationToken: ct));
+            if (charged == 0)
+            {
+                await tx.RollbackAsync(ct);
+                return null;
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO user_items (user_id, character_id, item_id, level, limit_time_minutes, slot_index, exp)
+                VALUES (@UserId, 0, @ItemId, @Level, 0, @Slot, 0);
+                """,
+                new { UserId = userId, ItemId = itemId, Level = level, Slot = slot },
+                tx,
+                cancellationToken: ct));
+            int rowId = await GetLastInsertedIdAsync(connection, tx, ct);
+
+            long gold = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT gold FROM user_game_info WHERE user_id = @UserId;", new { UserId = userId }, tx, cancellationToken: ct));
+            int cash = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT COALESCE((SELECT cash_amount FROM cash_balances WHERE user_id = @UserId), 0);", new { UserId = userId }, tx, cancellationToken: ct));
+
+            await tx.CommitAsync(ct);
+            return new PurchaseOutcome(rowId, gold, cash);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    private static bool IsSqlite(DbConnection connection) =>
+        connection.GetType().Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase);
+
     private static async Task<int> GetLastInsertedIdAsync(DbConnection conn, DbTransaction? tx, CancellationToken ct)
     {
         string query = conn.GetType().Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)
