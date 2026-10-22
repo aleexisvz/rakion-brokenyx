@@ -37,8 +37,11 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Uso del valor en el cliente (tiempo restante de ítems alquilados): **Inferred**.
 - Box de la cuenta (`AccountInventoryProvider`, `AccountBoxBlock`):
   - El parser del cliente (`engine.dll` 0x36196B41..0x36196C71) lee: `u8 N` + N × `u16` (caducados),
-    un `u8` (**Unknown**), 120 × `u16` itemId, 120 × `u8` level, 120 × `u32`, 120 × `u32` y un `u32`
+    un `u8` con el número de bolsas, 120 × `u16` itemId, 120 × `u8` level, 120 × `u32`, 120 × `u32` y un `u32`
     final (**Unknown**). **Observed.**
+  - El `u8` es el número de bolsas (`user_game_info.bag_count`; 40 slots por bolsa): `rakion.bin`
+    0x47E75A lo guarda en `listener+0x80`, el mismo campo que actualiza la respuesta a BuyBag
+    (0x475283). Offsets **Observed**, significado **Derived**. Con 0 el cliente no dibuja ningún slot.
   - Que los dos arrays de `u32` sean exp y limittime es **Derived** del orden de copia del servidor
     original (`RakionWorldServ.exe` 0x412065..0x4120E6).
   - Reglas del servidor original (`DBCommandCharacterList`), aplicadas igual: las filas con
@@ -47,3 +50,5 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Diferencias propias: se ignoran (con aviso en el log) los slots fuera de 0..119 o repetidos y los
     itemId que no caben en `u16`.
   - `user_items.limit_time_minutes` debe guardarse en la unidad de `LegacyGameClock` (0 = permanente).
+- Salida del inventario: el cliente espera `0x002D` con `[u8 Result]` (`engine.dll` 0x36193680,
+  **Observed**); sin respuesta se queda en "leaving inventory". Se responde 0.
