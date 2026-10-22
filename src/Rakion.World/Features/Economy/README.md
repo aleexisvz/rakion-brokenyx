@@ -98,3 +98,5 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Los campos de estadística del personaje son **contadores de puntos asignados** (el número de la izquierda en
     "(n/50)"), no totales. El tope real sale de una tabla por clase aún **Unknown**; se usa 50 (**Inferred** de la
     interfaz).
+  - Puntos por nivel: 3 por cada nivel subido (dato aportado por el mantenedor; se aplicará al implementar la subida
+    de nivel en la fase 6).
