@@ -167,7 +167,7 @@ public sealed class FieldPacketTests
     [TestMethod]
     public void FieldExitResponsePacket_SerializesAndParsesCorrectly()
     {
-        var packet = new FieldExitResponsePacket(ResultCode: 0);
+        var packet = new FieldExitResponsePacket(SlotIndex: 5);
         using var writer = new PacketWriter(packet.Opcode);
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
@@ -176,7 +176,7 @@ public sealed class FieldPacketTests
         Assert.AreEqual(0x003A, (ushort)packet.Opcode);
         bool success = FieldExitResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
-        Assert.AreEqual((byte)0, parsed.ResultCode);
+        Assert.AreEqual((byte)5, parsed.SlotIndex);
     }
 
     [TestMethod]
@@ -298,8 +298,7 @@ public sealed class FieldPacketTests
             MaxPlayers: 12,
             RoundTime: 5,
             Rounds: 3,
-            SubMode: 1,
-            LevelLimit: 20);
+            SubMode: 1);
 
         using var wReq = new PacketWriter(req.Opcode);
         req.Serialize(wReq);
@@ -323,8 +322,7 @@ public sealed class FieldPacketTests
             MaxPlayers: 12,
             RoundTime: 5,
             Rounds: 3,
-            SubMode: 1,
-            LevelLimit: 20);
+            SubMode: 1);
 
         using var wBcast = new PacketWriter(bcast.Opcode);
         bcast.Serialize(wBcast);

@@ -377,17 +377,18 @@ public sealed record FieldExitRequestPacket : IPacket
 }
 
 /// <summary>
-/// Server confirmation when exiting a field / room.
-/// Evidence: Observed in engine.dll 0x36193a70 (reads u8 Result) (opcode 0x003A).
+/// Server confirmation / notification when exiting a field / room: [u8 SlotIndex].
+/// Evidence: Observed in engine.dll 0x36193a70 and rakion.bin 0x474410 (opcode 0x003A).
+/// Client checks: if (payload[0] == GetMySlotNumber()) ExitRoomUI() else ClearPlayerSlot(payload[0]).
 /// </summary>
 public sealed record FieldExitResponsePacket(
-    byte ResultCode) : IPacket
+    byte SlotIndex) : IPacket
 {
     public ushort Opcode => (ushort)ServerOpcode.FieldExit;
 
     public void Serialize(PacketWriter writer)
     {
-        writer.WriteByte(ResultCode);
+        writer.WriteByte(SlotIndex);
     }
 
     public static bool TryParse(ReadOnlySpan<byte> span, out FieldExitResponsePacket packet)
@@ -399,8 +400,8 @@ public sealed record FieldExitResponsePacket(
         }
 
         var reader = new PacketReader(span);
-        byte result = reader.ReadByte();
-        packet = new FieldExitResponsePacket(result);
+        byte slotIndex = reader.ReadByte();
+        packet = new FieldExitResponsePacket(slotIndex);
         return true;
     }
 }
@@ -634,7 +635,7 @@ public sealed record FieldChangeSlotStatusBroadcastPacket(
 }
 
 /// <summary>
-/// Request from host to update room settings / rules.
+/// Request from host to update room settings / rules: [string RoomName, string Password, string MapName, u8 Mode, u8 MaxPlayers, u16 RoundTime, u8 Rounds, u8 SubMode].
 /// Evidence: Observed in engine.dll ?SendFieldChangeRule@IScavengerWorldNet@@UAEXPAD00EEGEE@Z (opcode 0x0041).
 /// </summary>
 public sealed record FieldChangeRuleRequestPacket(
@@ -645,8 +646,7 @@ public sealed record FieldChangeRuleRequestPacket(
     byte MaxPlayers,
     ushort RoundTime,
     byte Rounds,
-    byte SubMode,
-    byte LevelLimit) : IPacket
+    byte SubMode) : IPacket
 {
     public ushort Opcode => (ushort)ClientOpcode.FieldChangeRule;
 
@@ -660,7 +660,6 @@ public sealed record FieldChangeRuleRequestPacket(
         writer.WriteUInt16(RoundTime);
         writer.WriteByte(Rounds);
         writer.WriteByte(SubMode);
-        writer.WriteByte(LevelLimit);
     }
 
     public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeRuleRequestPacket packet)
@@ -675,7 +674,6 @@ public sealed record FieldChangeRuleRequestPacket(
         ushort roundTime = reader.ReadUInt16();
         byte rounds = reader.ReadByte();
         byte subMode = reader.ReadByte();
-        byte levelLimit = reader.Remaining > 0 ? reader.ReadByte() : (byte)0;
 
         packet = new FieldChangeRuleRequestPacket(
             roomName,
@@ -685,15 +683,14 @@ public sealed record FieldChangeRuleRequestPacket(
             maxPlayers,
             roundTime,
             rounds,
-            subMode,
-            levelLimit);
+            subMode);
         return true;
     }
 }
 
 /// <summary>
-/// Broadcast notifying members of updated room settings.
-/// Evidence: Observed in engine.dll 0x36197657 and RakionWorldServ 0x4077C0 (opcode 0x0041).
+/// Broadcast notifying members of updated room settings: [string RoomName, string Password, string MapName, u8 Mode, u8 MaxPlayers, u16 RoundTime, u8 Rounds, u8 SubMode].
+/// Evidence: Observed in engine.dll 0x36193b50 and rakion.bin 0x476100 (opcode 0x0041).
 /// </summary>
 public sealed record FieldChangeRuleBroadcastPacket(
     string RoomName,
@@ -703,8 +700,7 @@ public sealed record FieldChangeRuleBroadcastPacket(
     byte MaxPlayers,
     ushort RoundTime,
     byte Rounds,
-    byte SubMode,
-    byte LevelLimit) : IPacket
+    byte SubMode) : IPacket
 {
     public ushort Opcode => (ushort)ServerOpcode.FieldChangeRule;
 
@@ -718,7 +714,6 @@ public sealed record FieldChangeRuleBroadcastPacket(
         writer.WriteUInt16(RoundTime);
         writer.WriteByte(Rounds);
         writer.WriteByte(SubMode);
-        writer.WriteByte(LevelLimit);
     }
 
     public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeRuleBroadcastPacket packet)
@@ -733,7 +728,6 @@ public sealed record FieldChangeRuleBroadcastPacket(
         ushort roundTime = reader.ReadUInt16();
         byte rounds = reader.ReadByte();
         byte subMode = reader.ReadByte();
-        byte levelLimit = reader.Remaining > 0 ? reader.ReadByte() : (byte)0;
 
         packet = new FieldChangeRuleBroadcastPacket(
             roomName,
@@ -743,8 +737,7 @@ public sealed record FieldChangeRuleBroadcastPacket(
             maxPlayers,
             roundTime,
             rounds,
-            subMode,
-            levelLimit);
+            subMode);
         return true;
     }
 }
