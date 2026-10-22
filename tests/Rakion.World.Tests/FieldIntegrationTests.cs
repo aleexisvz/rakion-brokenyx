@@ -197,18 +197,26 @@ public sealed class FieldIntegrationTests
         var (opChatGuest, payloadChatGuest) = await ReadServerPacketAsync(s2);
         Assert.AreEqual((ushort)ServerOpcode.FieldChat, opChatGuest);
 
-        // 7. Guest exits room (0x003A)
+        // 7. Guest exits room (0x003A) - Guest is in slot 10 (Team 1)
         var exitReq = new FieldExitRequestPacket();
         await SendClientPacketAsync(s2, 6, exitReq.Opcode, exitReq);
         var (opExit, payloadExit) = await ReadServerPacketAsync(s2);
         Assert.AreEqual((ushort)ServerOpcode.FieldExit, opExit);
         Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadExit, out var pExit));
-        Assert.AreEqual((byte)0, pExit.ResultCode);
+        Assert.AreEqual((byte)10, pExit.SlotIndex);
 
-        // 8. Host exits room (room destroyed)
+        // Host receives exit broadcast for Guest (Slot 10)
+        var (opHostExitBroadcast, payloadHostExitBroadcast) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldExit, opHostExitBroadcast);
+        Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadHostExitBroadcast, out var pHostExitBroadcast));
+        Assert.AreEqual((byte)10, pHostExitBroadcast.SlotIndex);
+
+        // 8. Host exits room (room destroyed) - Host is in slot 0
         await SendClientPacketAsync(s1, 6, exitReq.Opcode, exitReq);
         var (opHostExit, payloadHostExit) = await ReadServerPacketAsync(s1);
         Assert.AreEqual((ushort)ServerOpcode.FieldExit, opHostExit);
+        Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadHostExit, out var pHostExit));
+        Assert.AreEqual((byte)0, pHostExit.SlotIndex);
 
         // FieldList is empty again
         await SendClientPacketAsync(s1, 7, listReq.Opcode, listReq);
@@ -303,8 +311,7 @@ public sealed class FieldIntegrationTests
             MaxPlayers: 8,
             RoundTime: 5,
             Rounds: 7,
-            SubMode: 0,
-            LevelLimit: 0);
+            SubMode: 0);
         await SendClientPacketAsync(s1, 15, ruleReq.Opcode, ruleReq);
 
         var (opRuleHost, payloadRuleHost) = await ReadServerPacketAsync(s1);

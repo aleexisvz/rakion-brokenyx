@@ -1066,15 +1066,27 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         if (session.ActiveChannel.FieldManager.TryLeaveField(session, out var field, out var player, out bool roomDestroyed))
         {
+            byte exitingSlot = player?.SlotIndex ?? 0;
             _logger.LogInformation(
-                "[{ConnectionId}] '{Player}' left room #{Number} (Destroyed: {Destroyed}).",
+                "[{ConnectionId}] '{Player}' (Slot {Slot}) left room #{Number} (Destroyed: {Destroyed}).",
                 session.Connection.ConnectionId,
                 session.ActiveCharacter?.Name ?? "Unknown",
+                exitingSlot,
                 field?.Number ?? 0,
                 roomDestroyed);
 
-            var response = new FieldExitResponsePacket(ResultCode: 0);
+            // Notify exiting player with their slot index so client knows to exit room UI
+            var response = new FieldExitResponsePacket(SlotIndex: exitingSlot);
             await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+
+            // Broadcast to remaining room members so their client clears the player's slot
+            if (!roomDestroyed && field is not null)
+            {
+                foreach (var member in field.Players)
+                {
+                    await SendPacketAsync(member.Session, response, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
     }
 
@@ -1269,7 +1281,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 req.RoundTime,
                 req.Rounds,
                 req.SubMode,
-                req.LevelLimit))
+                (byte)0))
             {
                 _logger.LogInformation(
                     "[{ConnectionId}] Room #{Number} rules updated by host '{Host}'.",
@@ -1285,8 +1297,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                     field.MaxPlayers,
                     field.RoundTime,
                     field.Rounds,
-                    field.SubMode,
-                    field.LevelLimit);
+                    field.SubMode);
 
                 foreach (var member in field.Players)
                 {
