@@ -16,8 +16,8 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 
 | Ítem | Opcodes (cliente → servidor) | Estado | Verificado con cliente real |
 | :--- | :--- | :--- | :--- |
-| 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo por personaje están pendientes. | `0x002C`: sí. Box: pendiente de probar |
-| 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Movimientos a o desde el equipo: rechazados con resultado 4 hasta que se envíe el equipo de cada personaje. Venta (`0x002F`) pendiente. | pendiente de probar |
+| 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo de cada personaje viajan en sus registros de `0x000C`/`0x000D`. | `0x002C`: sí. Box: pendiente de probar |
+| 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**). Venta (`0x002F`) pendiente. | Box: sí. Equipo: pendiente de probar |
 | 4.2, 4.4 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
@@ -61,3 +61,10 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
     sea exp es **Derived**.
   - Resultados del original (0x40CF10): 0 = movido, 3 = origen vacío, 4 = no se puede colocar ahí
     (significados **Derived**). Fuera de rango, el original desconecta (0x3E); aquí se responde 4.
+- Equipo de cada personaje: 19 slots por registro de personaje (`CharacterEquipment`): 19 × `u16` itemId, 19 × `u8`
+  level, 19 × `u32` exp, 19 × `u32` limittime. Tamaños **Observed** (`engine.dll` 0x36196450..0x361964F0); orden de
+  exp/limittime **Derived** de la copia del original (`RakionWorldServ.exe` 0x411E78..0x411F26). Las filas con
+  `character_id` = id del personaje van a su slot `slot_index`.
+- Al mover, la ubicación 1 (equipo) se refiere al personaje seleccionado. El original comprueba si el ítem puede ir a
+  ese slot (0x40BC10, resultado 4); esas reglas aún no se han observado, así que por ahora manda la validación del
+  propio cliente.
