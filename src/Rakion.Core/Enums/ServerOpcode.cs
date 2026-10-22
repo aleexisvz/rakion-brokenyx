@@ -93,6 +93,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryLeave = 0x002D,
 
+    /// <summary>
+    /// Inventory move result: [u8 Result] + source and destination slot states (19 bytes).
+    /// Evidence: Observed in engine.dll 0x36193810 (reader) and RakionWorldServ.exe 0x4219F7 (21-byte send).
+    /// </summary>
+    InventoryMove = 0x0031,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.
