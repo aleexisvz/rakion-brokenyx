@@ -124,6 +124,69 @@ public sealed class ShopModuleTests
         Assert.AreEqual(InventoryBuyResponsePacket.ResultCouponInvalid, response.Result);
     }
 
+    [TestMethod]
+    public async Task Sell_GoldItem_Pays40PercentAndClearsSlot()
+    {
+        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = _userId, CharacterId = 0, ItemId = 1001, SlotIndex = 6 });
+
+        var response = await SellAsync(6);
+
+        Assert.AreEqual(InventorySellResponsePacket.ResultSuccess, response.Result);
+        Assert.AreEqual(5000u + 1080u, response.Gold);
+        Assert.AreEqual((byte)6, response.BoxSlot);
+        Assert.IsEmpty(await _inventoryRepository.GetUserItemsAsync(_userId));
+    }
+
+    [TestMethod]
+    public async Task Sell_ItemInZeroPriceRange_PaysNothing()
+    {
+        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = _userId, CharacterId = 0, ItemId = 12000, SlotIndex = 0 });
+
+        var response = await SellAsync(0);
+
+        Assert.AreEqual(InventorySellResponsePacket.ResultSuccess, response.Result);
+        Assert.AreEqual(5000u, response.Gold); // ids 12000..12999 pay nothing in the legacy rules
+    }
+
+    [TestMethod]
+    public async Task Sell_EmptySlotOrCreature_IsRejected()
+    {
+        await _inventoryRepository.UpsertItemTemplatesAsync([new ItemEntity { Id = 8001, Shop = 1, GoldPrice = 100 }]);
+        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = _userId, CharacterId = 0, ItemId = 8001, SlotIndex = 2 });
+
+        var empty = await SellAsync(1);
+        var creature = await SellAsync(2);
+
+        Assert.AreEqual(InventorySellResponsePacket.ResultNotSellable, empty.Result);
+        Assert.AreEqual(InventorySellResponsePacket.ResultNotSellable, creature.Result);
+        Assert.AreEqual(5000u, creature.Gold);
+        Assert.HasCount(1, await _inventoryRepository.GetUserItemsAsync(_userId));
+    }
+
+    [TestMethod]
+    [DataRow(1, 2700, 0, 1080L)]
+    [DataRow(2, 0, 333, 499L)]
+    [DataRow(3, 1000, 1000, 0L)]
+    public void SellPrice_FollowsLegacyFormula(int shop, int goldPrice, int cashPrice, long expected)
+    {
+        var template = new ItemEntity { Id = 1001, Shop = (byte)shop, GoldPrice = goldPrice, CashPrice = cashPrice };
+
+        Assert.AreEqual(expected, ShopModule.SellPrice(1001, template));
+    }
+
+    private async Task<InventorySellResponsePacket> SellAsync(byte slot)
+    {
+        var session = new WorldSession(new TcpConnection(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), null!, NullLogger.Instance))
+        {
+            User = new UserEntity { Id = _userId, Username = "shopper" },
+            ActiveCharacter = new CharacterEntity { Id = 9, UserId = _userId, Name = "Buyer" },
+        };
+
+        Assert.IsTrue(_registry.TryGetHandler((ushort)ClientOpcode.InventorySell, out var handler));
+        await handler(session, new byte[] { slot }, CancellationToken.None);
+        return (InventorySellResponsePacket)_sender.Sent.Last().Packet;
+    }
+
     private async Task<InventoryBuyResponsePacket> BuyAsync(InventoryBuyRequestPacket request)
     {
         var session = new WorldSession(new TcpConnection(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), null!, NullLogger.Instance))

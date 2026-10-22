@@ -17,7 +17,8 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | Ítem | Opcodes (cliente → servidor) | Estado | Verificado con cliente real |
 | :--- | :--- | :--- | :--- |
 | 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo de cada personaje viajan en sus registros de `0x000C`/`0x000D`. | `0x002C`: sí. Box: pendiente de probar |
-| 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**). Venta (`0x002F`) pendiente. | Box: sí. Equipo: pendiente de probar |
+| 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**).  | Box: sí. Equipo: pendiente de probar |
+| 4.3 Vender ítems | `InventorySell` `0x002F` (**Observed**) | Venta desde el Box por oro con la fórmula del original; borrado del ítem y abono en una transacción. Rechazadas por ahora: criaturas (8000–8999). | pendiente de probar |
 | 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones, paquetes (tipo 10) e ítems PowerUser. | pendiente de probar |
 | 4.4 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
@@ -81,3 +82,9 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
     Resultados: 0 comprado, 3 no comprable o saldo insuficiente, 4 Box lleno, 0x14–0x16 cupones.
   - Slot destino: el más alto libre en `0 .. bolsas × 30 − 1` (0x40CCBE). Nivel inicial 1 (default de
     `useriteminfo.level`).
+- Venta (`0x002F`):
+  - Petición `[u8 slot del Box]`; respuesta `[u8 resultado][u32 oro][u32 cash][u8 slot]`. **Observed**
+    (`SendInventorySell`, `engine.dll` 0x361936A0); `rakion.bin` 0x478A70 actualiza saldos y vacía el slot.
+  - Precio del original (0x40CD70 / 0x40A810): tienda 1 → 40 % del precio en oro; tienda 2 → 150 % del precio en
+    cash, pagado en oro; resto → 0; ids 12000–12999 → 0. Constantes 0.4 y 1.5 **Observed**; se trunca.
+  - Criaturas (8000–8999): el original usa una tabla de precios por nivel aún **Unknown**; se rechazan (resultado 3).
