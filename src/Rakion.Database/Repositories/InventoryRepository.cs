@@ -313,6 +313,56 @@ public sealed class InventoryRepository : IInventoryRepository
         }
     }
 
+    public async Task<SaleOutcome?> SellFromBoxAsync(int userId, byte slot, int itemId, long goldGained, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(goldGained);
+
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            int? rowId = await connection.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+                """
+                SELECT id FROM user_items
+                WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot AND item_id = @ItemId
+                LIMIT 1;
+                """,
+                new { UserId = userId, Slot = slot, ItemId = itemId },
+                tx,
+                cancellationToken: ct));
+            if (rowId is null)
+            {
+                await tx.RollbackAsync(ct);
+                return null;
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM user_items WHERE id = @Id AND user_id = @UserId;",
+                new { Id = rowId.Value, UserId = userId },
+                tx,
+                cancellationToken: ct));
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE user_game_info SET gold = gold + @Gold WHERE user_id = @UserId;",
+                new { UserId = userId, Gold = goldGained },
+                tx,
+                cancellationToken: ct));
+
+            long gold = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                "SELECT gold FROM user_game_info WHERE user_id = @UserId;", new { UserId = userId }, tx, cancellationToken: ct));
+            int cash = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT COALESCE((SELECT cash_amount FROM cash_balances WHERE user_id = @UserId), 0);", new { UserId = userId }, tx, cancellationToken: ct));
+
+            await tx.CommitAsync(ct);
+            return new SaleOutcome(rowId.Value, gold, cash);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     private static bool IsSqlite(DbConnection connection) =>
         connection.GetType().Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase);
 

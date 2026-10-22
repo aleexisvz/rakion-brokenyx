@@ -560,3 +560,65 @@ public sealed record InventoryBuyResponsePacket(byte Result, uint Gold, uint Cas
     }
 }
 
+/// <summary>
+/// Client request to sell the item in an account box slot: [u8 BoxSlot].
+/// Evidence: Observed in engine.dll ?SendInventorySell@IScavengerWorldNet@@UAEXE@Z (0x002F, 3-byte message);
+/// the legacy server reads it as a box slot and rejects values of 120 or more (RakionWorldServ.exe 0x421606).
+/// </summary>
+public sealed record InventorySellRequestPacket(byte BoxSlot) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.InventorySell;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(BoxSlot);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventorySellRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        packet = new InventorySellRequestPacket(span[0]);
+        return true;
+    }
+}
+
+/// <summary>
+/// Server result for <see cref="InventorySellRequestPacket"/>: [u8 Result][u32 Gold][u32 Cash][u8 BoxSlot].
+/// Evidence: Observed in engine.dll 0x361936A0. rakion.bin 0x478A70 applies it only when Result is 0: Gold and
+/// Cash become the account balances and the box record of BoxSlot is cleared (Derived).
+/// Result codes from RakionWorldServ.exe 0x40CD70 (meanings Derived): 0 sold, 3 empty slot or not sellable.
+/// </summary>
+public sealed record InventorySellResponsePacket(byte Result, uint Gold, uint Cash, byte BoxSlot) : IPacket
+{
+    public const byte ResultSuccess = 0;
+    public const byte ResultNotSellable = 3;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventorySell;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        writer.WriteUInt32(Gold);
+        writer.WriteUInt32(Cash);
+        writer.WriteByte(BoxSlot);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventorySellResponsePacket packet)
+    {
+        packet = null!;
+        if (span.Length < 10)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new InventorySellResponsePacket(reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadByte());
+        return true;
+    }
+}
+

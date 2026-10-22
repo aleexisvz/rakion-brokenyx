@@ -105,6 +105,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryBuy = 0x002E,
 
+    /// <summary>
+    /// Sell result: [u8 Result][u32 Gold][u32 Cash][u8 BoxSlot].
+    /// Evidence: Observed in engine.dll 0x361936A0 (reader) and rakion.bin 0x478A70 (callback).
+    /// </summary>
+    InventorySell = 0x002F,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.
