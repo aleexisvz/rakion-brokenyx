@@ -256,3 +256,117 @@ public sealed record InventoryLeaveResponsePacket(byte Result) : IPacket
         return true;
     }
 }
+
+/// <summary>
+/// Where an inventory slot lives. Evidence: RakionWorldServ.exe 0x4218EF validates location 0 against
+/// 120 slots and any other value against 19 slots (Observed); names Derived.
+/// </summary>
+public enum InventoryLocation : byte
+{
+    AccountBox = 0,
+    Equipment = 1,
+}
+
+/// <summary>
+/// Client request to move an item between two slots: (u8, u8, u8, u8).
+/// Evidence: Observed in engine.dll ?SendInventoryMove@IScavengerWorldNet@@UAEXEEEE@Z (0x0031, 6-byte message)
+/// and in the legacy parser RakionWorldServ.exe 0x4218EF: source location, source slot, destination
+/// location, destination slot.
+/// </summary>
+public sealed record InventoryMoveRequestPacket(
+    InventoryLocation SourceLocation,
+    byte SourceSlot,
+    InventoryLocation DestinationLocation,
+    byte DestinationSlot) : IPacket
+{
+    public const int AccountBoxSlots = 120;
+    public const int EquipmentSlots = 19;
+
+    public ushort Opcode => (ushort)ClientOpcode.InventoryMove;
+
+    /// <summary>Same range rule as the legacy server: box slots 0..119, equipment slots 0..18.</summary>
+    public bool IsInRange =>
+        SourceSlot < SlotCount(SourceLocation) && DestinationSlot < SlotCount(DestinationLocation);
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte((byte)SourceLocation);
+        writer.WriteByte(SourceSlot);
+        writer.WriteByte((byte)DestinationLocation);
+        writer.WriteByte(DestinationSlot);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryMoveRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 4)
+        {
+            return false;
+        }
+
+        packet = new InventoryMoveRequestPacket((InventoryLocation)span[0], span[1], (InventoryLocation)span[2], span[3]);
+        return true;
+    }
+
+    private static int SlotCount(InventoryLocation location) =>
+        location == InventoryLocation.AccountBox ? AccountBoxSlots : EquipmentSlots;
+}
+
+/// <summary>
+/// Contents of one slot after a move: location, slot, item id, level, exp (9 bytes).
+/// Evidence: Observed field sizes in engine.dll 0x36193810; that the u32 is exp is Derived from the legacy
+/// server's slot arrays (item id, level, exp are contiguous: RakionWorldServ.exe 0x40CF8C..0x40CFDD).
+/// </summary>
+public readonly record struct InventorySlotState(InventoryLocation Location, byte Slot, ushort ItemId, byte Level, uint Exp)
+{
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte((byte)Location);
+        writer.WriteByte(Slot);
+        writer.WriteUInt16(ItemId);
+        writer.WriteByte(Level);
+        writer.WriteUInt32(Exp);
+    }
+
+    public static InventorySlotState Read(ref PacketReader reader) =>
+        new((InventoryLocation)reader.ReadByte(), reader.ReadByte(), reader.ReadUInt16(), reader.ReadByte(), reader.ReadUInt32());
+}
+
+/// <summary>
+/// Server result for <see cref="InventoryMoveRequestPacket"/>: [u8 Result][source state][destination state].
+/// Evidence: Observed in engine.dll 0x36193810 (19-byte reader) and RakionWorldServ.exe 0x4219F7.
+/// Result codes observed in RakionWorldServ.exe 0x40CF10: 0 = moved, 3 = source slot empty,
+/// 4 = item cannot go there (meanings Derived).
+/// </summary>
+public sealed record InventoryMoveResponsePacket(byte Result, InventorySlotState Source, InventorySlotState Destination) : IPacket
+{
+    public const byte ResultSuccess = 0;
+    public const byte ResultSourceEmpty = 3;
+    public const byte ResultNotAllowed = 4;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventoryMove;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        Source.Serialize(writer);
+        Destination.Serialize(writer);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryMoveResponsePacket packet)
+    {
+        packet = null!;
+        if (span.Length < 19)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        byte result = reader.ReadByte();
+        var source = InventorySlotState.Read(ref reader);
+        var destination = InventorySlotState.Read(ref reader);
+        packet = new InventoryMoveResponsePacket(result, source, destination);
+        return true;
+    }
+}
+

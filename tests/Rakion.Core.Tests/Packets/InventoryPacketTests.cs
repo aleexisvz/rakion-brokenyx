@@ -123,4 +123,37 @@ public sealed class InventoryPacketTests
         Assert.IsTrue(InventoryLeaveResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
         Assert.AreEqual(packet, parsed);
     }
+
+    [TestMethod]
+    public void InventoryMoveRequest_RoundTrip_AndRangeRule()
+    {
+        var packet = new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.AccountBox, 119);
+        using var writer = new PacketWriter(packet.Opcode);
+        packet.Serialize(writer);
+        byte[] bytes = writer.Build();
+
+        CollectionAssert.AreEqual(new byte[] { 0x08, 0x00, 0x31, 0x00, 0x00, 0x00, 0x00, 0x77 }, bytes);
+        Assert.IsTrue(InventoryMoveRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
+        Assert.AreEqual(packet, parsed);
+        Assert.IsTrue(parsed.IsInRange);
+        Assert.IsFalse((parsed with { DestinationSlot = 120 }).IsInRange);
+        Assert.IsFalse((parsed with { SourceLocation = InventoryLocation.Equipment, SourceSlot = 19 }).IsInRange);
+    }
+
+    [TestMethod]
+    public void InventoryMoveResponse_RoundTrip_Is19Bytes()
+    {
+        var packet = new InventoryMoveResponsePacket(
+            InventoryMoveResponsePacket.ResultSuccess,
+            new InventorySlotState(InventoryLocation.AccountBox, 0, 0, 0, 0),
+            new InventorySlotState(InventoryLocation.AccountBox, 5, 1002, 5, 77));
+        using var writer = new PacketWriter(packet.Opcode);
+        packet.Serialize(writer);
+        byte[] bytes = writer.Build();
+
+        Assert.HasCount(PacketHeader.HeaderSize + 19, bytes);
+        Assert.AreEqual((byte)5, bytes[PacketHeader.HeaderSize + 11]);
+        Assert.IsTrue(InventoryMoveResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
+        Assert.AreEqual(packet, parsed);
+    }
 }

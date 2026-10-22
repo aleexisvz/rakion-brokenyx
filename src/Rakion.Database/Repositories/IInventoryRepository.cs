@@ -13,5 +13,11 @@ public interface IInventoryRepository
     Task<bool> RemoveUserItemAsync(int userItemId, int userId, CancellationToken ct = default);
     Task<bool> UpdateSlotAsync(int userItemId, int userId, byte newSlotIndex, CancellationToken ct = default);
     Task<bool> UpdateLevelAndExpAsync(int userItemId, byte newLevel, long newExp, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically swaps the contents of two account box slots (rows with character_id = 0).
+    /// The destination may be empty. Returns false when the source slot is empty.
+    /// </summary>
+    Task<bool> SwapBoxSlotsAsync(int userId, byte sourceSlot, byte destinationSlot, CancellationToken ct = default);
 }
 

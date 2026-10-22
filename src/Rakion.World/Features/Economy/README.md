@@ -17,7 +17,8 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | Ítem | Opcodes (cliente → servidor) | Estado | Verificado con cliente real |
 | :--- | :--- | :--- | :--- |
 | 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo por personaje están pendientes. | `0x002C`: sí. Box: pendiente de probar |
-| 4.2 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
+| 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Movimientos a o desde el equipo: rechazados con resultado 4 hasta que se envíe el equipo de cada personaje. Venta (`0x002F`) pendiente. | pendiente de probar |
+| 4.2, 4.4 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
 
@@ -52,3 +53,11 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - `user_items.limit_time_minutes` debe guardarse en la unidad de `LegacyGameClock` (0 = permanente).
 - Salida del inventario: el cliente espera `0x002D` con `[u8 Result]` (`engine.dll` 0x36193680,
   **Observed**); sin respuesta se queda en "leaving inventory". Se responde 0.
+- Mover ítems (`0x0031`):
+  - Petición `[u8 ubicación origen][u8 slot origen][u8 ubicación destino][u8 slot destino]`; ubicación 0 = Box
+    (slots 0..119), otro valor = equipo (0..18). **Observed** en `RakionWorldServ.exe` 0x4218EF.
+  - Respuesta de 19 bytes: `u8` resultado + dos bloques `(u8 ubicación, u8 slot, u16 itemId, u8 level, u32 exp)`
+    con el contenido nuevo de origen y destino. Tamaños **Observed** (`engine.dll` 0x36193810); que el `u32`
+    sea exp es **Derived**.
+  - Resultados del original (0x40CF10): 0 = movido, 3 = origen vacío, 4 = no se puede colocar ahí
+    (significados **Derived**). Fuera de rango, el original desconecta (0x3E); aquí se responde 4.

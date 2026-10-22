@@ -111,6 +111,51 @@ public sealed class InventoryRepository : IInventoryRepository
         return affected > 0;
     }
 
+    public async Task<bool> SwapBoxSlotsAsync(int userId, byte sourceSlot, byte destinationSlot, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            const string selectSql = """
+                SELECT id AS Id, slot_index AS SlotIndex
+                FROM user_items
+                WHERE user_id = @UserId AND character_id = 0 AND slot_index IN (@Source, @Destination);
+                """;
+
+            var rows = (await connection.QueryAsync<(int Id, byte SlotIndex)>(new CommandDefinition(
+                selectSql,
+                new { UserId = userId, Source = sourceSlot, Destination = destinationSlot },
+                tx,
+                cancellationToken: ct))).ToList();
+
+            var source = rows.Where(r => r.SlotIndex == sourceSlot).Select(r => (int?)r.Id).FirstOrDefault();
+            if (source is null)
+            {
+                await tx.RollbackAsync(ct);
+                return false;
+            }
+
+            var destination = rows.Where(r => r.SlotIndex == destinationSlot).Select(r => (int?)r.Id).FirstOrDefault();
+
+            const string moveSql = "UPDATE user_items SET slot_index = @Slot WHERE id = @Id AND user_id = @UserId;";
+            await connection.ExecuteAsync(new CommandDefinition(moveSql, new { Slot = destinationSlot, Id = source.Value, UserId = userId }, tx, cancellationToken: ct));
+            if (destination is not null && destination != source)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(moveSql, new { Slot = sourceSlot, Id = destination.Value, UserId = userId }, tx, cancellationToken: ct));
+            }
+
+            await tx.CommitAsync(ct);
+            return true;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     private static async Task<int> GetLastInsertedIdAsync(DbConnection conn, DbTransaction? tx, CancellationToken ct)
     {
         string query = conn.GetType().Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)

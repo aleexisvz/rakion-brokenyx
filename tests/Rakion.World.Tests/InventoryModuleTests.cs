@@ -5,6 +5,8 @@ using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
 using Rakion.Core.Utilities;
 using Rakion.Database.Entities;
+using Rakion.Database.Repositories;
+using Rakion.Database.Tests.TestUtilities;
 using Rakion.Network.Tcp;
 using Rakion.World.Features.Economy;
 using Rakion.World.Modules;
@@ -17,15 +19,25 @@ public sealed class InventoryModuleTests
 {
     private static readonly DateTime Now = new(2026, 10, 21, 22, 15, 30);
 
+    private SqliteTestConnectionFactory _dbFactory = null!;
+    private InventoryRepository _inventoryRepository = null!;
     private RecordingSender _sender = null!;
     private WorldOpcodeRegistry _registry = null!;
 
     [TestInitialize]
     public void Setup()
     {
+        _dbFactory = new SqliteTestConnectionFactory($"Data Source=world_inventory_module_test_{Guid.NewGuid():N};Mode=Memory;Cache=Shared");
+        _inventoryRepository = new InventoryRepository(_dbFactory);
         _sender = new RecordingSender();
         _registry = new WorldOpcodeRegistry();
-        new InventoryModule(_sender, new FixedTimeProvider(Now), NullLogger<InventoryModule>.Instance).Register(_registry);
+        new InventoryModule(_sender, _inventoryRepository, new FixedTimeProvider(Now), NullLogger<InventoryModule>.Instance).Register(_registry);
+    }
+
+    [TestCleanup]
+    public void Cleanup()
+    {
+        _dbFactory.Dispose();
     }
 
     [TestMethod]
@@ -33,7 +45,8 @@ public sealed class InventoryModuleTests
     {
         Assert.IsTrue(_registry.IsMapped(ClientOpcode.InventoryEnter));
         Assert.IsTrue(_registry.IsMapped(ClientOpcode.InventoryLeave));
-        Assert.AreEqual(2, _registry.Count);
+        Assert.IsTrue(_registry.IsMapped(ClientOpcode.InventoryMove));
+        Assert.AreEqual(3, _registry.Count);
     }
 
     [TestMethod]
@@ -75,6 +88,62 @@ public sealed class InventoryModuleTests
         var response = (InventoryLeaveResponsePacket)_sender.Sent[0].Packet;
         Assert.AreEqual((ushort)ServerOpcode.InventoryLeave, response.Opcode);
         Assert.AreEqual(InventoryLeaveResponsePacket.ResultSuccess, response.Result);
+    }
+
+    [TestMethod]
+    public async Task InventoryMove_BoxToBox_SwapsAndReportsBothSlots()
+    {
+        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 1002, Level = 5, SlotIndex = 1 });
+        var session = CreatePlayingSession();
+
+        await MoveAsync(session, new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 1, InventoryLocation.AccountBox, 10));
+
+        var response = (InventoryMoveResponsePacket)_sender.Sent.Single().Packet;
+        Assert.AreEqual(InventoryMoveResponsePacket.ResultSuccess, response.Result);
+        Assert.AreEqual(new InventorySlotState(InventoryLocation.AccountBox, 1, 0, 0, 0), response.Source);
+        Assert.AreEqual(new InventorySlotState(InventoryLocation.AccountBox, 10, 1002, 5, 0), response.Destination);
+        Assert.AreEqual((byte)10, (await _inventoryRepository.GetUserItemsAsync(5)).Single().SlotIndex);
+    }
+
+    [TestMethod]
+    public async Task InventoryMove_FromEmptySlot_ReportsSourceEmpty()
+    {
+        await MoveAsync(CreatePlayingSession(), new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 3, InventoryLocation.AccountBox, 4));
+
+        var response = (InventoryMoveResponsePacket)_sender.Sent.Single().Packet;
+        Assert.AreEqual(InventoryMoveResponsePacket.ResultSourceEmpty, response.Result);
+    }
+
+    [TestMethod]
+    public async Task InventoryMove_ToEquipmentOrOutOfRange_IsRejectedWithoutChanges()
+    {
+        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 1001, SlotIndex = 0 });
+        var session = CreatePlayingSession();
+
+        await MoveAsync(session, new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.Equipment, 2));
+        await MoveAsync(session, new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.AccountBox, 200));
+
+        Assert.HasCount(2, _sender.Sent);
+        Assert.IsTrue(_sender.Sent.All(s => ((InventoryMoveResponsePacket)s.Packet).Result == InventoryMoveResponsePacket.ResultNotAllowed));
+        Assert.AreEqual((byte)0, (await _inventoryRepository.GetUserItemsAsync(5)).Single().SlotIndex);
+    }
+
+    private async Task MoveAsync(WorldSession session, InventoryMoveRequestPacket request)
+    {
+        using var writer = new PacketWriter(request.Opcode);
+        request.Serialize(writer);
+        byte[] payload = writer.Build()[PacketHeader.HeaderSize..];
+
+        Assert.IsTrue(_registry.TryGetHandler((ushort)ClientOpcode.InventoryMove, out var handler));
+        await handler(session, payload, CancellationToken.None);
+    }
+
+    private static WorldSession CreatePlayingSession()
+    {
+        var session = CreateSession();
+        session.User = new UserEntity { Id = 5, Username = "bob" };
+        session.ActiveCharacter = new CharacterEntity { Id = 9, UserId = 5, Name = "Bobby" };
+        return session;
     }
 
     private async Task DispatchAsync(WorldSession session, ClientOpcode opcode)
