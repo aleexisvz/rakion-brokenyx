@@ -30,6 +30,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly IAccountBalanceRepository _balanceRepository;
     private readonly ISessionTicketService _ticketService;
     private readonly IChannelManager _channelManager;
+    private readonly ISessionSender _sender;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -44,6 +45,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ISessionTicketService ticketService,
         IChannelManager channelManager,
         IEnumerable<IWorldOpcodeModule> modules,
+        ISessionSender sender,
         ILogger<WorldPacketHandler> logger)
     {
         _options = options;
@@ -52,6 +54,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _balanceRepository = balanceRepository;
         _ticketService = ticketService;
         _channelManager = channelManager;
+        _sender = sender;
         _logger = logger;
 
         RegisterBuiltInHandlers();
@@ -69,7 +72,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ISessionTicketService ticketService,
         IChannelManager channelManager,
         ILogger<WorldPacketHandler> logger)
-        : this(options, userRepository, characterRepository, balanceRepository, ticketService, channelManager, [], logger)
+        : this(options, userRepository, characterRepository, balanceRepository, ticketService, channelManager, [], WorldSessionSender.Instance, logger)
     {
     }
 
@@ -880,24 +883,6 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken)
-    {
-        using var writer = new PacketWriter(packet.Opcode);
-        packet.Serialize(writer);
-
-        if (session.IsEncrypted)
-        {
-            byte[] rawWire = writer.Build();
-            ReadOnlySpan<byte> payloadSpan = rawWire.Length >= PacketHeader.HeaderSize
-                ? rawWire.AsSpan(PacketHeader.HeaderSize)
-                : [];
-
-            byte[] encryptedWire = RakionWorldCrypto.EncryptServerPacket(packet.Opcode, payloadSpan);
-            await session.Connection.SendAsync(encryptedWire, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            await session.Connection.SendAsync(writer.Build(), cancellationToken).ConfigureAwait(false);
-        }
-    }
+    private ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken) =>
+        _sender.SendAsync(session, packet, cancellationToken);
 }

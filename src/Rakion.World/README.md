@@ -39,11 +39,16 @@
 - Los handlers propios de World se registran en `RegisterBuiltInHandlers()`. Otras funcionalidades (por ejemplo la economía del carril A, en `Features/Economy/`) implementan `IWorldOpcodeModule` y se registran en DI; no editan `WorldPacketHandler`.
 - Cada opcode tiene un único dueño: si un módulo intenta mapear un opcode ya enlazado, el constructor del handler lanza `InvalidOperationException` al arrancar.
 
-### 4. `ChannelManager` (`Rakion.World.Channels`)
+### 4. Vista de sesión y envío (`Rakion.World.Session`, contrato C-2)
+- `IWorldSessionView`: lectura de la sesión para funcionalidades de otros carriles (usuario, personaje activo, canal, `IsInField`). `WorldSession` la implementa de forma explícita; los consumidores no modifican la sesión.
+- `ISessionSender` / `WorldSessionSender`: serializa un `IPacket` y lo cifra con AES-128 si la sesión negoció el framing cifrado. `WorldPacketHandler` envía todas sus respuestas a través de él.
+- `IsInField` vale siempre `false` hasta que el sistema de salas de la fase 5 lo active.
+
+### 5. `ChannelManager` (`Rakion.World.Channels`)
 - Gestor concurrente en memoria de canales de juego (`LobbyChannel`).
 - Provee aislamiento de salas de chat y lista de usuarios por canal con soporte para restricciones por nivel y límites de jugadores.
 
-### 5. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
+### 6. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
 - Procesa datagramas UDP enviados por el cliente al entrar a la selección de personaje (`CMenuSelectCharacter`):
   - Recibe `0x0201` en el puerto 40708 (UDP 1) y `0x0202` en el puerto 40709 (UDP 2).
   - Responde con el datagrama de 12 bytes reflejando la Cookie enviada por el cliente y las banderas de puerto correspondientes (`0` para UDP 1, `1` para UDP 2).
