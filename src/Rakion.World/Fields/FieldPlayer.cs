@@ -16,6 +16,9 @@ public sealed class FieldPlayer
     /// <summary>True while the player is in the running match (legacy slot state 3, RakionWorldServ.exe 0x407ACD).</summary>
     public bool IsInGame { get; set; }
 
+    /// <summary>True once the client reported the map loaded (legacy slot state 4, RakionWorldServ.exe 0x408517).</summary>
+    public bool IsLoaded { get; set; }
+
     public FieldPlayer(WorldSession session, byte slotIndex, byte team, bool isMaster)
     {
         Session = session;

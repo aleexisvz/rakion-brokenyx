@@ -210,6 +210,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameEnter, HandleFieldGameEnterAsync);
         _registry.Map(ClientOpcode.FieldGameExit, HandleFieldGameExitAsync);
         _registry.Map(ClientOpcode.FieldSlotUdp, HandleFieldSlotUdpAsync);
+        _registry.Map(ClientOpcode.FieldGameRoundStart, HandleFieldGameRoundStartAsync);
+        _registry.Map(ClientOpcode.FieldGameAddPlayer, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: false, ct));
+        _registry.Map(ClientOpcode.FieldGameAddPlayerReply, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: true, ct));
     }
 
     private async ValueTask HandleCharacterTutorialClearAsync(WorldSession session, CancellationToken cancellationToken)
@@ -978,6 +981,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             out var failureReason))
         {
             field!.Rules = FieldRules.FromCreate(req);
+            field.ApplyDefaultSlots();
             _logger.LogInformation(
                 "[{ConnectionId}] Room #{Number} '{Name}' created by '{Host}' in channel {Channel}.",
                 session.Connection.ConnectionId,
@@ -1339,8 +1343,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
-        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) &&
-            field is not null)
+        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var chatter) &&
+            field is not null && chatter is not null)
         {
             string charName = session.ActiveCharacter?.Name ?? "Unknown";
             string formattedMessage = req.Message.StartsWith(charName, StringComparison.Ordinal)
@@ -1353,7 +1357,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 field.Number,
                 formattedMessage);
 
-            var broadcast = new FieldChatBroadcastPacket(formattedMessage);
+            var broadcast = new FieldChatBroadcastPacket(formattedMessage, chatter.SlotIndex);
             foreach (var member in field.Players)
             {
                 await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
@@ -1584,6 +1588,69 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (matchOver)
         {
             await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask HandleFieldGameRoundStartAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null)
+        {
+            return;
+        }
+
+        var start = field.MarkLoaded(player, DateTimeOffset.UtcNow);
+        _logger.LogInformation(
+            "[{ConnectionId}] Room #{Number} slot {Slot} loaded the map; round start {Action}.",
+            session.Connection.ConnectionId,
+            field.Number,
+            player.SlotIndex,
+            start is null ? "waits for the others" : start.Value.ToAllLoaded ? "sent to every member" : "sent to this member");
+        if (start is not { } round)
+        {
+            return;
+        }
+
+        var recipients = round.ToAllLoaded ? field.LoadedPlayers : [player];
+        foreach (var member in recipients)
+        {
+            await SendPacketAsync(member.Session, round.Packet, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Relays in-game player data: 0x4B goes to every other loaded member, 0x4C to one loaded member, both as 0x4B with
+    /// the sender's slot (RakionWorldServ.exe 0x405C00 / 0x405CC0, Observed).
+    /// </summary>
+    private async ValueTask HandleFieldGameAddPlayerAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        bool hasTarget,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameAddPlayerRequestPacket.TryParse(payload.Span, hasTarget, out var req))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldGameAddPlayer request ({Length} bytes).", session.Connection.ConnectionId, payload.Length);
+            return;
+        }
+
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var sender) is not true ||
+            field is null || sender is null || !sender.IsLoaded)
+        {
+            return;
+        }
+
+        var relay = new FieldGameAddPlayerPacket(sender.SlotIndex, req.Data);
+        foreach (var member in field.LoadedPlayers)
+        {
+            bool isTarget = req.TargetSlot is { } target ? member.SlotIndex == target : member != sender;
+            if (isTarget)
+            {
+                await SendPacketAsync(member.Session, relay, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
