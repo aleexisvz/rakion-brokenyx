@@ -122,5 +122,76 @@ public sealed class AccountBalanceRepository : IAccountBalanceRepository
 
         return affected > 0;
     }
-}
 
+    public async Task<PowerUserPurchaseOutcome> BuyPowerUserAsync(
+        int userId,
+        int cashPrice,
+        bool extend,
+        long nowMinutes,
+        long durationMinutes,
+        long maxAheadMinutes,
+        int pointsGained,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(cashPrice);
+
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            var state = await connection.QuerySingleAsync<PowerUserRow>(new CommandDefinition(
+                """
+                SELECT g.gold AS Gold, g.power_time AS PowerTime, g.power_level_point AS PowerLevelPoints,
+                       COALESCE((SELECT c.cash_amount FROM cash_balances c WHERE c.user_id = g.user_id), 0) AS Cash
+                FROM user_game_info g
+                WHERE g.user_id = @UserId;
+                """,
+                new { UserId = userId },
+                tx,
+                cancellationToken: ct));
+
+            if (state.PowerTime > nowMinutes + maxAheadMinutes)
+            {
+                await tx.RollbackAsync(ct);
+                return new PowerUserPurchaseOutcome(PowerUserPurchaseStatus.LimitReached, state.Gold, state.Cash, state.PowerTime, state.PowerLevelPoints);
+            }
+
+            int charged = await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE cash_balances SET cash_amount = cash_amount - @Price, updated_at = @Now WHERE user_id = @UserId AND cash_amount >= @Price;",
+                new { UserId = userId, Price = cashPrice, Now = DateTime.UtcNow },
+                tx,
+                cancellationToken: ct));
+            if (charged == 0)
+            {
+                await tx.RollbackAsync(ct);
+                return new PowerUserPurchaseOutcome(PowerUserPurchaseStatus.NotEnoughCash, state.Gold, state.Cash, state.PowerTime, state.PowerLevelPoints);
+            }
+
+            // Extending an expired card starts from now, so the new expiry is never in the past.
+            long powerTime = (extend ? Math.Max(state.PowerTime, nowMinutes) : nowMinutes) + durationMinutes;
+            int points = state.PowerLevelPoints + pointsGained;
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE user_game_info SET power_time = @PowerTime, power_level_point = @Points WHERE user_id = @UserId;",
+                new { UserId = userId, PowerTime = powerTime, Points = points },
+                tx,
+                cancellationToken: ct));
+
+            await tx.CommitAsync(ct);
+            return new PowerUserPurchaseOutcome(PowerUserPurchaseStatus.Bought, state.Gold, state.Cash - cashPrice, powerTime, points);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    private sealed class PowerUserRow
+    {
+        public long Gold { get; set; }
+        public int Cash { get; set; }
+        public long PowerTime { get; set; }
+        public int PowerLevelPoints { get; set; }
+    }
+}
