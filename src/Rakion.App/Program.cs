@@ -14,8 +14,10 @@ using Rakion.Database.Security;
 using Rakion.Database.Entities;
 using Rakion.World.Channels;
 using Rakion.World.Configuration;
+using Rakion.World.Features.Economy;
 using Rakion.World.Handlers;
 using Rakion.World.Hosting;
+using Rakion.World.Modules;
 using Rakion.World.Session;
 
 if (args.Contains("--generate-xfs"))
@@ -117,6 +119,7 @@ builder.Services.AddSingleton<AutoFetchServer>();
 
 builder.Services.AddSingleton<IChannelManager, ChannelManager>();
 builder.Services.AddSingleton<ISessionSender, WorldSessionSender>();
+builder.Services.AddSingleton<IWorldOpcodeModule, InventoryModule>();
 builder.Services.AddSingleton<WorldPacketHandler>();
 builder.Services.AddSingleton<WorldUdpPacketHandler>();
 builder.Services.AddSingleton<WorldServer>();
