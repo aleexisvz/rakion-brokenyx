@@ -313,6 +313,64 @@ public sealed class InventoryRepository : IInventoryRepository
         }
     }
 
+    public async Task<byte?> ReinforceInBoxAsync(
+        int userId,
+        byte targetSlot,
+        int targetItemId,
+        byte stoneSlot,
+        int stoneItemId,
+        int levelDelta,
+        CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        try
+        {
+            const string findSql = """
+                SELECT id AS Id, level AS Level FROM user_items
+                WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot AND item_id = @ItemId
+                LIMIT 1;
+                """;
+            var target = await connection.QuerySingleOrDefaultAsync<LevelRow>(new CommandDefinition(
+                findSql, new { UserId = userId, Slot = targetSlot, ItemId = targetItemId }, tx, cancellationToken: ct));
+            var stone = await connection.QuerySingleOrDefaultAsync<LevelRow>(new CommandDefinition(
+                findSql, new { UserId = userId, Slot = stoneSlot, ItemId = stoneItemId }, tx, cancellationToken: ct));
+            if (target is null || stone is null || target.Id == stone.Id)
+            {
+                await tx.RollbackAsync(ct);
+                return null;
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM user_items WHERE id = @Id AND user_id = @UserId;",
+                new { stone.Id, UserId = userId },
+                tx,
+                cancellationToken: ct));
+
+            byte level = (byte)Math.Clamp(target.Level + levelDelta, 0, byte.MaxValue);
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE user_items SET level = @Level WHERE id = @Id AND user_id = @UserId;",
+                new { Level = level, target.Id, UserId = userId },
+                tx,
+                cancellationToken: ct));
+
+            await tx.CommitAsync(ct);
+            return level;
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    private sealed class LevelRow
+    {
+        public int Id { get; set; }
+        public int Level { get; set; }
+    }
+
     public async Task<SaleOutcome?> SellFromBoxAsync(int userId, byte slot, int itemId, long goldGained, CancellationToken ct = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(goldGained);

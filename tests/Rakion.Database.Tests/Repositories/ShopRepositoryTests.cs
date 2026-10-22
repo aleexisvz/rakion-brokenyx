@@ -137,6 +137,36 @@ public sealed class ShopRepositoryTests
         Assert.HasCount(2, await _invRepo.GetUserItemsAsync(userId));
     }
 
+    [TestMethod]
+    public async Task ReinforceInBox_ConsumesStoneAndChangesLevel()
+    {
+        int userId = await CreateUserAsync(gold: 0, cash: 0);
+        var sword = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 0, ItemId = 1001, SlotIndex = 0, Level = 1 });
+        await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 0, ItemId = 13002, SlotIndex = 1 });
+
+        byte? up = await _invRepo.ReinforceInBoxAsync(userId, 0, 1001, 1, 13002, +1);
+
+        Assert.AreEqual((byte)2, up);
+        var items = await _invRepo.GetUserItemsAsync(userId);
+        Assert.AreEqual(sword.Id, items.Single().Id);
+        Assert.AreEqual((byte)2, items.Single().Level);
+    }
+
+    [TestMethod]
+    public async Task ReinforceInBox_FloorsAtZero_AndNeedsBothItems()
+    {
+        int userId = await CreateUserAsync(gold: 0, cash: 0);
+        await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 0, ItemId = 1001, SlotIndex = 0, Level = 1 });
+        await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 0, ItemId = 13002, SlotIndex = 1 });
+
+        Assert.IsNull(await _invRepo.ReinforceInBoxAsync(userId, 0, 1001, 2, 13002, +1));
+        Assert.IsNull(await _invRepo.ReinforceInBoxAsync(userId, 0, 1002, 1, 13002, +1));
+        byte? down = await _invRepo.ReinforceInBoxAsync(userId, 0, 1001, 1, 13002, -3);
+
+        Assert.AreEqual((byte)0, down);
+        Assert.HasCount(1, await _invRepo.GetUserItemsAsync(userId));
+    }
+
     private Task<int> CreateUserAsync(long gold, int cash) =>
         _userRepo.CreateUserAsync(
             new UserEntity { Username = $"buyer{Guid.NewGuid():N}"[..11], PasswordHash = "x", Email = "b@test" },
