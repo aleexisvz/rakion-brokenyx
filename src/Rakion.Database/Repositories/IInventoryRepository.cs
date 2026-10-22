@@ -17,6 +17,12 @@ public interface IInventoryRepository
     /// Returns null (and changes nothing) when the balance is too low or the slot is no longer empty;
     /// otherwise the balances after the purchase.
     /// </summary>
+    /// <summary>
+    /// Removes the item with the given id from an account box slot and credits the gold, in one transaction.
+    /// Returns null (and changes nothing) when that slot no longer holds that item; otherwise the balances.
+    /// </summary>
+    Task<SaleOutcome?> SellFromBoxAsync(int userId, byte slot, int itemId, long goldGained, CancellationToken ct = default);
+
     Task<PurchaseOutcome?> PurchaseIntoBoxAsync(
         int userId,
         int itemId,

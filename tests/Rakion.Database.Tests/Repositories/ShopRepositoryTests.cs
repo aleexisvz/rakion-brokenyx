@@ -107,6 +107,36 @@ public sealed class ShopRepositoryTests
         Assert.HasCount(1, await _invRepo.GetUserItemsAsync(userId));
     }
 
+    [TestMethod]
+    public async Task SellFromBox_RemovesItemAndCreditsGold()
+    {
+        int userId = await CreateUserAsync(gold: 1000, cash: 50);
+        var item = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 0, ItemId = 1001, SlotIndex = 4 });
+
+        var outcome = await _invRepo.SellFromBoxAsync(userId, 4, 1001, 1080);
+
+        Assert.IsNotNull(outcome);
+        Assert.AreEqual(item.Id, outcome.UserItemId);
+        Assert.AreEqual(2080L, outcome.Gold);
+        Assert.AreEqual(50, outcome.Cash);
+        Assert.IsEmpty(await _invRepo.GetUserItemsAsync(userId));
+    }
+
+    [TestMethod]
+    public async Task SellFromBox_WrongItemOrEquippedOrEmpty_ChangesNothing()
+    {
+        int userId = await CreateUserAsync(gold: 1000, cash: 0);
+        await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 0, ItemId = 1001, SlotIndex = 4 });
+        await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = 9, ItemId = 1002, SlotIndex = 5 });
+
+        Assert.IsNull(await _invRepo.SellFromBoxAsync(userId, 4, 1002, 10));
+        Assert.IsNull(await _invRepo.SellFromBoxAsync(userId, 5, 1002, 10));
+        Assert.IsNull(await _invRepo.SellFromBoxAsync(userId, 6, 1001, 10));
+
+        Assert.AreEqual(1000L, await _balanceRepo.GetGoldAsync(userId));
+        Assert.HasCount(2, await _invRepo.GetUserItemsAsync(userId));
+    }
+
     private Task<int> CreateUserAsync(long gold, int cash) =>
         _userRepo.CreateUserAsync(
             new UserEntity { Username = $"buyer{Guid.NewGuid():N}"[..11], PasswordHash = "x", Email = "b@test" },
