@@ -7,7 +7,7 @@ namespace Rakion.World.Session;
 /// <summary>
 /// State tracking for an active client connection on the World Server.
 /// </summary>
-public sealed class WorldSession
+public sealed class WorldSession : IWorldSessionView
 {
     public TcpConnection Connection { get; }
     public DateTime ConnectedAtUtc { get; }
@@ -20,6 +20,14 @@ public sealed class WorldSession
     public bool GameGuardVerified { get; set; }
     public bool IsEncrypted { get; set; }
     public ushort SequenceId { get; set; }
+    public bool IsInField { get; set; }
+
+    Guid IWorldSessionView.ConnectionId => Connection.ConnectionId;
+    int? IWorldSessionView.UserId => User?.Id;
+    string? IWorldSessionView.Username => User?.Username;
+    int? IWorldSessionView.CharacterId => ActiveCharacter?.Id;
+    string? IWorldSessionView.CharacterName => ActiveCharacter?.Name;
+    byte? IWorldSessionView.ChannelIndex => ActiveChannel?.Index;
 
     public WorldSession(TcpConnection connection)
     {

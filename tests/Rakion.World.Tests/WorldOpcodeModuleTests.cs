@@ -93,6 +93,7 @@ public sealed class WorldOpcodeModuleTests
             new SessionTicketService(),
             new ChannelManager(_options, NullLogger<ChannelManager>.Instance),
             [module],
+            WorldSessionSender.Instance,
             NullLogger<WorldPacketHandler>.Instance);
 
     private sealed class RecordingModule(ClientOpcode opcode) : IWorldOpcodeModule

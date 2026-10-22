@@ -16,6 +16,7 @@ using Rakion.World.Channels;
 using Rakion.World.Configuration;
 using Rakion.World.Handlers;
 using Rakion.World.Hosting;
+using Rakion.World.Session;
 
 if (args.Contains("--generate-xfs"))
 {
@@ -115,6 +116,7 @@ builder.Services.AddSingleton<BrokerServer>();
 builder.Services.AddSingleton<AutoFetchServer>();
 
 builder.Services.AddSingleton<IChannelManager, ChannelManager>();
+builder.Services.AddSingleton<ISessionSender, WorldSessionSender>();
 builder.Services.AddSingleton<WorldPacketHandler>();
 builder.Services.AddSingleton<WorldUdpPacketHandler>();
 builder.Services.AddSingleton<WorldServer>();
