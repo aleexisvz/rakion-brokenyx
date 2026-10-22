@@ -12,6 +12,7 @@ using Rakion.Database.Connection;
 using Rakion.Database.Repositories;
 using Rakion.Database.Security;
 using Rakion.Database.Entities;
+using Rakion.Database.Import;
 using Rakion.World.Channels;
 using Rakion.World.Configuration;
 using Rakion.World.Features.Economy;
@@ -26,6 +27,34 @@ if (args.Contains("--generate-xfs"))
     byte[] encBytes = XfsPacker.CreateNyxLauncherEnc("127.0.0.1", 40706, "http://127.0.0.1:8080/fetch/fetch.php");
     File.WriteAllBytes(targetPath, encBytes);
     Console.WriteLine($"[+] NyxLauncherEnc.xfs generated successfully at '{targetPath}' ({encBytes.Length} bytes).");
+    return;
+}
+
+if (args.Contains("--import-items"))
+{
+    // Loads item templates from the operator's local legacy dump (e.g. audit/DB/rakion_all.sql).
+    int index = Array.IndexOf(args, "--import-items");
+    string? dumpPath = args.Length > index + 1 && !args[index + 1].StartsWith("--") ? args[index + 1] : null;
+    if (dumpPath is null || !File.Exists(dumpPath))
+    {
+        Console.WriteLine("[!] Usage: --import-items <path to legacy SQL dump containing iteminfo rows>");
+        return;
+    }
+
+    IConfiguration importConfig = new ConfigurationBuilder()
+        .AddJsonFile("config/appsettings.json", optional: true)
+        .AddJsonFile("appsettings.json", optional: true)
+        .AddEnvironmentVariables("RAKION_")
+        .Build();
+
+    string importConnection = importConfig.GetConnectionString("RakionDb")
+        ?? importConfig["ConnectionStrings:RakionDb"]
+        ?? "Server=localhost;Port=3306;Database=rakion;User=root;Password=root;CharSet=utf8mb4;";
+
+    using var dumpReader = new StreamReader(dumpPath);
+    var templates = LegacyItemCatalogParser.Parse(dumpReader);
+    int imported = await new InventoryRepository(new MySqlConnectionFactory(importConnection)).UpsertItemTemplatesAsync(templates);
+    Console.WriteLine($"[+] Imported {imported} item templates from '{dumpPath}'.");
     return;
 }
 
