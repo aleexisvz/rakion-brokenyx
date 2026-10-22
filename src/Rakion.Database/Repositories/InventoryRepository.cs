@@ -111,7 +111,16 @@ public sealed class InventoryRepository : IInventoryRepository
         return affected > 0;
     }
 
-    public async Task<bool> SwapBoxSlotsAsync(int userId, byte sourceSlot, byte destinationSlot, CancellationToken ct = default)
+    public Task<bool> SwapBoxSlotsAsync(int userId, byte sourceSlot, byte destinationSlot, CancellationToken ct = default) =>
+        SwapSlotsAsync(userId, 0, sourceSlot, 0, destinationSlot, ct);
+
+    public async Task<bool> SwapSlotsAsync(
+        int userId,
+        int sourceCharacterId,
+        byte sourceSlot,
+        int destinationCharacterId,
+        byte destinationSlot,
+        CancellationToken ct = default)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
@@ -119,31 +128,42 @@ public sealed class InventoryRepository : IInventoryRepository
         try
         {
             const string selectSql = """
-                SELECT id AS Id, slot_index AS SlotIndex
+                SELECT id
                 FROM user_items
-                WHERE user_id = @UserId AND character_id = 0 AND slot_index IN (@Source, @Destination);
+                WHERE user_id = @UserId AND character_id = @CharacterId AND slot_index = @Slot
+                LIMIT 1;
                 """;
 
-            var rows = (await connection.QueryAsync<(int Id, byte SlotIndex)>(new CommandDefinition(
+            int? source = await connection.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
                 selectSql,
-                new { UserId = userId, Source = sourceSlot, Destination = destinationSlot },
+                new { UserId = userId, CharacterId = sourceCharacterId, Slot = sourceSlot },
                 tx,
-                cancellationToken: ct))).ToList();
-
-            var source = rows.Where(r => r.SlotIndex == sourceSlot).Select(r => (int?)r.Id).FirstOrDefault();
+                cancellationToken: ct));
             if (source is null)
             {
                 await tx.RollbackAsync(ct);
                 return false;
             }
 
-            var destination = rows.Where(r => r.SlotIndex == destinationSlot).Select(r => (int?)r.Id).FirstOrDefault();
+            int? destination = await connection.QuerySingleOrDefaultAsync<int?>(new CommandDefinition(
+                selectSql,
+                new { UserId = userId, CharacterId = destinationCharacterId, Slot = destinationSlot },
+                tx,
+                cancellationToken: ct));
 
-            const string moveSql = "UPDATE user_items SET slot_index = @Slot WHERE id = @Id AND user_id = @UserId;";
-            await connection.ExecuteAsync(new CommandDefinition(moveSql, new { Slot = destinationSlot, Id = source.Value, UserId = userId }, tx, cancellationToken: ct));
+            const string moveSql = "UPDATE user_items SET character_id = @CharacterId, slot_index = @Slot WHERE id = @Id AND user_id = @UserId;";
+            await connection.ExecuteAsync(new CommandDefinition(
+                moveSql,
+                new { CharacterId = destinationCharacterId, Slot = destinationSlot, Id = source.Value, UserId = userId },
+                tx,
+                cancellationToken: ct));
             if (destination is not null && destination != source)
             {
-                await connection.ExecuteAsync(new CommandDefinition(moveSql, new { Slot = sourceSlot, Id = destination.Value, UserId = userId }, tx, cancellationToken: ct));
+                await connection.ExecuteAsync(new CommandDefinition(
+                    moveSql,
+                    new { CharacterId = sourceCharacterId, Slot = sourceSlot, Id = destination.Value, UserId = userId },
+                    tx,
+                    cancellationToken: ct));
             }
 
             await tx.CommitAsync(ct);

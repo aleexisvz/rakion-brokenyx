@@ -354,6 +354,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         long gold = await _balanceRepository.GetGoldAsync(user.Id, cancellationToken).ConfigureAwait(false);
         int cash = await _balanceRepository.GetCashAsync(user.Id, cancellationToken).ConfigureAwait(false);
         var characterEntities = await _characterRepository.GetCharactersByUserIdAsync(user.Id, cancellationToken).ConfigureAwait(false);
+        AccountInventory? inventory = _accountInventory is null
+            ? null
+            : await _accountInventory.GetAccountInventoryAsync(user.Id, gameInfo?.BagCount ?? 1, cancellationToken).ConfigureAwait(false);
 
         var summaries = new List<CharacterSummary>(characterEntities.Count);
         for (int i = 0; i < characterEntities.Count; i++)
@@ -369,7 +372,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 ce.LevelPoint,
                 ce.Hit1, ce.Hit2, ce.Hit3, ce.Hit4, ce.Chit, ce.Hp, ce.Ap,
                 AttackSpeed: 100, Speed: 100, MaxCp: 100,
-                (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount));
+                (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount,
+                inventory?.EquipmentOf(ce.Id)));
         }
 
         byte unlockedSlots = gameInfo?.SlotCount ?? 3;
@@ -393,10 +397,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (session.IsEncrypted)
         {
             // Send Part 2 packet (Opcode 0x000D) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
-            AccountBoxBlock? accountBox = _accountInventory is null
-                ? null
-                : await _accountInventory.GetAccountBoxAsync(user.Id, gameInfo?.BagCount ?? 1, cancellationToken).ConfigureAwait(false);
-            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries, AccountBox: accountBox), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries, AccountBox: inventory?.Box), cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation(

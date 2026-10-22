@@ -19,5 +19,18 @@ public interface IInventoryRepository
     /// The destination may be empty. Returns false when the source slot is empty.
     /// </summary>
     Task<bool> SwapBoxSlotsAsync(int userId, byte sourceSlot, byte destinationSlot, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically swaps the contents of two slots of the same user, each identified by its owner
+    /// (character id, or 0 for the account box) and slot index. The destination may be empty.
+    /// Returns false when the source slot is empty.
+    /// </summary>
+    Task<bool> SwapSlotsAsync(
+        int userId,
+        int sourceCharacterId,
+        byte sourceSlot,
+        int destinationCharacterId,
+        byte destinationSlot,
+        CancellationToken ct = default);
 }
 

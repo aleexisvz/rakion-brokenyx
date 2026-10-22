@@ -115,16 +115,27 @@ public sealed class InventoryModuleTests
     }
 
     [TestMethod]
-    public async Task InventoryMove_ToEquipmentOrOutOfRange_IsRejectedWithoutChanges()
+    public async Task InventoryMove_BoxToEquipment_EquipsOnActiveCharacter()
+    {
+        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 1001, Level = 3, SlotIndex = 0 });
+
+        await MoveAsync(CreatePlayingSession(), new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.Equipment, 2));
+
+        var response = (InventoryMoveResponsePacket)_sender.Sent.Single().Packet;
+        Assert.AreEqual(InventoryMoveResponsePacket.ResultSuccess, response.Result);
+        Assert.AreEqual(new InventorySlotState(InventoryLocation.Equipment, 2, 1001, 3, 0), response.Destination);
+        var item = (await _inventoryRepository.GetUserItemsAsync(5)).Single();
+        Assert.AreEqual((9, (byte)2), (item.CharacterId, item.SlotIndex));
+    }
+
+    [TestMethod]
+    public async Task InventoryMove_OutOfRange_IsRejectedWithoutChanges()
     {
         await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 1001, SlotIndex = 0 });
-        var session = CreatePlayingSession();
 
-        await MoveAsync(session, new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.Equipment, 2));
-        await MoveAsync(session, new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.AccountBox, 200));
+        await MoveAsync(CreatePlayingSession(), new InventoryMoveRequestPacket(InventoryLocation.AccountBox, 0, InventoryLocation.Equipment, 19));
 
-        Assert.HasCount(2, _sender.Sent);
-        Assert.IsTrue(_sender.Sent.All(s => ((InventoryMoveResponsePacket)s.Packet).Result == InventoryMoveResponsePacket.ResultNotAllowed));
+        Assert.AreEqual(InventoryMoveResponsePacket.ResultNotAllowed, ((InventoryMoveResponsePacket)_sender.Sent.Single().Packet).Result);
         Assert.AreEqual((byte)0, (await _inventoryRepository.GetUserItemsAsync(5)).Single().SlotIndex);
     }
 

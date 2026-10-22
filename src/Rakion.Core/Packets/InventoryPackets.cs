@@ -78,12 +78,12 @@ public sealed record InventoryEnterResponsePacket(byte Result, uint ServerTimeMi
 }
 
 /// <summary>
-/// One slot of the account-wide item box (rows with characterid = 0).
+/// One item slot as the client receives it, in the account box or in a character's equipment.
 /// Evidence: Observed client record layout (engine.dll 0x36196B90..0x36196C3F): ItemId u16 at +0x00,
 /// Level u8 at +0x08, then two u32 at +0x14 and +0x20. That those are Exp and LimitTime is Derived
 /// from the order the legacy server copies them (RakionWorldServ.exe 0x412065..0x4120E6).
 /// </summary>
-public readonly record struct AccountBoxSlot(ushort ItemId, byte Level, uint Exp, uint LimitTime)
+public readonly record struct ItemSlot(ushort ItemId, byte Level, uint Exp, uint LimitTime)
 {
     public bool IsEmpty => ItemId == 0;
 }
@@ -108,10 +108,10 @@ public sealed record AccountBoxBlock
     /// <summary>Size of the block when no expired items are listed.</summary>
     public const int EmptyBlockSize = 1 + 1 + SlotCount * (2 + 1 + 4 + 4) + 4;
 
-    private readonly AccountBoxSlot[] _slots;
+    private readonly ItemSlot[] _slots;
     private readonly ushort[] _expiredItemIds;
 
-    public AccountBoxBlock(IReadOnlyList<AccountBoxSlot>? slots = null, IReadOnlyList<ushort>? expiredItemIds = null, byte bagCount = 0)
+    public AccountBoxBlock(IReadOnlyList<ItemSlot>? slots = null, IReadOnlyList<ushort>? expiredItemIds = null, byte bagCount = 0)
     {
         if (slots is not null && slots.Count > SlotCount)
         {
@@ -123,7 +123,7 @@ public sealed record AccountBoxBlock
             throw new ArgumentException("At most 255 expired items fit in the block.", nameof(expiredItemIds));
         }
 
-        _slots = new AccountBoxSlot[SlotCount];
+        _slots = new ItemSlot[SlotCount];
         if (slots is not null)
         {
             for (int i = 0; i < slots.Count; i++)
@@ -138,7 +138,7 @@ public sealed record AccountBoxBlock
 
     public static AccountBoxBlock Empty { get; } = new();
 
-    public IReadOnlyList<AccountBoxSlot> Slots => _slots;
+    public IReadOnlyList<ItemSlot> Slots => _slots;
     public IReadOnlyList<ushort> ExpiredItemIds => _expiredItemIds;
     public byte BagCount { get; }
 
@@ -216,10 +216,10 @@ public sealed record AccountBoxBlock
             exps[i] = reader.ReadUInt32();
         }
 
-        var slots = new AccountBoxSlot[SlotCount];
+        var slots = new ItemSlot[SlotCount];
         for (int i = 0; i < SlotCount; i++)
         {
-            slots[i] = new AccountBoxSlot(itemIds[i], levels[i], exps[i], reader.ReadUInt32());
+            slots[i] = new ItemSlot(itemIds[i], levels[i], exps[i], reader.ReadUInt32());
         }
 
         reader.Skip(4);
@@ -368,5 +368,48 @@ public sealed record InventoryMoveResponsePacket(byte Result, InventorySlotState
         packet = new InventoryMoveResponsePacket(result, source, destination);
         return true;
     }
+}
+
+/// <summary>
+/// The 19 equipment slots inside each character record of WorldLogin (0x000C) and WorldLoginPart2 (0x000D):
+/// 19 x u16 item id, 19 x u8 level, 19 x u32 exp, 19 x u32 limit time.
+/// Evidence: array sizes Observed (engine.dll 0x36196450..0x361964F0). Exp and limit time order is Derived from
+/// the legacy DBCommandCharacterList copy (RakionWorldServ.exe 0x411E78..0x411F26: item id, level, exp, limit
+/// time, then the row id kept server-side), the same order as the account box.
+/// </summary>
+public static class CharacterEquipment
+{
+    public const int SlotCount = 19;
+
+    public static void Serialize(PacketWriter writer, IReadOnlyList<ItemSlot>? slots)
+    {
+        if (slots is not null && slots.Count > SlotCount)
+        {
+            throw new ArgumentException($"A character has {SlotCount} equipment slots.", nameof(slots));
+        }
+
+        for (int i = 0; i < SlotCount; i++)
+        {
+            writer.WriteUInt16(At(slots, i).ItemId);
+        }
+
+        for (int i = 0; i < SlotCount; i++)
+        {
+            writer.WriteByte(At(slots, i).Level);
+        }
+
+        for (int i = 0; i < SlotCount; i++)
+        {
+            writer.WriteUInt32(At(slots, i).Exp);
+        }
+
+        for (int i = 0; i < SlotCount; i++)
+        {
+            writer.WriteUInt32(At(slots, i).LimitTime);
+        }
+    }
+
+    private static ItemSlot At(IReadOnlyList<ItemSlot>? slots, int index) =>
+        slots is not null && index < slots.Count ? slots[index] : default;
 }
 

@@ -74,10 +74,7 @@ public sealed record WorldLoginPart2Packet(
                 writer.WriteUInt16(c.AttackSpeed);        // [CharacterRecord + 0x90] AttackSpeed
                 writer.WriteUInt16(c.Speed);              // [CharacterRecord + 0x9C] Speed
                 writer.WriteUInt16(c.MaxCp);              // [CharacterRecord + 0xA8] MaxCp
-                writer.WriteZeroBytes(0x26);              // 19 * uint16 EquippedItemIds
-                writer.WriteZeroBytes(0x13);              // 19 * byte EquippedItemLevels
-                writer.WriteZeroBytes(0x4c);              // 19 * uint32 EquippedItemSerials
-                writer.WriteZeroBytes(0x4c);              // 19 * uint32 EquippedItemLimitTimes
+                CharacterEquipment.Serialize(writer, c.Equipment); // 19 equipment slots
                 writer.WriteZeroBytes(0x64);              // 100 * byte StageRanks
                 writer.WriteByte(3);                      // [CharacterRecord + 0x41C] PotionSlotCount
             }

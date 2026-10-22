@@ -96,7 +96,7 @@ public sealed class InventoryModule : IWorldOpcodeModule
             return;
         }
 
-        if (view.UserId is not int userId || view.CharacterId is null)
+        if (view.UserId is not int userId || view.CharacterId is not int characterId)
         {
             _logger.LogWarning("[{ConnectionId}] InventoryMove rejected: no authenticated user with an active character.", view.ConnectionId);
             return;
@@ -109,16 +109,19 @@ public sealed class InventoryModule : IWorldOpcodeModule
             _logger.LogWarning("[{ConnectionId}] InventoryMove rejected: slot out of range ({Request}).", view.ConnectionId, request);
             result = InventoryMoveResponsePacket.ResultNotAllowed;
         }
-        else if (request.SourceLocation != InventoryLocation.AccountBox || request.DestinationLocation != InventoryLocation.AccountBox)
-        {
-            // Equipment slots are not sent at login yet, so moving into or out of them would desync the client.
-            _logger.LogInformation("[{ConnectionId}] InventoryMove to or from equipment is not supported yet ({Request}).", view.ConnectionId, request);
-            result = InventoryMoveResponsePacket.ResultNotAllowed;
-        }
         else
         {
+            // UNKNOWN: the legacy server checks whether the item may go into an equipment slot
+            // (RakionWorldServ.exe 0x40BC10, result 4); its rules are not observed yet, so the client's own
+            // drag-and-drop restrictions are relied on for now.
             bool moved = await _inventoryRepository
-                .SwapBoxSlotsAsync(userId, request.SourceSlot, request.DestinationSlot, cancellationToken)
+                .SwapSlotsAsync(
+                    userId,
+                    OwnerOf(request.SourceLocation, characterId),
+                    request.SourceSlot,
+                    OwnerOf(request.DestinationLocation, characterId),
+                    request.DestinationSlot,
+                    cancellationToken)
                 .ConfigureAwait(false);
             result = moved ? InventoryMoveResponsePacket.ResultSuccess : InventoryMoveResponsePacket.ResultSourceEmpty;
         }
@@ -126,8 +129,8 @@ public sealed class InventoryModule : IWorldOpcodeModule
         var items = await _inventoryRepository.GetUserItemsAsync(userId, characterId: null, cancellationToken).ConfigureAwait(false);
         var response = new InventoryMoveResponsePacket(
             result,
-            StateOf(items, request.SourceLocation, request.SourceSlot),
-            StateOf(items, request.DestinationLocation, request.DestinationSlot));
+            StateOf(items, request.SourceLocation, request.SourceSlot, characterId),
+            StateOf(items, request.DestinationLocation, request.DestinationSlot, characterId));
         await _sender.SendAsync(view, response, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -138,20 +141,25 @@ public sealed class InventoryModule : IWorldOpcodeModule
             result);
     }
 
-    private static InventorySlotState StateOf(IReadOnlyList<Database.Entities.UserItemEntity> items, InventoryLocation location, byte slot)
+    // Box rows belong to character 0; equipment rows to the character currently selected.
+    private static int OwnerOf(InventoryLocation location, int characterId) =>
+        location == InventoryLocation.AccountBox ? 0 : characterId;
+
+    private static InventorySlotState StateOf(
+        IReadOnlyList<Database.Entities.UserItemEntity> items,
+        InventoryLocation location,
+        byte slot,
+        int characterId)
     {
-        if (location == InventoryLocation.AccountBox)
+        int owner = OwnerOf(location, characterId);
+        foreach (var item in items)
         {
-            foreach (var item in items)
+            if (item.CharacterId == owner && item.SlotIndex == slot && item.ItemId is > 0 and <= ushort.MaxValue)
             {
-                if (item.CharacterId == 0 && item.SlotIndex == slot && item.ItemId is > 0 and <= ushort.MaxValue)
-                {
-                    return new InventorySlotState(location, slot, (ushort)item.ItemId, item.Level, (uint)Math.Clamp(item.Exp, 0, uint.MaxValue));
-                }
+                return new InventorySlotState(location, slot, (ushort)item.ItemId, item.Level, (uint)Math.Clamp(item.Exp, 0, uint.MaxValue));
             }
         }
 
-        // UNKNOWN: equipment slot contents are not tracked yet; report the slot as empty.
         return new InventorySlotState(location, slot, 0, 0, 0);
     }
 }

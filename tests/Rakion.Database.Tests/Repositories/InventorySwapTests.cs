@@ -58,6 +58,21 @@ public sealed class InventorySwapTests
         Assert.AreEqual((byte)0, await SlotOfAsync(1, equipped.Id));
     }
 
+    [TestMethod]
+    public async Task SwapSlots_BetweenBoxAndEquipment_MovesOwnerAndSlot()
+    {
+        var boxed = await AddAsync(userId: 1, characterId: 0, itemId: 1001, slot: 7);
+        var worn = await AddAsync(userId: 1, characterId: 9, itemId: 2001, slot: 2);
+
+        Assert.IsTrue(await _invRepo.SwapSlotsAsync(1, 0, 7, 9, 2));
+
+        var items = await _invRepo.GetUserItemsAsync(1);
+        var nowWorn = items.Single(i => i.Id == boxed.Id);
+        var nowBoxed = items.Single(i => i.Id == worn.Id);
+        Assert.AreEqual((9, (byte)2), (nowWorn.CharacterId, nowWorn.SlotIndex));
+        Assert.AreEqual((0, (byte)7), (nowBoxed.CharacterId, nowBoxed.SlotIndex));
+    }
+
     private Task<UserItemEntity> AddAsync(int userId, int characterId, int itemId, byte slot) =>
         _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = characterId, ItemId = itemId, SlotIndex = slot });
 

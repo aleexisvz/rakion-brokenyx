@@ -38,10 +38,10 @@ public sealed class AccountInventoryProviderTests
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 1001, SlotIndex = 0, Level = 3, Exp = 40 });
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 1002, SlotIndex = 7, LimitTimeMinutes = (int)later });
 
-        var box = await _provider.GetAccountBoxAsync(5, 1, CancellationToken.None);
+        var box = (await _provider.GetAccountInventoryAsync(5, 1, CancellationToken.None)).Box;
 
-        Assert.AreEqual(new AccountBoxSlot(1001, 3, 40, 0), box.Slots[0]);
-        Assert.AreEqual(new AccountBoxSlot(1002, 1, 0, later), box.Slots[7]);
+        Assert.AreEqual(new ItemSlot(1001, 3, 40, 0), box.Slots[0]);
+        Assert.AreEqual(new ItemSlot(1002, 1, 0, later), box.Slots[7]);
         Assert.AreEqual(2, box.Slots.Count(s => !s.IsEmpty));
         Assert.IsEmpty(box.ExpiredItemIds);
         Assert.AreEqual((byte)1, box.BagCount);
@@ -53,7 +53,7 @@ public sealed class AccountInventoryProviderTests
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 9, ItemId = 2001, SlotIndex = 0 });
         await AddAsync(new UserItemEntity { UserId = 6, CharacterId = 0, ItemId = 2002, SlotIndex = 0 });
 
-        var box = await _provider.GetAccountBoxAsync(5, 1, CancellationToken.None);
+        var box = (await _provider.GetAccountInventoryAsync(5, 1, CancellationToken.None)).Box;
 
         Assert.IsTrue(box.Slots.All(s => s.IsEmpty));
     }
@@ -65,7 +65,7 @@ public sealed class AccountInventoryProviderTests
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 3001, SlotIndex = 2, LimitTimeMinutes = (int)earlier });
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 9, ItemId = 3002, SlotIndex = 1, LimitTimeMinutes = (int)earlier });
 
-        var box = await _provider.GetAccountBoxAsync(5, 1, CancellationToken.None);
+        var box = (await _provider.GetAccountInventoryAsync(5, 1, CancellationToken.None)).Box;
 
         Assert.IsTrue(box.Slots[2].IsEmpty);
         CollectionAssert.AreEquivalent(new ushort[] { 3001, 3002 }, box.ExpiredItemIds.ToArray());
@@ -78,10 +78,29 @@ public sealed class AccountInventoryProviderTests
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 4002, SlotIndex = 3 });
         await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 4003, SlotIndex = 3 });
 
-        var box = await _provider.GetAccountBoxAsync(5, 1, CancellationToken.None);
+        var box = (await _provider.GetAccountInventoryAsync(5, 1, CancellationToken.None)).Box;
 
         Assert.AreEqual((ushort)4002, box.Slots[3].ItemId);
         Assert.AreEqual(1, box.Slots.Count(s => !s.IsEmpty));
+    }
+
+    [TestMethod]
+    public async Task Equipment_PlacesCharacterItemsBySlotPerCharacter()
+    {
+        await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 9, ItemId = 5001, SlotIndex = 0, Level = 2 });
+        await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 9, ItemId = 5002, SlotIndex = 18 });
+        await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 10, ItemId = 5003, SlotIndex = 4 });
+        await AddAsync(new UserItemEntity { UserId = 5, CharacterId = 9, ItemId = 5004, SlotIndex = 19 });
+
+        var inventory = await _provider.GetAccountInventoryAsync(5, 1, CancellationToken.None);
+
+        var hero = inventory.EquipmentOf(9)!;
+        Assert.AreEqual(new ItemSlot(5001, 2, 0, 0), hero[0]);
+        Assert.AreEqual((ushort)5002, hero[18].ItemId);
+        Assert.AreEqual(2, hero.Count(s => !s.IsEmpty));
+        Assert.AreEqual((ushort)5003, inventory.EquipmentOf(10)![4].ItemId);
+        Assert.IsNull(inventory.EquipmentOf(11));
+        Assert.IsTrue(inventory.Box.Slots.All(s => s.IsEmpty));
     }
 
     private Task AddAsync(UserItemEntity item) => _inventoryRepository.AddUserItemAsync(item);
