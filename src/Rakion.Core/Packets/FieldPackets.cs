@@ -4,55 +4,58 @@ using Rakion.Core.Protocol;
 namespace Rakion.Core.Packets;
 
 /// <summary>
-/// Represents a single room (field) descriptor in the channel game list.
-/// Evidence: Observed in RakionWorldServ.exe 0x405790 and engine.dll 0x36193900.
+/// One room in the channel game list: u16 room number, 11 bytes, u32/u16/u32/u16 about the host, the room name and
+/// a trailing u16.
+/// Evidence: Observed in RakionWorldServ.exe 0x405790 (writer) and engine.dll 0x36193900 (reader: 1 + 2 + 11 + 12
+/// bytes, then the name and a u16). Each byte is named after the legacy room field it copies (see FieldRules in
+/// World); the host block comes from a helper on the host user (0x40ABE0) and is UNKNOWN.
 /// </summary>
 public sealed record FieldListEntry(
     ushort RoomNumber,
     bool HasPassword,
     bool IsInProgress,
+    byte Kind,
     byte Mode,
-    byte Map,
-    byte MaxPlayers,
-    byte RoundTime,
-    byte Rounds,
-    byte SubMode,
-    byte LevelLimit,
+    byte MinLevel,
+    byte MaxLevel,
+    byte RuleExtra,
+    byte Unknown,
+    byte Option,
     byte CurrentPlayers,
-    byte MaxAllowed,
-    uint HostUserId,
-    ushort HostLevel,
+    byte MaxPlayers,
     string RoomName,
+    uint HostValue1 = 0,
+    ushort HostValue2 = 0,
+    uint HostValue3 = 0,
+    ushort HostValue4 = 0,
     ushort Extra = 0)
 {
     public void Serialize(PacketWriter writer)
     {
         writer.WriteUInt16(RoomNumber);
-        writer.WriteByte((byte)(HasPassword ? 1 : 0));
-        writer.WriteByte((byte)(IsInProgress ? 1 : 0));
-        writer.WriteByte(Mode);
-        writer.WriteByte(Map);
-        writer.WriteByte(MaxPlayers);
-        writer.WriteByte(RoundTime);
-        writer.WriteByte(Rounds);
-        writer.WriteByte(SubMode);
-        writer.WriteByte(LevelLimit);
-        writer.WriteByte(CurrentPlayers);
-        writer.WriteByte(MaxAllowed);
-        writer.WriteUInt32(HostUserId);
-        writer.WriteUInt16(HostLevel);
+        writer.WriteByte((byte)(HasPassword ? 1 : 0)); // room + 0x3F (password) not empty
+        writer.WriteByte((byte)(IsInProgress ? 1 : 0)); // room + 0x08 == 2
+        writer.WriteByte(Kind);                          // room + 0x118
+        writer.WriteByte(Mode);                          // room + 0x119
+        writer.WriteByte(MinLevel);                      // room + 0x111
+        writer.WriteByte(MaxLevel);                      // room + 0x112
+        writer.WriteByte(RuleExtra);                     // room + 0x113
+        writer.WriteByte(Unknown);                       // room + 0x2BC, UNKNOWN
+        writer.WriteByte(Option);                        // room + 0x11A
+        writer.WriteByte(CurrentPlayers);                // room + 0x116 + 0x117 (players per team)
+        writer.WriteByte(MaxPlayers);                    // room + 0x114 + 0x115 (open slots per team)
+        writer.WriteUInt32(HostValue1);
+        writer.WriteUInt16(HostValue2);
+        writer.WriteUInt32(HostValue3);
+        writer.WriteUInt16(HostValue4);
         writer.WriteNullTerminatedString(RoomName);
-        writer.WriteUInt16(Extra);
+        writer.WriteUInt16(Extra);                       // room + 0x3A8, UNKNOWN
     }
 
     public static bool TryParse(ref PacketReader reader, out FieldListEntry entry)
     {
         entry = null!;
-        // Fixed portion before room name:
-        // RoomNumber (2) + HasPassword (1) + IsInProgress (1) + Mode (1) + Map (1) +
-        // MaxPlayers (1) + RoundTime (1) + Rounds (1) + SubMode (1) + LevelLimit (1) +
-        // CurrentPlayers (1) + MaxAllowed (1) + HostUserId (4) + HostLevel (2) = 18 bytes
-        if (reader.Remaining < 18)
+        if (reader.Remaining < 25)
         {
             return false;
         }
@@ -60,44 +63,29 @@ public sealed record FieldListEntry(
         ushort roomNumber = reader.ReadUInt16();
         bool hasPassword = reader.ReadByte() != 0;
         bool isInProgress = reader.ReadByte() != 0;
+        byte kind = reader.ReadByte();
         byte mode = reader.ReadByte();
-        byte map = reader.ReadByte();
-        byte maxPlayers = reader.ReadByte();
-        byte roundTime = reader.ReadByte();
-        byte rounds = reader.ReadByte();
-        byte subMode = reader.ReadByte();
-        byte levelLimit = reader.ReadByte();
+        byte minLevel = reader.ReadByte();
+        byte maxLevel = reader.ReadByte();
+        byte ruleExtra = reader.ReadByte();
+        byte unknown = reader.ReadByte();
+        byte option = reader.ReadByte();
         byte currentPlayers = reader.ReadByte();
-        byte maxAllowed = reader.ReadByte();
-        uint hostUserId = reader.ReadUInt32();
-        ushort hostLevel = reader.ReadUInt16();
+        byte maxPlayers = reader.ReadByte();
+        uint host1 = reader.ReadUInt32();
+        ushort host2 = reader.ReadUInt16();
+        uint host3 = reader.ReadUInt32();
+        ushort host4 = reader.ReadUInt16();
         string roomName = reader.ReadNullTerminatedString();
-
         if (reader.Remaining < 2)
         {
             return false;
         }
 
         ushort extra = reader.ReadUInt16();
-
         entry = new FieldListEntry(
-            roomNumber,
-            hasPassword,
-            isInProgress,
-            mode,
-            map,
-            maxPlayers,
-            roundTime,
-            rounds,
-            subMode,
-            levelLimit,
-            currentPlayers,
-            maxAllowed,
-            hostUserId,
-            hostLevel,
-            roomName,
-            extra);
-
+            roomNumber, hasPassword, isInProgress, kind, mode, minLevel, maxLevel, ruleExtra, unknown, option,
+            currentPlayers, maxPlayers, roomName, host1, host2, host3, host4, extra);
         return true;
     }
 }

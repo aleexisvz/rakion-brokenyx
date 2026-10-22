@@ -450,22 +450,25 @@ public sealed class GameField
 
     public FieldListEntry ToFieldListEntry()
     {
+        byte openSlots;
+        lock (_lock)
+        {
+            openSlots = (byte)_isSlotClosed.Count(closed => !closed);
+        }
+
         return new FieldListEntry(
             RoomNumber: Number,
             HasPassword: HasPassword,
             IsInProgress: IsInProgress,
-            Mode: Mode,
-            Map: Map,
-            MaxPlayers: MaxPlayers,
-            RoundTime: RoundTime,
-            Rounds: Rounds,
-            SubMode: SubMode,
-            LevelLimit: LevelLimit,
+            Kind: Rules.Kind,
+            Mode: Rules.Mode,
+            MinLevel: Rules.MinLevel,
+            MaxLevel: Rules.MaxLevel,
+            RuleExtra: Rules.Extra,
+            Unknown: 0,
+            Option: Rules.Option,
             CurrentPlayers: PlayerCount,
-            MaxAllowed: MaxPlayers,
-            HostUserId: HostUserId,
-            HostLevel: HostLevel,
-            RoomName: Name,
-            Extra: 0);
+            MaxPlayers: openSlots,
+            RoomName: Name);
     }
 }

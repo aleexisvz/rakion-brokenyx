@@ -69,19 +69,16 @@ public sealed class FieldPacketTests
                 RoomNumber: 1,
                 HasPassword: true,
                 IsInProgress: false,
+                Kind: 0,
                 Mode: 1,
-                Map: 3,
-                MaxPlayers: 8,
-                RoundTime: 5,
-                Rounds: 3,
-                SubMode: 0,
-                LevelLimit: 15,
+                MinLevel: 1,
+                MaxLevel: 15,
+                RuleExtra: 0,
+                Unknown: 0,
+                Option: 3,
                 CurrentPlayers: 2,
-                MaxAllowed: 8,
-                HostUserId: 1001,
-                HostLevel: 10,
-                RoomName: "Pro Only 1v1",
-                Extra: 0)
+                MaxPlayers: 8,
+                RoomName: "Pro Only 1v1")
         };
 
         var packet = new FieldListResponsePacket(entries);
@@ -92,24 +89,22 @@ public sealed class FieldPacketTests
         bool success = FieldListResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
         Assert.HasCount(1, parsed.Fields);
+        Assert.AreEqual(entries[0], parsed.Fields[0]);
+    }
 
-        var first = parsed.Fields[0];
-        Assert.AreEqual((ushort)1, first.RoomNumber);
-        Assert.IsTrue(first.HasPassword);
-        Assert.IsFalse(first.IsInProgress);
-        Assert.AreEqual((byte)1, first.Mode);
-        Assert.AreEqual((byte)3, first.Map);
-        Assert.AreEqual((byte)8, first.MaxPlayers);
-        Assert.AreEqual((byte)5, first.RoundTime);
-        Assert.AreEqual((byte)3, first.Rounds);
-        Assert.AreEqual((byte)0, first.SubMode);
-        Assert.AreEqual((byte)15, first.LevelLimit);
-        Assert.AreEqual((byte)2, first.CurrentPlayers);
-        Assert.AreEqual((byte)8, first.MaxAllowed);
-        Assert.AreEqual(1001u, first.HostUserId);
-        Assert.AreEqual((ushort)10, first.HostLevel);
-        Assert.AreEqual("Pro Only 1v1", first.RoomName);
-        Assert.AreEqual((ushort)0, first.Extra);
+    [TestMethod]
+    public void FieldListEntry_MatchesClientReaderLayout()
+    {
+        var entry = new FieldListEntry(7, false, false, 0, 1, 1, 15, 0, 0, 3, 2, 8, "abc");
+        using var writer = new PacketWriter();
+        entry.Serialize(writer);
+        byte[] bytes = writer.WrittenSpan.ToArray();
+
+        // engine.dll 0x36193900: u16 + 11 bytes + u32/u16/u32/u16, then the name and a u16.
+        Assert.HasCount(2 + 11 + 12 + 4 + 2, bytes);
+        Assert.AreEqual((byte)1, bytes[5], "mode");
+        Assert.AreEqual((byte)15, bytes[7], "max level");
+        Assert.AreEqual((byte)'a', bytes[25]);
     }
 
 
