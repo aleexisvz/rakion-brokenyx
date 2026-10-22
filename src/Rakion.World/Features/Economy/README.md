@@ -18,7 +18,8 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | :--- | :--- | :--- | :--- |
 | 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo de cada personaje viajan en sus registros de `0x000C`/`0x000D`. | `0x002C`: sí. Box: pendiente de probar |
 | 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**). Venta (`0x002F`) pendiente. | Box: sí. Equipo: pendiente de probar |
-| 4.2, 4.4 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
+| 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones, paquetes (tipo 10) e ítems PowerUser. | pendiente de probar |
+| 4.4 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
 
@@ -40,7 +41,7 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - El parser del cliente (`engine.dll` 0x36196B41..0x36196C71) lee: `u8 N` + N × `u16` (caducados),
     un `u8` con el número de bolsas, 120 × `u16` itemId, 120 × `u8` level, 120 × `u32`, 120 × `u32` y un `u32`
     final (**Unknown**). **Observed.**
-  - El `u8` es el número de bolsas (`user_game_info.bag_count`; 40 slots por bolsa): `rakion.bin`
+  - El `u8` es el número de bolsas (`user_game_info.bag_count`; 30 slots por bolsa, **Observed** en la búsqueda de slot libre de la compra): `rakion.bin`
     0x47E75A lo guarda en `listener+0x80`, el mismo campo que actualiza la respuesta a BuyBag
     (0x475283). Offsets **Observed**, significado **Derived**. Con 0 el cliente no dibuja ningún slot.
   - Que los dos arrays de `u32` sean exp y limittime es **Derived** del orden de copia del servidor
@@ -68,3 +69,15 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 - Al mover, la ubicación 1 (equipo) se refiere al personaje seleccionado. El original comprueba si el ítem puede ir a
   ese slot (0x40BC10, resultado 4); esas reglas aún no se han observado, así que por ahora manda la validación del
   propio cliente.
+- Tienda (`0x002E`):
+  - Catálogo: `Rakion.App --import-items <dump.sql>` carga las filas `iteminfo` de tu copia local del dump original
+    en `item_templates` (el dump nunca entra en el repo).
+  - Petición `[u16 itemId][u8 pagar con oro][u8 cupón]` y `[u16 slot del cupón]` solo si hay cupón. **Observed**
+    (`SendInventoryBuy`); significados **Derived** del original (`RakionWorldServ.exe` 0x4212BE, 0x40CB10).
+  - Respuesta: `u8` resultado, `u32` oro, `u32` cash, `u8` N y, si hay éxito, N slots, N itemId, N niveles; después
+    `u8` M + M × `u32` (**Unknown**, se envía vacío). **Observed** en `engine.dll` 0x36195640; `rakion.bin`
+    0x4774E0 guarda oro y cash como saldos nuevos.
+  - Reglas del original (0x40A6C0): tienda 1 = solo oro, 2 = solo cash, 3 = ambos; el saldo debe cubrir el precio.
+    Resultados: 0 comprado, 3 no comprable o saldo insuficiente, 4 Box lleno, 0x14–0x16 cupones.
+  - Slot destino: el más alto libre en `0 .. bolsas × 30 − 1` (0x40CCBE). Nivel inicial 1 (default de
+    `useriteminfo.level`).
