@@ -413,3 +413,150 @@ public static class CharacterEquipment
         slots is not null && index < slots.Count ? slots[index] : default;
 }
 
+/// <summary>
+/// Client shop purchase: [u16 ItemId][u8 PayWithGold][u8 UsesCoupon] and, when UsesCoupon is non-zero,
+/// [u16 CouponSlot].
+/// Evidence: Observed in engine.dll ?SendInventoryBuy@IScavengerWorldNet@@UAEXGEEG@Z (0x002E, sends the
+/// last u16 only when the third argument is non-zero). Meanings Derived from the legacy server
+/// (RakionWorldServ.exe 0x4212BE, 0x40CB10): a non-zero PayWithGold checks the gold price and balance,
+/// zero the cash ones; UsesCoupon = 1 reads a coupon item (ids 11000..11999) from box slot CouponSlot.
+/// </summary>
+public sealed record InventoryBuyRequestPacket(ushort ItemId, bool PayWithGold, byte UsesCoupon = 0, ushort CouponSlot = 0) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.InventoryBuy;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteUInt16(ItemId);
+        writer.WriteByte(PayWithGold ? (byte)1 : (byte)0);
+        writer.WriteByte(UsesCoupon);
+        if (UsesCoupon != 0)
+        {
+            writer.WriteUInt16(CouponSlot);
+        }
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryBuyRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 4)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        ushort itemId = reader.ReadUInt16();
+        bool payWithGold = reader.ReadByte() != 0;
+        byte usesCoupon = reader.ReadByte();
+        ushort couponSlot = 0;
+        if (usesCoupon != 0)
+        {
+            if (reader.Remaining < 2)
+            {
+                return false;
+            }
+
+            couponSlot = reader.ReadUInt16();
+        }
+
+        packet = new InventoryBuyRequestPacket(itemId, payWithGold, usesCoupon, couponSlot);
+        return true;
+    }
+}
+
+/// <summary>One item a purchase put into the account box.</summary>
+public readonly record struct BoughtItem(byte BoxSlot, ushort ItemId, byte Level);
+
+/// <summary>
+/// Server result for <see cref="InventoryBuyRequestPacket"/>:
+///   u8 Result, u32 Gold, u32 Cash, u8 N,
+///   (Result == 0 only) N x u8 box slot, N x u16 item id, N x u8 level,
+///   u8 M, M x u32 (UNKNOWN: purpose not yet verified; sent empty).
+/// Evidence: layout Observed in engine.dll 0x36195640. rakion.bin 0x4774E0 stores Gold at account+0x64 and
+/// Cash at account+0x68 (the balances after the purchase, Derived) and places each item into the box record
+/// of its slot. Result codes Observed in RakionWorldServ.exe 0x40CB10 (meanings Derived): 0 bought, 3 cannot
+/// be bought or not enough money, 4 box full, 0x14/0x15/0x16 coupon errors.
+/// </summary>
+public sealed record InventoryBuyResponsePacket(byte Result, uint Gold, uint Cash, IReadOnlyList<BoughtItem>? Items = null) : IPacket
+{
+    public const byte ResultSuccess = 0;
+    public const byte ResultNotBuyable = 3;
+    public const byte ResultBoxFull = 4;
+    public const byte ResultCouponInvalid = 0x14;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventoryBuy;
+
+    public void Serialize(PacketWriter writer)
+    {
+        var items = Result == ResultSuccess ? Items ?? [] : [];
+        if (items.Count > byte.MaxValue)
+        {
+            throw new InvalidOperationException("At most 255 items fit in one purchase result.");
+        }
+
+        writer.WriteByte(Result);
+        writer.WriteUInt32(Gold);
+        writer.WriteUInt32(Cash);
+        writer.WriteByte((byte)items.Count);
+        foreach (var item in items)
+        {
+            writer.WriteByte(item.BoxSlot);
+        }
+
+        foreach (var item in items)
+        {
+            writer.WriteUInt16(item.ItemId);
+        }
+
+        foreach (var item in items)
+        {
+            writer.WriteByte(item.Level);
+        }
+
+        writer.WriteByte(0); // UNKNOWN: count of the trailing u32 list.
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryBuyResponsePacket packet)
+    {
+        packet = null!;
+        var reader = new PacketReader(span);
+        if (reader.Remaining < 11)
+        {
+            return false;
+        }
+
+        byte result = reader.ReadByte();
+        uint gold = reader.ReadUInt32();
+        uint cash = reader.ReadUInt32();
+        int count = reader.ReadByte();
+        var items = new List<BoughtItem>();
+        if (result == ResultSuccess && count > 0)
+        {
+            if (reader.Remaining < count * 4 + 1)
+            {
+                return false;
+            }
+
+            byte[] slots = reader.ReadBytes(count).ToArray();
+            var ids = new ushort[count];
+            for (int i = 0; i < count; i++)
+            {
+                ids[i] = reader.ReadUInt16();
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                items.Add(new BoughtItem(slots[i], ids[i], reader.ReadByte()));
+            }
+        }
+
+        if (reader.Remaining < 1)
+        {
+            return false;
+        }
+
+        packet = new InventoryBuyResponsePacket(result, gold, cash, items);
+        return true;
+    }
+}
+
