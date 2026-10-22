@@ -152,6 +152,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IWorldOpcodeModule, InventoryModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, ShopModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, StatPointModule>();
+builder.Services.AddSingleton<IWorldOpcodeModule, PowerUserModule>();
 builder.Services.AddSingleton<IAccountInventoryProvider, AccountInventoryProvider>();
 builder.Services.AddSingleton<WorldPacketHandler>();
 builder.Services.AddSingleton<WorldUdpPacketHandler>();

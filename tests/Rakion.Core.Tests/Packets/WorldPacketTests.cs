@@ -315,9 +315,9 @@ public sealed class WorldPacketTests
         ushort country = reader.ReadUInt16();
         Assert.AreEqual((ushort)0, country);
         uint headerGold = reader.ReadUInt32();
-        Assert.AreEqual(100u, headerGold, "Gold must be at [7..10] (engine.dll 0x36195F1F)");
-        uint headerCash = reader.ReadUInt32();
-        Assert.AreEqual(50u, headerCash, "Cash must be at [11..14] (engine.dll 0x36195F30)");
+        Assert.AreEqual(100u, headerGold, "Gold is still sent at [7..10] (engine.dll 0x36195F1F)");
+        uint headerServerTime = reader.ReadUInt32();
+        Assert.AreEqual(0u, headerServerTime, "Server time must be at [11..14] (callback arg 5 -> rakion.bin clock setter)");
         uint headerRankGrade = reader.ReadUInt32();
         Assert.AreEqual(0u, headerRankGrade, "RankGrade must be at [15..18] (engine.dll 0x36195F43)");
         reader.ReadNullTerminatedString(); // Username

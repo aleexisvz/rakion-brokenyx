@@ -19,8 +19,9 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo de cada personaje viajan en sus registros de `0x000C`/`0x000D`. | `0x002C`: sí. Box: pendiente de probar |
 | 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**).  | Box: sí. Equipo: pendiente de probar |
 | 4.3 Vender ítems | `InventorySell` `0x002F` (**Observed**) | Venta desde el Box por oro con la fórmula del original; borrado del ítem y abono en una transacción. Rechazadas por ahora: criaturas (8000–8999). | pendiente de probar |
-| 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones, paquetes (tipo 10) e ítems PowerUser. | pendiente de probar |
+| 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones y paquetes (tipo 10). Ítems PowerUser: solo con PowerUser activo, como el original. | pendiente de probar |
 | 4.4 Reparto de puntos | `InventoryAllocationPoint` `0x0033` (**Observed**) | Gasta un punto de nivel (o de PowerUser si no quedan) en una de las 10 estadísticas, en una transacción; tope 50 por estadística (**Inferred**). Reseteo (`0x001B`) pendiente. | pendiente de probar |
+| 4.2 PU Card | `InventoryBuyPowerUser` `0x0034` (**Observed**) | Compra nueva (8000 cash, caduca ahora + 30 días) o renovación (6000 cash, +30 días), +5 puntos PowerUser, tope de 180 días por delante; una transacción. Cupones rechazados. | pendiente de probar |
 | 4.5 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
@@ -100,3 +101,13 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
     interfaz).
   - Puntos por nivel: 3 por cada nivel subido (dato aportado por el mantenedor; se aplicará al implementar la subida
     de nivel en la fase 6).
+- PU Card (`0x0034`):
+  - Petición `[u8 renovar][u8 cupón]` + `[u16 slot del cupón]` si hay cupón; respuesta `[u8 resultado][u32 oro][u32 cash]
+    [u32 caducidad PowerUser][u16 puntos PowerUser][u8 M]` + M × `u32` (**Unknown**, vacío). **Observed** (`engine.dll`
+    0x361958C0, `rakion.bin` 0x474F50).
+  - Reglas del original (0x40B2C0 y SQL de `DBCommandInventoryBuyPowerUser`, **Observed**): renovar = 6000 cash y
+    caducidad + 30 días; nueva = 8000 cash y ahora + 30 días; +5 puntos PowerUser; si la caducidad ya está a más de
+    180 días, resultado 4; sin cash, resultado 3. La caducidad usa la unidad de `LegacyGameClock`.
+  - Diferencia propia: renovar una tarjeta ya caducada empieza desde ahora.
+  - Pendiente: el estado PowerUser no se envía todavía en el login, así que tras volver a entrar el cliente puede no
+    mostrarlo hasta localizar ese campo del paquete de login (fase 3, carril B).

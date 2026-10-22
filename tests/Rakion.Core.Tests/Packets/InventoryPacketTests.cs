@@ -258,6 +258,24 @@ public sealed class InventoryPacketTests
         Assert.AreEqual(response, parsedResponse);
     }
 
+    [TestMethod]
+    public void InventoryBuyPowerUser_RequestAndResponse_RoundTrip()
+    {
+        var request = new InventoryBuyPowerUserRequestPacket(Extend: true);
+        var response = new InventoryBuyPowerUserResponsePacket(0, 100000, 44000, 1_066_000_000, 5);
+
+        byte[] requestBytes = Build(request);
+        byte[] responseBytes = Build(response);
+
+        CollectionAssert.AreEqual(new byte[] { 0x06, 0x00, 0x34, 0x00, 0x01, 0x00 }, requestBytes);
+        Assert.HasCount(PacketHeader.HeaderSize + 16, responseBytes);
+        Assert.IsTrue(InventoryBuyPowerUserRequestPacket.TryParse(requestBytes.AsSpan(PacketHeader.HeaderSize), out var parsedRequest));
+        Assert.IsTrue(InventoryBuyPowerUserResponsePacket.TryParse(responseBytes.AsSpan(PacketHeader.HeaderSize), out var parsedResponse));
+        Assert.AreEqual(request, parsedRequest);
+        Assert.AreEqual(response, parsedResponse);
+        Assert.IsFalse(InventoryBuyPowerUserRequestPacket.TryParse([2, 0], out _));
+    }
+
     private static byte[] Build(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

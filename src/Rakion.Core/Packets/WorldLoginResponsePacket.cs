@@ -42,6 +42,9 @@ public sealed record WorldLoginResponsePacket(
     IReadOnlyList<CharacterSummary>? Characters = null,
     string Username = "",
     bool TutorialCompleted = false,
+    uint ServerTimeMinutes = 0,
+    uint PowerUserExpiry = 0,
+    ushort PowerUserPoints = 0,
     ushort ResponseOpcode = (ushort)ServerOpcode.WorldLogin) : IPacket
 {
     public ushort Opcode => ResponseOpcode;
@@ -58,14 +61,15 @@ public sealed record WorldLoginResponsePacket(
         // Retail v258 client layout:
         // [1..4]   UserId (uint)
         // [5..6]   Country (ushort = 0)
-        // [7..10]  Gold (uint)
-        // [11..14] Cash (uint)
+        // [7..10]  uint (sent as Gold; UNKNOWN: engine.dll passes it on, rakion.bin stores it at listener+0x18)
+        // [11..14] ServerTimeMinutes (uint, LegacyGameClock): rakion.bin 0x47E1C9 hands it to the clock setter
+        //          0x4733D0 used for PowerUser time left (offsets Observed; meaning Derived)
         // [15..18] RankGrade (uint = 0)
         // [19..]   Username (null-terminated string)
         writer.WriteUInt32(UserId);
         writer.WriteUInt16(0); // Country (engine.dll 0x36195F6C)
         writer.WriteUInt32(Gold); // [7..10] Gold (engine.dll 0x36195F1F -> [esp + 0x30])
-        writer.WriteUInt32(Cash); // [11..14] Cash (engine.dll 0x36195F30 -> [esp + 0x4C])
+        writer.WriteUInt32(ServerTimeMinutes); // [11..14] Server time (engine.dll 0x36195F30, callback arg 5)
         writer.WriteUInt32(0); // [15..18] RankGrade (engine.dll 0x36195F43)
         writer.WriteNullTerminatedString(Username ?? string.Empty);
 
@@ -77,8 +81,10 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteUInt32(0);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteNullTerminatedString(string.Empty);
-        writer.WriteUInt32(0);
-        writer.WriteUInt16(0);
+        // PowerUser expiry (LegacyGameClock minutes) and points: callback args 15/16, which rakion.bin 0x47E2BD stores at
+        // listener+0x60/+0x64, the same fields the PowerUser purchase reply updates (Observed offsets; meaning Derived).
+        writer.WriteUInt32(PowerUserExpiry);
+        writer.WriteUInt16(PowerUserPoints);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteByte(0);
@@ -166,8 +172,8 @@ public sealed record WorldLoginResponsePacket(
                 var r = new PacketReader(payload.Slice(1));
                 uint userId = r.ReadUInt32();
                 ushort country = r.ReadUInt16();
-                uint gold = r.ReadUInt32();
-                uint cash = r.ReadUInt32();
+                r.ReadUInt32();
+                uint serverTime = r.ReadUInt32();
                 uint rankGrade = r.ReadUInt32();
                 string username = r.ReadNullTerminatedString();
 
@@ -178,8 +184,8 @@ public sealed record WorldLoginResponsePacket(
                 r.ReadUInt32();
                 r.ReadNullTerminatedString();
                 r.ReadNullTerminatedString();
-                r.ReadUInt32();
-                r.ReadUInt16();
+                uint powerUserExpiry = r.ReadUInt32();
+                ushort powerUserPoints = r.ReadUInt16();
                 r.ReadNullTerminatedString();
                 r.ReadNullTerminatedString();
                 r.ReadByte();
@@ -190,8 +196,8 @@ public sealed record WorldLoginResponsePacket(
                     r.ReadNullTerminatedString();
                 }
                 r.ReadUInt16();
-                r.ReadUInt32(); // postBuddyGold
-                r.ReadUInt32(); // postBuddyCash
+                uint gold = r.ReadUInt32();
+                uint cash = r.ReadUInt32();
                 byte slots = r.ReadByte();
                 byte extraFlag = r.ReadByte();
                 int totalSlots = Math.Min((int)slots, 4);
@@ -235,7 +241,18 @@ public sealed record WorldLoginResponsePacket(
                         win, lose, draw));
                 }
 
-                packet = new WorldLoginResponsePacket(result, userId, gold, cash, slots, chars, username);
+                packet = new WorldLoginResponsePacket(
+                    result,
+                    userId,
+                    gold,
+                    cash,
+                    slots,
+                    chars,
+                    username,
+                    TutorialCompleted: extraFlag != 0,
+                    ServerTimeMinutes: serverTime,
+                    PowerUserExpiry: powerUserExpiry,
+                    PowerUserPoints: powerUserPoints);
                 return true;
             }
         }

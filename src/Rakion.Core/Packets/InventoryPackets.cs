@@ -698,3 +698,101 @@ public sealed record InventoryAllocationPointResponsePacket(
     }
 }
 
+/// <summary>
+/// Client request to buy 30 days of PowerUser: [u8 Extend][u8 UsesCoupon] and, when UsesCoupon is non-zero,
+/// [u16 CouponSlot].
+/// Evidence: Observed in engine.dll ?SendInventoryBuyPowerUser@IScavengerWorldNet@@UAEXEEG@Z (0x0034). The legacy
+/// server accepts only 0 or 1 in the first byte (RakionWorldServ.exe 0x422B4B) and, when it is non-zero, prices the
+/// card at 6000 cash and adds 30 days to the current expiry; otherwise 8000 cash and expiry = now + 30 days
+/// (0x40B2C0, DBCommandInventoryBuyPowerUser SQL). Meaning of the byte as "extend" Derived.
+/// </summary>
+public sealed record InventoryBuyPowerUserRequestPacket(bool Extend, byte UsesCoupon = 0, ushort CouponSlot = 0) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.InventoryBuyPowerUser;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Extend ? (byte)1 : (byte)0);
+        writer.WriteByte(UsesCoupon);
+        if (UsesCoupon != 0)
+        {
+            writer.WriteUInt16(CouponSlot);
+        }
+    }
+
+    /// <summary>Rejects a first byte other than 0 or 1, as the legacy server does.</summary>
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryBuyPowerUserRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 2 || span[0] > 1)
+        {
+            return false;
+        }
+
+        ushort couponSlot = 0;
+        if (span[1] != 0)
+        {
+            if (span.Length < 4)
+            {
+                return false;
+            }
+
+            couponSlot = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(span[2..]);
+        }
+
+        packet = new InventoryBuyPowerUserRequestPacket(span[0] == 1, span[1], couponSlot);
+        return true;
+    }
+}
+
+/// <summary>
+/// Server result for <see cref="InventoryBuyPowerUserRequestPacket"/>:
+///   u8 Result, u32 Gold, u32 Cash, u32 PowerUserExpiry, u16 PowerUserPoints, u8 M, M x u32 (UNKNOWN; sent empty).
+/// Evidence: layout Observed in engine.dll 0x361958C0. rakion.bin 0x474F50 stores Gold/Cash as balances, the expiry
+/// (LegacyGameClock minutes, converted to days/hours/minutes left) and the points at account+0x58 (Derived).
+/// Result codes Observed in RakionWorldServ.exe 0x40B2C0 / DBCommandInventoryBuyPowerUser (meanings Derived):
+/// 0 bought, 3 not enough cash, 4 expiry already more than 180 days ahead, 0x14..0x16 coupon errors.
+/// </summary>
+public sealed record InventoryBuyPowerUserResponsePacket(
+    byte Result,
+    uint Gold,
+    uint Cash,
+    uint PowerUserExpiry,
+    ushort PowerUserPoints) : IPacket
+{
+    public const byte ResultSuccess = 0;
+    public const byte ResultNotEnoughCash = 3;
+    public const byte ResultLimitReached = 4;
+    public const byte ResultCouponInvalid = 0x14;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventoryBuyPowerUser;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        writer.WriteUInt32(Gold);
+        writer.WriteUInt32(Cash);
+        writer.WriteUInt32(PowerUserExpiry);
+        writer.WriteUInt16(PowerUserPoints);
+        writer.WriteByte(0); // UNKNOWN: count of the trailing u32 list.
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryBuyPowerUserResponsePacket packet)
+    {
+        packet = null!;
+        if (span.Length < 16)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new InventoryBuyPowerUserResponsePacket(
+            reader.ReadByte(),
+            reader.ReadUInt32(),
+            reader.ReadUInt32(),
+            reader.ReadUInt32(),
+            reader.ReadUInt16());
+        return true;
+    }
+}
+
