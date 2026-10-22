@@ -162,6 +162,18 @@ public enum ServerOpcode : ushort
     FieldList = 0x0036,
 
     /// <summary>
+    /// Room details for a player who just entered: rule header, names and the 20 slots.
+    /// Evidence: Observed in engine.dll jump table opcode 0x37 (0x361975e7 -> 0x36196ce0) and RakionWorldServ 0x4073B7.
+    /// </summary>
+    FieldInfo = 0x0037,
+
+    /// <summary>
+    /// Quick enter failed (no room). No payload.
+    /// Evidence: Observed in engine.dll jump table opcode 0x39 (0x36197603 -> 0x36193a60) and RakionWorldServ 0x423436.
+    /// </summary>
+    FieldQuickEnter = 0x0039,
+
+    /// <summary>
     /// Response to field / room creation request: [u8 ResultCode, u16 RoomNumber].
     /// Evidence: Observed in engine.dll jump table opcode 0x3B (0x3619761f -> 0x36193a90) and RakionWorldServ 0x423a82.
     /// </summary>
