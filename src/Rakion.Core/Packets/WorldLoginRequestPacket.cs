@@ -14,7 +14,7 @@ public sealed record WorldLoginRequestPacket(
     string ClientPath = "",
     ushort Country = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.WorldLogin;
+    public ushort Opcode => (ushort)ClientOpcode.WorldLogin;
 
     public void Serialize(PacketWriter writer)
     {

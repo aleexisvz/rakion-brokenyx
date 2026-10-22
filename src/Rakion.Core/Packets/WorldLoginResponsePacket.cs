@@ -40,7 +40,7 @@ public sealed record WorldLoginResponsePacket(
     byte UnlockedSlots = 3,
     IReadOnlyList<CharacterSummary>? Characters = null,
     string Username = "",
-    ushort ResponseOpcode = (ushort)RakionOpcode.WorldLogin) : IPacket
+    ushort ResponseOpcode = (ushort)ServerOpcode.WorldLogin) : IPacket
 {
     public ushort Opcode => ResponseOpcode;
 

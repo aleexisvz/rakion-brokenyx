@@ -79,7 +79,7 @@ public sealed class ServerListIntegrationTests
         await ReadExactAsync(stream, headerBuffer);
         Assert.IsTrue(PacketHeader.TryParse(headerBuffer, out var responseHeader));
 
-        Assert.AreEqual((ushort)RakionOpcode.ServerListResponse, responseHeader.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ServerListResponse, responseHeader.Opcode);
         Assert.IsGreaterThan((int)PacketHeader.HeaderSize, responseHeader.TotalLength);
 
         // Read response payload

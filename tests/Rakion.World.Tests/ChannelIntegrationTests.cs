@@ -137,36 +137,36 @@ public sealed class ChannelIntegrationTests
 
         // Read WorldLoginResponse
         var (opcode1, payload1) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.WorldLogin, opcode1);
+        Assert.AreEqual((ushort)ServerOpcode.WorldLogin, opcode1);
 
         // Read WorldLoginPart2
         var (opcode2, payload2) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, opcode2);
+        Assert.AreEqual((ushort)ServerOpcode.WorldLoginPart2, opcode2);
 
         // 2. Select Character
         var selectReq = new CharacterSelectRequestPacket((uint)charId);
         await SendClientPacketAsync(stream, 2, selectReq.Opcode, selectReq);
 
         var (selOp, selPayload) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.CharacterSelect, selOp);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterSelect, selOp);
         Assert.IsTrue(CharacterSelectResponsePacket.TryParse(selPayload, out var selResp));
         Assert.AreEqual((byte)0, selResp.ResultCode);
 
         // Character selection automatically initiates lobby entrance (Opcode 0x001F and 0x001E)
         var (autoEnterOp, autoEnterPayload) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, autoEnterOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, autoEnterOp);
         Assert.IsTrue(ChannelEnterResponsePacket.TryParse(autoEnterPayload, out var autoEnterResp));
         Assert.AreEqual((byte)0, autoEnterResp.ResultCode);
 
         var (autoCharsOp, _) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, autoCharsOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, autoCharsOp);
 
         // 3. Request Channel List (0x001D)
         var listReq = new ChannelListRequestPacket();
         await SendClientPacketAsync(stream, 3, listReq.Opcode, listReq);
 
         var (listOp, listPayload) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelList, listOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelList, listOp);
         Assert.IsTrue(ChannelListResponsePacket.TryParse(listPayload, out var listResp));
         Assert.HasCount(3, listResp.Channels);
         Assert.AreEqual("Beginner 01", listResp.Channels[0].Name);
@@ -178,7 +178,7 @@ public sealed class ChannelIntegrationTests
         await SendClientPacketAsync(stream, 4, enterReq.Opcode, enterReq);
 
         var (enterOp, enterPayload) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, enterOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, enterOp);
         Assert.IsTrue(ChannelEnterResponsePacket.TryParse(enterPayload, out var enterResp));
         Assert.AreEqual((byte)0, enterResp.ResultCode);
         Assert.AreEqual((byte)0, enterResp.ChannelIndex);
@@ -186,14 +186,14 @@ public sealed class ChannelIntegrationTests
 
         // Server delivers initial ChannelCharacters (0x001E) upon channel entrance
         var (autoEnterCharsOp, _) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, autoEnterCharsOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, autoEnterCharsOp);
 
         // 5. Request Channel Characters (0x001E) explicitly
         var charReq = new ChannelCharactersRequestPacket();
         await SendClientPacketAsync(stream, 5, charReq.Opcode, charReq);
 
         var (charsOp, charsPayload) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, charsOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, charsOp);
         Assert.IsTrue(ChannelCharactersResponsePacket.TryParse(charsPayload, out var charsResp));
         Assert.HasCount(1, charsResp.Characters);
         Assert.AreEqual("ChannelHero", charsResp.Characters[0].Name);
@@ -203,7 +203,7 @@ public sealed class ChannelIntegrationTests
         await SendClientPacketAsync(stream, 6, exitReq.Opcode, exitReq);
 
         var (exitOp, exitPayload) = await ReadServerPacketAsync(stream);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelExit, exitOp);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelExit, exitOp);
         Assert.IsTrue(ChannelExitResponsePacket.TryParse(exitPayload, out var exitResp));
         Assert.AreEqual((byte)0, exitResp.ResultCode);
     }
@@ -234,19 +234,19 @@ public sealed class ChannelIntegrationTests
         using var stream2 = client2.GetStream();
 
         // Login & select Alice
-        await SendClientPacketAsync(stream1, 1, (ushort)RakionOpcode.WorldLogin, new WorldLoginRequestPacket(SessionTicket: 0, Username: "user1"));
+        await SendClientPacketAsync(stream1, 1, (ushort)ClientOpcode.WorldLogin, new WorldLoginRequestPacket(SessionTicket: 0, Username: "user1"));
         await ReadServerPacketAsync(stream1); // login resp
         await ReadServerPacketAsync(stream1); // login2
-        await SendClientPacketAsync(stream1, 2, (ushort)RakionOpcode.CharacterSelect, new CharacterSelectRequestPacket((uint)char1));
+        await SendClientPacketAsync(stream1, 2, (ushort)ClientOpcode.CharacterSelect, new CharacterSelectRequestPacket((uint)char1));
         await ReadServerPacketAsync(stream1); // char select resp (0x0014)
         await ReadServerPacketAsync(stream1); // auto channel enter resp (0x001F)
         await ReadServerPacketAsync(stream1); // auto channel chars resp (0x001E)
 
         // Login & select Bob
-        await SendClientPacketAsync(stream2, 1, (ushort)RakionOpcode.WorldLogin, new WorldLoginRequestPacket(SessionTicket: 0, Username: "user2"));
+        await SendClientPacketAsync(stream2, 1, (ushort)ClientOpcode.WorldLogin, new WorldLoginRequestPacket(SessionTicket: 0, Username: "user2"));
         await ReadServerPacketAsync(stream2); // login resp
         await ReadServerPacketAsync(stream2); // login2
-        await SendClientPacketAsync(stream2, 2, (ushort)RakionOpcode.CharacterSelect, new CharacterSelectRequestPacket((uint)char2));
+        await SendClientPacketAsync(stream2, 2, (ushort)ClientOpcode.CharacterSelect, new CharacterSelectRequestPacket((uint)char2));
         await ReadServerPacketAsync(stream2); // char select resp (0x0014)
         await ReadServerPacketAsync(stream2); // auto channel enter resp (0x001F)
         await ReadServerPacketAsync(stream2); // auto channel chars resp (0x001E)
@@ -255,11 +255,11 @@ public sealed class ChannelIntegrationTests
         await ReadServerPacketAsync(stream1);
 
         // Both enter Free Channel (1)
-        await SendClientPacketAsync(stream1, 3, (ushort)RakionOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
+        await SendClientPacketAsync(stream1, 3, (ushort)ClientOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
         await ReadServerPacketAsync(stream1); // enter resp (0x001F)
         await ReadServerPacketAsync(stream1); // channel chars (0x001E)
 
-        await SendClientPacketAsync(stream2, 3, (ushort)RakionOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
+        await SendClientPacketAsync(stream2, 3, (ushort)ClientOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
         await ReadServerPacketAsync(stream2); // enter resp (0x001F)
         await ReadServerPacketAsync(stream2); // channel chars (0x001E)
 
@@ -267,25 +267,25 @@ public sealed class ChannelIntegrationTests
         await ReadServerPacketAsync(stream1);
 
         // 1. Channel Chat: Alice sends chat message
-        await SendClientPacketAsync(stream1, 4, (ushort)RakionOpcode.ChannelChat, new ChannelChatRequestPacket("Hello Bob!"));
+        await SendClientPacketAsync(stream1, 4, (ushort)ClientOpcode.ChannelChat, new ChannelChatRequestPacket("Hello Bob!"));
 
         // Both Alice and Bob should receive broadcast
         var (chatOp1, chatPayload1) = await ReadServerPacketAsync(stream1);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelChat, chatOp1);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelChat, chatOp1);
         Assert.IsTrue(ChannelChatBroadcastPacket.TryParse(chatPayload1, out var chatB1));
         Assert.AreEqual("Alice : Hello Bob!", chatB1.FormattedMessage);
 
         var (chatOp2, chatPayload2) = await ReadServerPacketAsync(stream2);
-        Assert.AreEqual((ushort)RakionOpcode.ChannelChat, chatOp2);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelChat, chatOp2);
         Assert.IsTrue(ChannelChatBroadcastPacket.TryParse(chatPayload2, out var chatB2));
         Assert.AreEqual("Alice : Hello Bob!", chatB2.FormattedMessage);
 
         // 2. Whisper: Bob whispers to Alice
-        await SendClientPacketAsync(stream2, 4, (ushort)RakionOpcode.CharacterWhisper, new CharacterWhisperRequestPacket("Alice", "Can you hear me?"));
+        await SendClientPacketAsync(stream2, 4, (ushort)ClientOpcode.CharacterWhisper, new CharacterWhisperRequestPacket("Alice", "Can you hear me?"));
 
         // Alice receives incoming whisper
         var (wOpAlice, wPayloadAlice) = await ReadServerPacketAsync(stream1);
-        Assert.AreEqual((ushort)RakionOpcode.CharacterWhisper, wOpAlice);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterWhisper, wOpAlice);
         Assert.IsTrue(CharacterWhisperResponsePacket.TryParse(wPayloadAlice, out var wRespAlice));
         Assert.AreEqual((byte)0, wRespAlice.ResultCode);
         Assert.AreEqual("Bob", wRespAlice.CharacterName);
@@ -293,14 +293,14 @@ public sealed class ChannelIntegrationTests
 
         // Bob receives confirmation echo
         var (wOpBob, wPayloadBob) = await ReadServerPacketAsync(stream2);
-        Assert.AreEqual((ushort)RakionOpcode.CharacterWhisper, wOpBob);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterWhisper, wOpBob);
         Assert.IsTrue(CharacterWhisperResponsePacket.TryParse(wPayloadBob, out var wRespBob));
         Assert.AreEqual((byte)0, wRespBob.ResultCode);
 
         // 3. Whisper to offline player: Bob whispers to "Ghost"
-        await SendClientPacketAsync(stream2, 5, (ushort)RakionOpcode.CharacterWhisper, new CharacterWhisperRequestPacket("Ghost", "Where are you?"));
+        await SendClientPacketAsync(stream2, 5, (ushort)ClientOpcode.CharacterWhisper, new CharacterWhisperRequestPacket("Ghost", "Where are you?"));
         var (wOpFail, wPayloadFail) = await ReadServerPacketAsync(stream2);
-        Assert.AreEqual((ushort)RakionOpcode.CharacterWhisper, wOpFail);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterWhisper, wOpFail);
         Assert.IsTrue(CharacterWhisperResponsePacket.TryParse(wPayloadFail, out var wRespFail));
         Assert.AreEqual((byte)1, wRespFail.ResultCode);
     }
@@ -340,10 +340,10 @@ public sealed class ChannelIntegrationTests
         await ReadServerPacketAsync(stream); // ChannelCharactersResponse (0x001E)
 
         // 3. Client requests FieldList (Opcode 0x0036) upon entering the lobby
-        await SendClientPacketAsync(stream, 3, (ushort)RakionOpcode.FieldList, new FieldListRequestPacket());
+        await SendClientPacketAsync(stream, 3, (ushort)ClientOpcode.FieldList, new FieldListRequestPacket());
         var (fieldOp, fieldPayload) = await ReadServerPacketAsync(stream);
 
-        Assert.AreEqual((ushort)RakionOpcode.FieldList, fieldOp);
+        Assert.AreEqual((ushort)ServerOpcode.FieldList, fieldOp);
         Assert.AreEqual(0x0036, (ushort)fieldOp);
         Assert.IsTrue(FieldListResponsePacket.TryParse(fieldPayload, out var fieldResp));
         Assert.IsEmpty(fieldResp.Fields);

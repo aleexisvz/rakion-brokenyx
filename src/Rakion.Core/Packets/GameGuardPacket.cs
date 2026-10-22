@@ -8,7 +8,7 @@ namespace Rakion.Core.Packets;
 /// </summary>
 public sealed record GameGuardPacket(byte ResultCode = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.GameGuardResponse;
+    public ushort Opcode => (ushort)ServerOpcode.GameGuard;
 
     public void Serialize(PacketWriter writer)
     {

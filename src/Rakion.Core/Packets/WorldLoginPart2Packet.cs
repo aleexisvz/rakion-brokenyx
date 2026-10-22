@@ -23,7 +23,7 @@ public sealed record WorldLoginPart2Packet(
 {
     public const int BasePayloadSize = 1326;
 
-    public ushort Opcode => (ushort)RakionOpcode.WorldLoginPart2;
+    public ushort Opcode => (ushort)ServerOpcode.WorldLoginPart2;
 
     public void Serialize(PacketWriter writer)
     {

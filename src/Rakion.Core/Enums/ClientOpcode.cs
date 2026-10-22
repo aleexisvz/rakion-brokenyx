@@ -1,13 +1,15 @@
 namespace Rakion.Core.Enums;
 
 /// <summary>
-/// Known protocol opcodes for the Rakion v258 network protocol.
+/// Opcodes sent by the client to the server (client → server direction).
+/// Server responses live in <see cref="ServerOpcode"/>; the same numeric value can mean a
+/// different message in each direction, so the two sets are never mixed.
 /// </summary>
-public enum RakionOpcode : ushort
+public enum ClientOpcode : ushort
 {
     None = 0x0000,
 
-    // --- Broker / Handshake Opcodes ---
+    // --- Broker (TCP 40706) ---
     /// <summary>
     /// Sent by the client to request the server list.
     /// Evidence: Observed in BrokenServer.Systems.oPCode and client handshake.
@@ -15,10 +17,10 @@ public enum RakionOpcode : ushort
     ServerListRequest = 0xCDDF,
 
     /// <summary>
-    /// Response sent to client containing the list of available game servers.
-    /// Evidence: Observed in BrokenServer.Systems.ServerListPacket.
+    /// Server list request framed with the response opcode value.
+    /// Evidence: Inferred — accepted by the Broker as a server list request since phase 2.
     /// </summary>
-    ServerListResponse = 0x0101,
+    ServerListRequestAlt = 0x0101,
 
     /// <summary>
     /// Client login authentication (standard v258).
@@ -27,50 +29,29 @@ public enum RakionOpcode : ushort
     Login = 0x1310,
 
     /// <summary>
-    /// Alternative login opcode variant 2.
+    /// Alternative login opcode variant 2 (SV_AUTH_LOGIN_2).
+    /// Evidence: Observed in BrokenServer.Systems.oPCode.
     /// </summary>
     LoginAlt2 = 0x3000,
 
     /// <summary>
-    /// Alternative login opcode variant 3.
+    /// Alternative login opcode variant 3 (SV_AUTH_LOGIN_3).
+    /// Evidence: Observed in BrokenServer.Systems.oPCode.
     /// </summary>
     LoginAlt3 = 0x5000,
 
     /// <summary>
-    /// Alternative login opcode variant 4.
+    /// Alternative login opcode variant 4 (SV_AUTH_LOGIN_4).
+    /// Evidence: Observed in BrokenServer.Systems.oPCode.
     /// </summary>
     LoginAlt4 = 0x4000,
 
-    // --- World Server / Character Management Opcodes ---
-    /// <summary>
-    /// World server session authentication and character list handshake for retail v258.
-    /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z and jump table opcode 12 (0x000C).
-    /// </summary>
-    WorldLogin = 0x000C,
-
+    // --- World Server (TCP 40708) ---
     /// <summary>
     /// Legacy/unencrypted WorldLogin opcode variant.
     /// Evidence: Observed in RakionWorldServ switch jump table (0x004299B8).
     /// </summary>
     WorldLoginLegacy = 0x0002,
-
-    /// <summary>
-    /// World server login success/failure result response.
-    /// Evidence: Observed in RakionWorldServ 0x4286fd (0x001E).
-    /// </summary>
-    WorldLoginResponse = 0x001E,
-
-    /// <summary>
-    /// World server character roster, gold, cash, and unlocked slots.
-    /// Evidence: Observed in RakionWorldServ 0x428832 (0x001F).
-    /// </summary>
-    WorldCharacterList = 0x001F,
-
-    /// <summary>
-    /// World server login part 2 packet completing client handshake and enabling Character Select UI (retail OnRecvLogin2).
-    /// Evidence: Observed in engine.dll jump table opcode 13 (0x000D) calling 0x36196690.
-    /// </summary>
-    WorldLoginPart2 = 0x000D,
 
     /// <summary>
     /// Legacy world login part 2 packet opcode.
@@ -97,20 +78,20 @@ public enum RakionOpcode : ushort
     CharacterSelectRetail = 0x0009,
 
     /// <summary>
-    /// Direct WorldLogin opcode variant used by IScavengerWorldNet::SendLogin(ticket, user).
-    /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z.
+    /// World server session authentication with the Broker session ticket.
+    /// Evidence: Observed in engine.dll ?SendLogin@IScavengerWorldNet@@UAEXKPAD@Z (0x000C).
     /// </summary>
-    WorldLoginAlt = 0x000C,
+    WorldLogin = 0x000C,
 
     /// <summary>
-    /// Retail WorldLogin alias.
+    /// World login part 2 completing the client handshake.
+    /// Evidence: Observed in engine.dll jump table opcode 13 (0x000D).
     /// </summary>
-    WorldLoginRetail = 0x000C,
+    WorldLoginPart2 = 0x000D,
 
     /// <summary>
-    /// UDP hole punching / NAT probe success notification and confirmation.
-    /// Evidence: Observed in engine.dll ?SendSuccessUDP@IScavengerWorldNet@@UAEXE@Z (0x000E),
-    /// OnRecvSuccessUDP (0x36192DA0), and RakionWorldServ 0x4208b3.
+    /// UDP hole punching / NAT probe success notification.
+    /// Evidence: Observed in engine.dll ?SendSuccessUDP@IScavengerWorldNet@@UAEXE@Z (0x000E).
     /// </summary>
     UdpSuccess = 0x000E,
 
@@ -125,12 +106,6 @@ public enum RakionOpcode : ushort
     /// Evidence: Observed in engine.dll ?SendGameGuard@IScavengerWorldNet@@UAEXPAE@Z (0x0010).
     /// </summary>
     GameGuard = 0x0010,
-
-    /// <summary>
-    /// Server confirmation response to GameGuard verification.
-    /// Evidence: Observed in RakionWorldServ opcode 16 stub response (0x001B).
-    /// </summary>
-    GameGuardResponse = 0x001B,
 
     /// <summary>
     /// Character creation request.
@@ -151,9 +126,8 @@ public enum RakionOpcode : ushort
     CharacterSelect = 0x0014,
 
     /// <summary>
-    /// Character name change notification for messenger / buddy system after character creation.
-    /// Evidence: Observed in engine.dll ?SendCharacterChangeBuddyName@IScavengerWorldNet@@UAEXPAD@Z (0x0015)
-    /// and OnRecvChangeBuddyName jump table opcode 21 calling 0x36192FB0.
+    /// Character name change notification for the messenger / buddy system.
+    /// Evidence: Observed in engine.dll ?SendCharacterChangeBuddyName@IScavengerWorldNet@@UAEXPAD@Z (0x0015).
     /// </summary>
     CharacterChangeBuddyName = 0x0015,
 
@@ -181,76 +155,47 @@ public enum RakionOpcode : ushort
     /// </summary>
     CharacterChangeCharName = 0x001C,
 
+    // --- Channel / Lobby ---
     /// <summary>
-    /// Character deletion confirmation response (retail v258 engine.dll opcode 19).
-    /// Evidence: Observed in engine.dll jump table opcode 19 (0x0013) calling 0x36192e70.
-    /// </summary>
-    CharacterDeleteResponse = 0x0013,
-
-    /// <summary>
-    /// Legacy character deletion confirmation response.
-    /// Evidence: Observed in RakionWorldServ opcode 19 handler (0x002D).
-    /// </summary>
-    CharacterDeleteResponseLegacy = 0x002D,
-
-    /// <summary>
-    /// Character selection confirmation response (retail v258 engine.dll opcode 20).
-    /// Evidence: Observed in engine.dll jump table opcode 20 (0x0014) calling 0x36192f90.
-    /// </summary>
-    CharacterSelectResponse = 0x0014,
-
-    /// <summary>
-    /// Legacy character selection confirmation response.
-    /// Evidence: Observed in RakionWorldServ opcode 20 handler (0x002E).
-    /// </summary>
-    CharacterSelectResponseLegacy = 0x002E,
-
-    // --- Channel / Lobby Opcodes ---
-    /// <summary>
-    /// Channel list request / response (retail v258 engine.dll opcode 29).
-    /// Evidence: Observed in engine.dll ?SendChannelList@IScavengerWorldNet@@UAEXEE@Z (0x001D)
-    /// and OnRecvChannelList (0x361931E0).
+    /// Channel list request.
+    /// Evidence: Observed in engine.dll ?SendChannelList@IScavengerWorldNet@@UAEXEE@Z (0x001D).
     /// </summary>
     ChannelList = 0x001D,
 
     /// <summary>
-    /// Channel characters request / response (retail v258 engine.dll opcode 30).
-    /// Evidence: Observed in engine.dll ?SendChannelCharacters@IScavengerWorldNet@@UAEXXZ (0x001E)
-    /// and OnRecvChannelCharacters (0x361932A0).
+    /// Channel characters request.
+    /// Evidence: Observed in engine.dll ?SendChannelCharacters@IScavengerWorldNet@@UAEXXZ (0x001E).
     /// </summary>
     ChannelCharacters = 0x001E,
 
     /// <summary>
-    /// Channel enter request / response (retail v258 engine.dll opcode 31).
-    /// Evidence: Observed in engine.dll ?SendChannelEnter@IScavengerWorldNet@@UAEXEPAD@Z (0x001F)
-    /// and OnRecvChannelEnter (0x361933F0).
+    /// Channel enter request.
+    /// Evidence: Observed in engine.dll ?SendChannelEnter@IScavengerWorldNet@@UAEXEPAD@Z (0x001F).
     /// </summary>
     ChannelEnter = 0x001F,
 
     /// <summary>
-    /// Channel exit request / response (retail v258 engine.dll opcode 32).
-    /// Evidence: Observed in engine.dll ?SendChannelExit@IScavengerWorldNet@@UAEXXZ (0x0020)
-    /// and OnRecvChannelExit (0x36193490).
+    /// Channel exit request.
+    /// Evidence: Observed in engine.dll ?SendChannelExit@IScavengerWorldNet@@UAEXXZ (0x0020).
     /// </summary>
     ChannelExit = 0x0020,
 
     /// <summary>
-    /// Channel create request / response (retail v258 engine.dll opcode 33).
+    /// Channel create request.
     /// Evidence: Observed in engine.dll ?SendChannelCreate@IScavengerWorldNet@@UAEXPAD0E@Z (0x0021).
     /// </summary>
     ChannelCreate = 0x0021,
 
     /// <summary>
-    /// Channel lobby chat message broadcast (retail v258 engine.dll opcode 34).
-    /// Evidence: Observed in engine.dll ?SendChannelChat@IScavengerWorldNet@@UAEXPAD@Z (0x0022)
-    /// and OnRecvChannelChat (0x361934E0).
+    /// Channel lobby chat message.
+    /// Evidence: Observed in engine.dll ?SendChannelChat@IScavengerWorldNet@@UAEXPAD@Z (0x0022).
     /// </summary>
     ChannelChat = 0x0022,
 
+    // --- Fields / Rooms ---
     /// <summary>
-    /// Requests or returns the active field / room list in the channel.
-    /// Evidence: Observed in engine.dll ?SendFieldList (0x36191ba0, opcode 0x0036)
-    /// and RakionWorldServ opcode switch (0x42b0ba -> 0x422c90).
+    /// Requests the active field / room list in the channel.
+    /// Evidence: Observed in engine.dll ?SendFieldList (0x36191ba0, opcode 0x0036).
     /// </summary>
     FieldList = 0x0036,
 
@@ -284,7 +229,7 @@ public enum RakionOpcode : ushort
     /// </summary>
     FieldChat = 0x007F,
 
-    // --- UDP NAT Probe / Relay Opcodes ---
+    // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch probe / keep-alive sent to UDP Port 1 (40708).
     /// Evidence: Observed in Rakion.bin 0x00473B84 and RakionWorldServ.exe 0x00429554.

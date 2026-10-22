@@ -14,7 +14,7 @@ public sealed record LoginRequestPacket(
     ushort ClientVersion = 1026,
     string ClientIp = "127.0.0.1",
     byte Flag = 0,
-    ushort SubOpcode = (ushort)RakionOpcode.Login,
+    ushort SubOpcode = (ushort)ClientOpcode.Login,
     bool IsLauncherHandshake = false,
     uint LauncherSalt = 0,
     byte[]? LauncherCiphertext = null) : IPacket
@@ -50,10 +50,10 @@ public sealed record LoginRequestPacket(
         if (data.Length >= 2)
         {
             ushort embeddedSubOpcode = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(data[..2]);
-            if (embeddedSubOpcode is (ushort)RakionOpcode.Login
-                or (ushort)RakionOpcode.LoginAlt2
-                or (ushort)RakionOpcode.LoginAlt3
-                or (ushort)RakionOpcode.LoginAlt4)
+            if (embeddedSubOpcode is (ushort)ClientOpcode.Login
+                or (ushort)ClientOpcode.LoginAlt2
+                or (ushort)ClientOpcode.LoginAlt3
+                or (ushort)ClientOpcode.LoginAlt4)
             {
                 resolvedSubOpcode = embeddedSubOpcode;
                 data = data[2..];
@@ -61,7 +61,7 @@ public sealed record LoginRequestPacket(
         }
 
         // Fixed 70-byte packet from NyxLauncher (4-byte header + 2-byte sub-opcode 0x1310 + 64-byte payload)
-        if (resolvedSubOpcode == (ushort)RakionOpcode.Login && data.Length == 64)
+        if (resolvedSubOpcode == (ushort)ClientOpcode.Login && data.Length == 64)
         {
             if (NyxLauncherCrypto.TryDecryptPart1(data[..32], out string decUser, out uint decSalt))
             {

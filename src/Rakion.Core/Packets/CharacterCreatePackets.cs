@@ -12,7 +12,7 @@ public sealed record CharacterCreateRequestPacket(
     CharacterClass Class,
     byte Slot) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterCreate;
+    public ushort Opcode => (ushort)ClientOpcode.CharacterCreate;
 
     public void Serialize(PacketWriter writer)
     {
@@ -52,7 +52,7 @@ public sealed record CharacterCreateResponsePacket(
     byte ResultCode,
     uint CharacterId = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterCreate;
+    public ushort Opcode => (ushort)ServerOpcode.CharacterCreate;
 
     public void Serialize(PacketWriter writer)
     {

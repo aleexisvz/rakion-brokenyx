@@ -11,7 +11,7 @@ public sealed class PacketWriterTests
     [TestMethod]
     public void Build_WithOpcode_AutomaticallyPrefixesCorrectHeader()
     {
-        using var writer = new PacketWriter((ushort)RakionOpcode.ServerListResponse);
+        using var writer = new PacketWriter((ushort)ServerOpcode.ServerListResponse);
         writer.WriteByte(1); // 1 server
         writer.WriteUInt16(40708); // port
 
@@ -24,7 +24,7 @@ public sealed class PacketWriterTests
         ushort opcode = BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(2, 2));
 
         Assert.AreEqual((ushort)7, totalLength);
-        Assert.AreEqual((ushort)RakionOpcode.ServerListResponse, opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ServerListResponse, opcode);
         Assert.AreEqual((byte)1, packet[4]);
         Assert.AreEqual((ushort)40708, BinaryPrimitives.ReadUInt16LittleEndian(packet.AsSpan(5, 2)));
     }
@@ -32,7 +32,7 @@ public sealed class PacketWriterTests
     [TestMethod]
     public void Roundtrip_WriterAndReader_PreservesAllData()
     {
-        using var writer = new PacketWriter((ushort)RakionOpcode.Login);
+        using var writer = new PacketWriter((ushort)ClientOpcode.Login);
         writer.WriteByte(5);
         writer.WriteBoolean(true);
         writer.WriteInt16(-456);
@@ -48,7 +48,7 @@ public sealed class PacketWriterTests
 
         // Parse header
         Assert.IsTrue(PacketHeader.TryParse(packet, out var header));
-        Assert.AreEqual((ushort)RakionOpcode.Login, header.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.Login, header.Opcode);
         Assert.AreEqual(packet.Length, (int)header.TotalLength);
 
         // Read payload

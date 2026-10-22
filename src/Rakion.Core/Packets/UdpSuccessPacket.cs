@@ -20,7 +20,7 @@ public sealed record UdpSuccessPacket(
 {
     public const int PayloadSize = 13;
 
-    public ushort Opcode => (ushort)RakionOpcode.UdpSuccess;
+    public ushort Opcode => (ushort)ServerOpcode.UdpSuccess;
 
     public void Serialize(PacketWriter writer)
     {
