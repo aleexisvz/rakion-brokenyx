@@ -224,6 +224,23 @@ public sealed class InventoryPacketTests
         Assert.IsEmpty(parsedFailure.Items!);
     }
 
+    [TestMethod]
+    public void InventorySell_RequestAndResponse_RoundTrip()
+    {
+        var request = new InventorySellRequestPacket(28);
+        var response = new InventorySellResponsePacket(InventorySellResponsePacket.ResultSuccess, 7080, 50000, 28);
+
+        byte[] requestBytes = Build(request);
+        byte[] responseBytes = Build(response);
+
+        CollectionAssert.AreEqual(new byte[] { 0x05, 0x00, 0x2F, 0x00, 0x1C }, requestBytes);
+        Assert.HasCount(PacketHeader.HeaderSize + 10, responseBytes);
+        Assert.IsTrue(InventorySellRequestPacket.TryParse(requestBytes.AsSpan(PacketHeader.HeaderSize), out var parsedRequest));
+        Assert.IsTrue(InventorySellResponsePacket.TryParse(responseBytes.AsSpan(PacketHeader.HeaderSize), out var parsedResponse));
+        Assert.AreEqual(request, parsedRequest);
+        Assert.AreEqual(response, parsedResponse);
+    }
+
     private static byte[] Build(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);
