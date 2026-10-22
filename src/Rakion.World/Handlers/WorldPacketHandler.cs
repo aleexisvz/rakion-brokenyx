@@ -385,7 +385,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             Cash: (uint)Math.Clamp(cash, 0, int.MaxValue),
             UnlockedSlots: unlockedSlots,
             Characters: summaries,
-            Username: user.Username);
+            Username: user.Username,
+            TutorialCompleted: gameInfo?.TutorialCompleted ?? false);
 
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
 
