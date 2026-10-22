@@ -31,7 +31,7 @@ public sealed class AccountInventoryProvider : IAccountInventoryProvider
         var items = await _inventoryRepository.GetUserItemsAsync(userId, characterId: null, cancellationToken).ConfigureAwait(false);
         uint now = LegacyGameClock.ToMinutes(_timeProvider.GetLocalNow().DateTime);
 
-        var slots = new AccountBoxSlot[AccountBoxBlock.SlotCount];
+        var slots = new ItemSlot[AccountBoxBlock.SlotCount];
         var expired = new List<ushort>();
 
         foreach (var item in items)
@@ -68,7 +68,7 @@ public sealed class AccountInventoryProvider : IAccountInventoryProvider
                 continue;
             }
 
-            slots[item.SlotIndex] = new AccountBoxSlot(
+            slots[item.SlotIndex] = new ItemSlot(
                 (ushort)item.ItemId,
                 item.Level,
                 (uint)Math.Clamp(item.Exp, 0, uint.MaxValue),

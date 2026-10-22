@@ -60,9 +60,9 @@ public sealed class InventoryPacketTests
     [TestMethod]
     public void AccountBoxBlock_RoundTrip_PreservesSlotsAndExpiredItems()
     {
-        var slots = new AccountBoxSlot[AccountBoxBlock.SlotCount];
-        slots[0] = new AccountBoxSlot(1001, 3, 50, 0);
-        slots[119] = new AccountBoxSlot(2002, 7, 0, 29_000_000);
+        var slots = new ItemSlot[AccountBoxBlock.SlotCount];
+        slots[0] = new ItemSlot(1001, 3, 50, 0);
+        slots[119] = new ItemSlot(2002, 7, 0, 29_000_000);
         var block = new AccountBoxBlock(slots, [3003, 3004], bagCount: 2);
 
         using var writer = new PacketWriter();
@@ -91,8 +91,8 @@ public sealed class InventoryPacketTests
     [TestMethod]
     public void WorldLoginPart2_WithAccountBox_WritesSlotArraysAtObservedOffsets()
     {
-        var slots = new AccountBoxSlot[AccountBoxBlock.SlotCount];
-        slots[5] = new AccountBoxSlot(0x1234, 9, 0xAABBCCDD, 0x01020304);
+        var slots = new ItemSlot[AccountBoxBlock.SlotCount];
+        slots[5] = new ItemSlot(0x1234, 9, 0xAABBCCDD, 0x01020304);
         var packet = new WorldLoginPart2Packet(UnlockedSlots: 3, AccountBox: new AccountBoxBlock(slots, bagCount: 1));
 
         using var writer = new PacketWriter(packet.Opcode);
@@ -155,5 +155,43 @@ public sealed class InventoryPacketTests
         Assert.AreEqual((byte)5, bytes[PacketHeader.HeaderSize + 11]);
         Assert.IsTrue(InventoryMoveResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
         Assert.AreEqual(packet, parsed);
+    }
+
+    [TestMethod]
+    public void CharacterEquipment_WritesFourParallelArraysAtObservedSizes()
+    {
+        var slots = new ItemSlot[CharacterEquipment.SlotCount];
+        slots[3] = new ItemSlot(0x1234, 7, 0x11223344, 0x55667788);
+
+        using var writer = new PacketWriter();
+        CharacterEquipment.Serialize(writer, slots);
+        var bytes = writer.WrittenSpan;
+
+        Assert.AreEqual(0x26 + 0x13 + 0x4C + 0x4C, bytes.Length);
+        Assert.AreEqual((ushort)0x1234, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes[(3 * 2)..]));
+        Assert.AreEqual((byte)7, bytes[0x26 + 3]);
+        Assert.AreEqual(0x11223344u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes[(0x26 + 0x13 + 3 * 4)..]));
+        Assert.AreEqual(0x55667788u, System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes[(0x26 + 0x13 + 0x4C + 3 * 4)..]));
+    }
+
+    [TestMethod]
+    public void WorldLogin_WithEquipment_KeepsPacketSize()
+    {
+        var slots = new ItemSlot[CharacterEquipment.SlotCount];
+        slots[0] = new ItemSlot(1001, 1, 0, 0);
+        var bare = new CharacterSummary(1, "Hero", 0, CharacterClass.Swordman, 1, 0, 0);
+
+        byte[] without = Build(new WorldLoginResponsePacket(0, 1, Characters: [bare], Username: "admin"));
+        byte[] with = Build(new WorldLoginResponsePacket(0, 1, Characters: [bare with { Equipment = slots }], Username: "admin"));
+
+        Assert.HasCount(without.Length, with);
+        Assert.AreEqual(3, Enumerable.Range(0, with.Length).Count(i => with[i] != without[i])); // u16 id (2 bytes) + level
+    }
+
+    private static byte[] Build(IPacket packet)
+    {
+        using var writer = new PacketWriter(packet.Opcode);
+        packet.Serialize(writer);
+        return writer.Build();
     }
 }

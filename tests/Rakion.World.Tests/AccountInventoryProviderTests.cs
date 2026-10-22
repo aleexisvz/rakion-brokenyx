@@ -40,8 +40,8 @@ public sealed class AccountInventoryProviderTests
 
         var box = await _provider.GetAccountBoxAsync(5, 1, CancellationToken.None);
 
-        Assert.AreEqual(new AccountBoxSlot(1001, 3, 40, 0), box.Slots[0]);
-        Assert.AreEqual(new AccountBoxSlot(1002, 1, 0, later), box.Slots[7]);
+        Assert.AreEqual(new ItemSlot(1001, 3, 40, 0), box.Slots[0]);
+        Assert.AreEqual(new ItemSlot(1002, 1, 0, later), box.Slots[7]);
         Assert.AreEqual(2, box.Slots.Count(s => !s.IsEmpty));
         Assert.IsEmpty(box.ExpiredItemIds);
         Assert.AreEqual((byte)1, box.BagCount);
