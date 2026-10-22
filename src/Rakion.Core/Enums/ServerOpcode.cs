@@ -89,6 +89,13 @@ public enum ServerOpcode : ushort
     /// </summary>
     CharacterSelectLegacy = 0x002E,
 
+    // --- Inventory / Shop / Blacksmith ---
+    /// <summary>
+    /// Inventory enter result: [u8 Result][u32 ServerTimeMinutes].
+    /// Evidence: Observed in RakionWorldServ.exe 0x427A9D (7-byte send) and engine.dll 0x36193650 (reads u8 + u32).
+    /// </summary>
+    InventoryEnter = 0x002C,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.

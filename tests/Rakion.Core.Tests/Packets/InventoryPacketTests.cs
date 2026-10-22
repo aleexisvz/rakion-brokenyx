@@ -35,4 +35,25 @@ public sealed class InventoryPacketTests
         Assert.HasCount(PacketHeader.HeaderSize, bytes);
         Assert.IsTrue(InventoryLeaveRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out _));
     }
+
+    [TestMethod]
+    public void InventoryEnterResponse_RoundTrip_MatchesObservedLayout()
+    {
+        var packet = new InventoryEnterResponsePacket(InventoryEnterResponsePacket.ResultSuccess, 0x01020304);
+        using var writer = new PacketWriter(packet.Opcode);
+        packet.Serialize(writer);
+        byte[] bytes = writer.Build();
+
+        // Header (length 9, opcode 0x002C) + u8 result + u32 little-endian.
+        CollectionAssert.AreEqual(new byte[] { 0x09, 0x00, 0x2C, 0x00, 0x00, 0x04, 0x03, 0x02, 0x01 }, bytes);
+        Assert.AreEqual((ushort)ServerOpcode.InventoryEnter, packet.Opcode);
+        Assert.IsTrue(InventoryEnterResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
+        Assert.AreEqual(packet, parsed);
+    }
+
+    [TestMethod]
+    public void InventoryEnterResponse_TryParse_RejectsShortPayload()
+    {
+        Assert.IsFalse(InventoryEnterResponsePacket.TryParse([0x00, 0x01, 0x02, 0x03], out _));
+    }
 }
