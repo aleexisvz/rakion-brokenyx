@@ -16,10 +16,12 @@ namespace Rakion.Core.Packets;
 ///   [1322..]uint FinalDword (4 bytes)
 /// Total payload size: 1326 bytes.
 /// If UnlockedSlots &gt; 4, character records for slots 4..(UnlockedSlots-1) are serialized before the tail block.
+/// The tail block is the account item box, modelled by <see cref="AccountBoxBlock"/> (lane A, C-3).
 /// </summary>
 public sealed record WorldLoginPart2Packet(
     byte UnlockedSlots = 3,
-    IReadOnlyList<CharacterSummary>? Characters = null) : IPacket
+    IReadOnlyList<CharacterSummary>? Characters = null,
+    AccountBoxBlock? AccountBox = null) : IPacket
 {
     public const int BasePayloadSize = 1326;
 
@@ -81,14 +83,8 @@ public sealed record WorldLoginPart2Packet(
             }
         }
 
-        // Tail block (1326 bytes) for retail engine.dll 0x36196B41:
-        writer.WriteByte(0);        // WordCount (0 words)
-        writer.WriteByte(0);        // Flag (0)
-        writer.WriteZeroBytes(240); // 120 words
-        writer.WriteZeroBytes(120); // 120 bytes
-        writer.WriteZeroBytes(480); // 120 dwords
-        writer.WriteZeroBytes(480); // 120 dwords
-        writer.WriteUInt32(0);      // Final dword
+        // Tail block for retail engine.dll 0x36196B41 (1326 bytes when no expired items are listed).
+        (AccountBox ?? AccountBoxBlock.Empty).Serialize(writer);
     }
 
     public static bool TryParse(ReadOnlySpan<byte> payload, out WorldLoginPart2Packet packet)
