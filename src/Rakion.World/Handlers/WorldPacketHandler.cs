@@ -9,6 +9,7 @@ using Rakion.Core.Cryptography;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
+using Rakion.Core.Utilities;
 using Rakion.Database.Repositories;
 using Rakion.Network.Tcp;
 using Rakion.World.Channels;
@@ -390,7 +391,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             UnlockedSlots: unlockedSlots,
             Characters: summaries,
             Username: user.Username,
-            TutorialCompleted: gameInfo?.TutorialCompleted ?? false);
+            TutorialCompleted: gameInfo?.TutorialCompleted ?? false,
+            ServerTimeMinutes: LegacyGameClock.ToMinutes(DateTime.Now),
+            PowerUserExpiry: (uint)Math.Clamp(gameInfo?.PowerTime ?? 0, 0, uint.MaxValue),
+            PowerUserPoints: (ushort)Math.Clamp(gameInfo?.PowerLevelPoint ?? 0, 0, ushort.MaxValue));
 
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
 
