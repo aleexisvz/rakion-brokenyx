@@ -92,7 +92,7 @@ public readonly record struct ItemSlot(ushort ItemId, byte Level, uint Exp, uint
 /// Account item box sent at the end of WorldLoginPart2 (0x000D).
 /// Wire layout, Observed in the client parser (engine.dll 0x36196B41..0x36196C71):
 ///   u8 N, N x u16          expired item ids (Derived: legacy server collects rows whose limittime passed)
-///   u8                     BagCount: unlocked bags, 40 slots each (Derived, see below)
+///   u8                     BagCount: unlocked bags, 30 slots each (Derived, see below)
 ///   120 x u16              ItemId per slot
 ///   120 x u8               Level per slot
 ///   120 x u32              Exp per slot
