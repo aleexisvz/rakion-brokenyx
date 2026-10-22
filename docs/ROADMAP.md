@@ -174,28 +174,29 @@ rakion-brokenyx/
 - [ ] **4.0 Prerrequisitos:** contratos C-0, C-1 y C-2 mergeados en `main`.
 - [ ] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):**
   - Enviar al cliente el mapa de ranuras ocupadas (armas, cascos, pecheras, accesorios, criaturas invocables, pociones) con sus niveles de forja y duraciones.
-  - Evidencia: nombre del método **Observed** (símbolo `IScavengerWorldNet`); opcode y layout de la respuesta **Unknown** (requiere observación del cliente). Lectura de inventario en BD: ya existe (`IInventoryRepository.GetUserItemsAsync`, 1.3).
+  - Evidencia: petición `SendInventoryEnter()` = opcode `0x002C` sin payload, y `SendInventoryLeave()` = `0x002D`, **Observed** (inmediato del opcode en `engine.dll`). Layout de la respuesta del servidor **Unknown** (requiere observar el parser del cliente). Lectura de inventario en BD: ya existe (`IInventoryRepository.GetUserItemsAsync`, 1.3).
   - Verificado con cliente real: no.
 - [ ] **4.2 Tienda de Objetos (`SendInventoryBuy(uint16 itemId, uint8 type, uint8 period, uint16 price)`):**
   - Validar precio en oro o cash contra el catálogo `ItemInfo` en servidor (el `price` enviado por el cliente nunca se usa como verdad).
   - Descontar saldo de forma atómica y asignar el item en `UserItemInfo` en la misma transacción, con log.
-  - Evidencia: firma **Derived** (de la firma del símbolo); semántica de `type`/`period` **Inferred**; opcode **Unknown**.
+  - Evidencia: opcode `0x002E` y tipos `(u16, u8, u8, u16)` **Observed** (`engine.dll`); semántica de `type`/`period` **Inferred**; respuesta **Unknown**. Compras relacionadas: `BuyBag` `0x0032`, `BuyPowerUser` `0x0034`, `BuyCharacterSlot` `0x0035`, `BuyPotionSlot` `0x006F` (**Observed**).
   - Verificado con cliente real: no.
-- [ ] **4.3 Venta y Movimiento de Items (`SendInventorySell(uint8 slot)` y `SendInventoryMove(uint8 src, uint8 dst, ...)`):**
+- [ ] **4.3 Venta y Movimiento de Items (`SendInventorySell(uint8)` y `SendInventoryMove(uint8, uint8, uint8, uint8)`):**
   - Permitir reorganizar objetos entre bolsas y vender items por oro.
-  - Evidencia: `Sell` **Derived**; parámetros extra de `Move` **Unknown**; `CUser::ulSellGold` **Observed** (símbolo), fórmula del precio de venta **Unknown** (configurable).
+  - Evidencia: `Sell` = `0x002F`, `Move` = `0x0031` con 4 × `u8` **Observed**; significado de cada byte de `Move` **Inferred**; `StackPotion(u8, u8)` = `0x0073` **Observed**; `CUser::ulSellGold` **Observed** (símbolo), fórmula del precio de venta **Unknown** (configurable).
   - Verificado con cliente real: no.
 - [ ] **4.4 Asignación y Reseteo de Puntos (`SendInventoryAllocationPoint(uint8 statIndex)`, `SendCharacterStateClear(uint8, uint16 cost)`):**
   - Permitir repartir puntos a las estadísticas primarias (`hit1`–`hit4`, `chit`, `hp`, `ap`, velocidad, CP) y recalcular atributos totales.
-  - Evidencia: opcode de `StateClear` `0x001B` **Observed**; mapeo `statIndex → estadística` **Inferred**; opcode de `AllocationPoint` **Unknown**.
+  - Evidencia: opcode de `StateClear` `0x001B` **Observed**; mapeo `statIndex → estadística` **Inferred**; `AllocationPoint(u8)` = `0x0033` **Observed**.
   - Verificado con cliente real: no.
 - [ ] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`):**
+  - Petición `SendEncahntReinforce(u8, u8, u8, u8*)` = `0x0074` **Observed**; significado de los parámetros **Inferred**.
   - Cadena `"Not Destroy below lv3 Item!!"` en `CUser::CheckEnchantReinforce`: **Observed**. Prueba solo que los items por debajo de lv3 no se destruyen.
   - "0 a +3 con 100 % de éxito": **Inferred** (no probado). Nivel máximo (+15) y probabilidades de éxito/degradación/rotura: **Unknown** → configurables en `appsettings.json`.
   - Sincronización instantánea de las nuevas estadísticas del item.
   - Verificado con cliente real: no.
 - [ ] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*:
-  - Evidencia: nombres **Observed**; layout **Unknown**.
+  - Evidencia: `Peek()` `0x006B`, `Accept(u32, u16)` `0x006C`, `Dispose(u32)` `0x006D` **Observed**; respuestas **Unknown**.
   - Verificado con cliente real: no.
 
 ---
