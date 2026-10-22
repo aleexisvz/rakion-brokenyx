@@ -276,6 +276,27 @@ public sealed class InventoryPacketTests
         Assert.IsFalse(InventoryBuyPowerUserRequestPacket.TryParse([2, 0], out _));
     }
 
+    [TestMethod]
+    public void EnchantReinforce_RequestAndResponse_RoundTrip()
+    {
+        var request = new EnchantReinforceRequestPacket(4, 9, [10, 11]);
+        var success = new EnchantReinforceResponsePacket(EnchantReinforceResponsePacket.LevelUp, 4, 9, []);
+        var refusal = new EnchantReinforceResponsePacket(EnchantReinforceResponsePacket.StoneNotForThisLevel, 4, 9, []);
+
+        byte[] requestBytes = Build(request);
+        byte[] successBytes = Build(success);
+        byte[] refusalBytes = Build(refusal);
+
+        CollectionAssert.AreEqual(new byte[] { 0x09, 0x00, 0x74, 0x00, 4, 9, 2, 10, 11 }, requestBytes);
+        CollectionAssert.AreEqual(new byte[] { 0x08, 0x00, 0x74, 0x00, 0, 4, 9, 0 }, successBytes);
+        CollectionAssert.AreEqual(new byte[] { 0x05, 0x00, 0x74, 0x00, 8 }, refusalBytes);
+        Assert.IsTrue(EnchantReinforceRequestPacket.TryParse(requestBytes.AsSpan(PacketHeader.HeaderSize), out var parsedRequest));
+        Assert.IsTrue(EnchantReinforceResponsePacket.TryParse(successBytes.AsSpan(PacketHeader.HeaderSize), out var parsedSuccess));
+        Assert.AreEqual(request, parsedRequest);
+        Assert.AreEqual(success, parsedSuccess);
+        Assert.IsFalse(EnchantReinforceRequestPacket.TryParse([1, 2, 4, 0, 0, 0, 0], out _));
+    }
+
     private static byte[] Build(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

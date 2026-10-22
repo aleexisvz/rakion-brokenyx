@@ -796,3 +796,115 @@ public sealed record InventoryBuyPowerUserResponsePacket(
     }
 }
 
+/// <summary>
+/// Client blacksmith request: [u8 TargetSlot][u8 StoneSlot][u8 N][N x u8 MaterialSlot], all account box slots.
+/// Evidence: Observed in engine.dll ?SendEncahntReinforce@IScavengerWorldNet@@UAEXEEEPAE@Z (0x0074) and in the legacy
+/// parser RakionWorldServ.exe 0x421E80, which disconnects when N is above 3 (meanings Derived from 0x40C310).
+/// </summary>
+public sealed record EnchantReinforceRequestPacket(byte TargetSlot, byte StoneSlot, IReadOnlyList<byte> MaterialSlots) : IPacket
+{
+    public const int MaxMaterials = 3;
+
+    public ushort Opcode => (ushort)ClientOpcode.EnchantReinforce;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(TargetSlot);
+        writer.WriteByte(StoneSlot);
+        writer.WriteByte((byte)MaterialSlots.Count);
+        foreach (byte slot in MaterialSlots)
+        {
+            writer.WriteByte(slot);
+        }
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out EnchantReinforceRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 3 || span[2] > MaxMaterials || span.Length < 3 + span[2])
+        {
+            return false;
+        }
+
+        packet = new EnchantReinforceRequestPacket(span[0], span[1], span.Slice(3, span[2]).ToArray());
+        return true;
+    }
+
+    public bool Equals(EnchantReinforceRequestPacket? other) =>
+        other is not null && TargetSlot == other.TargetSlot && StoneSlot == other.StoneSlot && MaterialSlots.SequenceEqual(other.MaterialSlots);
+
+    public override int GetHashCode() => HashCode.Combine(TargetSlot, StoneSlot, MaterialSlots.Count);
+}
+
+/// <summary>
+/// Server result for <see cref="EnchantReinforceRequestPacket"/>.
+/// Results below 6 mean the attempt happened: the client clears the stone and material slots and applies the outcome
+/// to the target (rakion.bin 0x478D80, Observed): 0 level + 1, 1 no change, 2/3/4 level - 1/2/3, 5 item destroyed.
+/// 6 and above are refusals that consume nothing (legacy RakionWorldServ.exe 0x40C310: 6 not reinforceable or at the
+/// cap, 7 invalid stone or material, 8 stone not usable at this level). Meanings Derived.
+/// </summary>
+public sealed record EnchantReinforceResponsePacket(
+    byte Result,
+    byte TargetSlot,
+    byte StoneSlot,
+    IReadOnlyList<byte> MaterialSlots) : IPacket
+{
+    public const byte LevelUp = 0;
+    public const byte NoChange = 1;
+    public const byte LevelDown1 = 2;
+    public const byte LevelDown2 = 3;
+    public const byte LevelDown3 = 4;
+    public const byte Destroyed = 5;
+    public const byte NotReinforceable = 6;
+    public const byte InvalidStoneOrMaterial = 7;
+    public const byte StoneNotForThisLevel = 8;
+
+    public ushort Opcode => (ushort)ServerOpcode.EnchantReinforce;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        if (Result >= NotReinforceable)
+        {
+            return;
+        }
+
+        writer.WriteByte(TargetSlot);
+        writer.WriteByte(StoneSlot);
+        writer.WriteByte((byte)MaterialSlots.Count);
+        foreach (byte slot in MaterialSlots)
+        {
+            writer.WriteByte(slot);
+        }
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out EnchantReinforceResponsePacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        if (span[0] >= NotReinforceable)
+        {
+            packet = new EnchantReinforceResponsePacket(span[0], 0, 0, []);
+            return true;
+        }
+
+        if (span.Length < 4 || span.Length < 4 + span[3])
+        {
+            return false;
+        }
+
+        packet = new EnchantReinforceResponsePacket(span[0], span[1], span[2], span.Slice(4, span[3]).ToArray());
+        return true;
+    }
+
+    public bool Equals(EnchantReinforceResponsePacket? other) =>
+        other is not null && Result == other.Result && TargetSlot == other.TargetSlot && StoneSlot == other.StoneSlot
+        && MaterialSlots.SequenceEqual(other.MaterialSlots);
+
+    public override int GetHashCode() => HashCode.Combine(Result, TargetSlot, StoneSlot, MaterialSlots.Count);
+}
+
