@@ -161,6 +161,54 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldList = 0x0036,
 
+    /// <summary>
+    /// Response to field / room creation request: [u8 ResultCode, u16 RoomNumber].
+    /// Evidence: Observed in engine.dll jump table opcode 0x3B (0x3619761f -> 0x36193a90) and RakionWorldServ 0x423a82.
+    /// </summary>
+    FieldCreate = 0x003B,
+
+    /// <summary>
+    /// Response to enter room request (details of room and players).
+    /// Evidence: Observed in engine.dll jump table opcode 0x38 (0x361975f5 -> 0x361970e0) and RakionWorldServ 0x423870.
+    /// </summary>
+    FieldEnter = 0x0038,
+
+    /// <summary>
+    /// Response to exit room request.
+    /// Evidence: Observed in engine.dll jump table opcode 0x3A (0x36197611 -> 0x36193a70) and RakionWorldServ.
+    /// </summary>
+    FieldExit = 0x003A,
+
+    /// <summary>
+    /// Player ready state broadcast in field / room.
+    /// Evidence: Observed in engine.dll jump table opcode 0x3D (0x3619763b -> 0x36193ae0) and RakionWorldServ 0x407568.
+    /// </summary>
+    FieldReady = 0x003D,
+
+    /// <summary>
+    /// Player team change broadcast in field / room: [u8 Result, u8 OldSlot, u8 NewSlot].
+    /// Evidence: Observed in engine.dll jump table opcode 0x3E (0x36197649 -> 0x36193b0b) and RakionWorldServ 0x40779D.
+    /// </summary>
+    FieldChangeTeam = 0x003E,
+
+    /// <summary>
+    /// Room rule change broadcast in field / room.
+    /// Evidence: Observed in engine.dll jump table opcode 0x41 (0x36197657) and RakionWorldServ 0x4077C0.
+    /// </summary>
+    FieldChangeRule = 0x0041,
+
+    /// <summary>
+    /// Slot status change broadcast in field / room: [u8 SlotIndex, u8 Status].
+    /// Evidence: Observed in engine.dll jump table opcode 0x42 (0x36197665 -> 0x36193c50) and RakionWorldServ 0x407980.
+    /// </summary>
+    FieldChangeSlotStatus = 0x0042,
+
+    /// <summary>
+    /// Field chat message broadcast.
+    /// Evidence: Observed in engine.dll jump table opcode 0x47 (0x361976ab -> 0x36193b70) and RakionWorldServ.
+    /// </summary>
+    FieldChat = 0x0047,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).

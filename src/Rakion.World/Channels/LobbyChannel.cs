@@ -15,6 +15,7 @@ public sealed class LobbyChannel
     public byte MaxLevel { get; }
     public byte MaxPlayers { get; }
     public ConcurrentDictionary<Guid, WorldSession> Sessions { get; } = new();
+    public Rakion.World.Fields.FieldManager FieldManager { get; } = new();
 
     public byte CurrentPlayers => (byte)Math.Min(Sessions.Count, 255);
 
