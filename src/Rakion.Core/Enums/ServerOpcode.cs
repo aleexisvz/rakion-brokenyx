@@ -117,6 +117,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryAllocationPoint = 0x0033,
 
+    /// <summary>
+    /// PowerUser purchase result: result, gold, cash, PowerUser expiry, PowerUser points, trailing u32 list.
+    /// Evidence: Observed in engine.dll 0x361958C0 (reader) and rakion.bin 0x474F50 (callback).
+    /// </summary>
+    InventoryBuyPowerUser = 0x0034,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.
