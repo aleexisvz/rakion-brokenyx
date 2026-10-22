@@ -46,7 +46,7 @@ public sealed class WorldUdpPacketHandler : IUdpPacketHandler
                 // empty, the observed source is stored in the same encoding (raw in_addr, port in network order).
                 uint ip = probe.Ip != 0 ? probe.Ip : BinaryPrimitives.ReadUInt32LittleEndian(remoteEndPoint.Address.MapToIPv4().GetAddressBytes());
                 ushort port = probe.Port != 0 ? probe.Port : BinaryPrimitives.ReverseEndianness((ushort)remoteEndPoint.Port);
-                bool recorded = _endpoints?.TryRecord(probe.UserIndex, probe.UserId, flag != 0, ip, port) ?? false;
+                bool recorded = _endpoints?.TryRecord(probe.UserId, flag != 0, ip, port) ?? false;
                 _logger.LogDebug(
                     "[UDP:{Port}] Probe endpoint for user index {UserIndex}: reported {ReportedIp:X8}:{ReportedPort:X4}, observed {Remote}, stored: {Recorded}.",
                     server.Port,

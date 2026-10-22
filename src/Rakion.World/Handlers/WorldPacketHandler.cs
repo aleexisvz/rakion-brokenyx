@@ -422,7 +422,6 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             ServerTimeMinutes: LegacyGameClock.ToMinutes(DateTime.Now),
             PowerUserExpiry: (uint)Math.Clamp(gameInfo?.PowerTime ?? 0, 0, uint.MaxValue),
             PowerUserPoints: (ushort)Math.Clamp(gameInfo?.PowerLevelPoint ?? 0, 0, ushort.MaxValue),
-            UdpIndex: session.UdpIndex,
             UdpKey: session.UdpKey);
 
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
