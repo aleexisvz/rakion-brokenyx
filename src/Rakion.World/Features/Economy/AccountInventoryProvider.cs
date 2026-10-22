@@ -26,7 +26,7 @@ public sealed class AccountInventoryProvider : IAccountInventoryProvider
         _logger = logger;
     }
 
-    public async Task<AccountBoxBlock> GetAccountBoxAsync(int userId, CancellationToken cancellationToken)
+    public async Task<AccountBoxBlock> GetAccountBoxAsync(int userId, byte bagCount, CancellationToken cancellationToken)
     {
         var items = await _inventoryRepository.GetUserItemsAsync(userId, characterId: null, cancellationToken).ConfigureAwait(false);
         uint now = LegacyGameClock.ToMinutes(_timeProvider.GetLocalNow().DateTime);
@@ -75,6 +75,13 @@ public sealed class AccountInventoryProvider : IAccountInventoryProvider
                 (uint)Math.Max(item.LimitTimeMinutes, 0));
         }
 
-        return new AccountBoxBlock(slots, expired);
+        _logger.LogInformation(
+            "User {UserId}: account box with {ItemCount} items, {ExpiredCount} expired, {BagCount} bags.",
+            userId,
+            slots.Count(s => !s.IsEmpty),
+            expired.Count,
+            bagCount);
+
+        return new AccountBoxBlock(slots, expired, bagCount);
     }
 }

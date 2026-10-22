@@ -7,5 +7,6 @@ namespace Rakion.World.Features.Economy;
 /// </summary>
 public interface IAccountInventoryProvider
 {
-    Task<AccountBoxBlock> GetAccountBoxAsync(int userId, CancellationToken cancellationToken);
+    /// <param name="bagCount">Unlocked bags (user_game_info.bag_count); the client shows 40 box slots per bag.</param>
+    Task<AccountBoxBlock> GetAccountBoxAsync(int userId, byte bagCount, CancellationToken cancellationToken);
 }

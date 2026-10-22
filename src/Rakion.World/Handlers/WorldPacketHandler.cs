@@ -394,7 +394,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             // Send Part 2 packet (Opcode 0x000D) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
             AccountBoxBlock? accountBox = _accountInventory is null
                 ? null
-                : await _accountInventory.GetAccountBoxAsync(user.Id, cancellationToken).ConfigureAwait(false);
+                : await _accountInventory.GetAccountBoxAsync(user.Id, gameInfo?.BagCount ?? 1, cancellationToken).ConfigureAwait(false);
             await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries, AccountBox: accountBox), cancellationToken).ConfigureAwait(false);
         }
 

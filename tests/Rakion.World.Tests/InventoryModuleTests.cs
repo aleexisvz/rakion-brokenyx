@@ -65,11 +65,16 @@ public sealed class InventoryModuleTests
     }
 
     [TestMethod]
-    public async Task InventoryLeave_SendsNothing()
+    public async Task InventoryLeave_RepliesSuccess()
     {
-        await DispatchAsync(CreateSession(), ClientOpcode.InventoryLeave);
+        var session = CreateSession();
 
-        Assert.IsEmpty(_sender.Sent);
+        await DispatchAsync(session, ClientOpcode.InventoryLeave);
+
+        Assert.HasCount(1, _sender.Sent);
+        var response = (InventoryLeaveResponsePacket)_sender.Sent[0].Packet;
+        Assert.AreEqual((ushort)ServerOpcode.InventoryLeave, response.Opcode);
+        Assert.AreEqual(InventoryLeaveResponsePacket.ResultSuccess, response.Result);
     }
 
     private async Task DispatchAsync(WorldSession session, ClientOpcode opcode)

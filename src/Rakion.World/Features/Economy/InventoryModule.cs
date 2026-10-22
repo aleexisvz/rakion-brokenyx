@@ -60,13 +60,19 @@ public sealed class InventoryModule : IWorldOpcodeModule
             serverTimeMinutes);
     }
 
-    private ValueTask HandleInventoryLeaveAsync(
+    private async ValueTask HandleInventoryLeaveAsync(
         WorldSession session,
         ReadOnlyMemory<byte> payload,
         CancellationToken cancellationToken)
     {
         IWorldSessionView view = session;
-        _logger.LogDebug("[{ConnectionId}] InventoryLeave received.", view.ConnectionId);
-        return ValueTask.CompletedTask;
+        InventoryLeaveRequestPacket.TryParse(payload.Span, out _);
+
+        // The legacy server also persists inventory state on leave; here every change is saved when it
+        // happens (buy, sell, move), so leaving only needs the acknowledgement the client waits for.
+        var response = new InventoryLeaveResponsePacket(InventoryLeaveResponsePacket.ResultSuccess);
+        await _sender.SendAsync(view, response, cancellationToken).ConfigureAwait(false);
+
+        _logger.LogDebug("[{ConnectionId}] InventoryLeave acknowledged.", view.ConnectionId);
     }
 }
