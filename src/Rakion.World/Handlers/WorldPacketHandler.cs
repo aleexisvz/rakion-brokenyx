@@ -15,6 +15,7 @@ using Rakion.Network.Tcp;
 using Rakion.World.Channels;
 using Rakion.World.Configuration;
 using Rakion.World.Features.Economy;
+using Rakion.World.Fields;
 using Rakion.World.Modules;
 using Rakion.World.Session;
 
@@ -202,6 +203,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldChangeSlotStatus, HandleFieldChangeSlotStatusAsync);
         _registry.Map(ClientOpcode.FieldChangeTeam, HandleFieldChangeTeamAsync);
         _registry.Map(ClientOpcode.FieldChangeRule, HandleFieldChangeRuleAsync);
+        _registry.Map(ClientOpcode.FieldGameStart, HandleFieldGameStartAsync);
+        _registry.Map(ClientOpcode.FieldGameEnter, HandleFieldGameEnterAsync);
+        _registry.Map(ClientOpcode.FieldGameExit, HandleFieldGameExitAsync);
     }
 
     private async ValueTask HandleCharacterTutorialClearAsync(WorldSession session, CancellationToken cancellationToken)
@@ -1082,9 +1086,11 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             // Broadcast to remaining room members so their client clears the player's slot
             if (!roomDestroyed && field is not null)
             {
-                foreach (var member in field.Players)
+                await BroadcastToFieldAsync(field, response, cancellationToken).ConfigureAwait(false);
+
+                if (field.IsInProgress && !field.Players.Any(p => p.IsInGame))
                 {
-                    await SendPacketAsync(member.Session, response, cancellationToken).ConfigureAwait(false);
+                    await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -1333,6 +1339,107 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                     await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
                 }
             }
+        }
+    }
+
+    private async ValueTask HandleFieldGameStartAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGameStart rejected: not in a room.", session.Connection.ConnectionId);
+            return;
+        }
+
+        byte? result = field.TryStartGame(player);
+        if (result is null)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGameStart ignored in room #{Number}: not the host or already running.", session.Connection.ConnectionId, field.Number);
+            return;
+        }
+
+        _logger.LogInformation("[{ConnectionId}] Room #{Number} game start by '{Host}': result {Result}.", session.Connection.ConnectionId, field.Number, session.ActiveCharacter?.Name ?? "Unknown", result.Value);
+
+        var response = new FieldGameStartResponsePacket(result.Value);
+        if (result.Value != FieldGameStartResponsePacket.Started)
+        {
+            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await BroadcastToFieldAsync(field, response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleFieldGameEnterAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGameEnter rejected: not in a room.", session.Connection.ConnectionId);
+            return;
+        }
+
+        byte result = field.TryEnterGame(player);
+        _logger.LogInformation("[{ConnectionId}] Room #{Number} slot {Slot} game enter: result {Result}.", session.Connection.ConnectionId, field.Number, player.SlotIndex, result);
+
+        var response = new FieldGameEnterResponsePacket(result, player.SlotIndex);
+        if (result != FieldGameEnterResponsePacket.Entered)
+        {
+            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await BroadcastToFieldAsync(field, response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleFieldGameExitAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameExitRequestPacket.TryParse(payload.Span, out var req))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldGameExit request packet.", session.Connection.ConnectionId);
+            return;
+        }
+
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null || !player.IsInGame)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGameExit rejected: not in a running match.", session.Connection.ConnectionId);
+            return;
+        }
+
+        bool matchOver = field.ExitGame(player);
+        _logger.LogInformation("[{ConnectionId}] Room #{Number} slot {Slot} left the match (value {Value}, match over: {Over}).", session.Connection.ConnectionId, field.Number, player.SlotIndex, req.Value, matchOver);
+
+        await BroadcastToFieldAsync(field, new FieldGameExitBroadcastPacket(req.Value), cancellationToken).ConfigureAwait(false);
+        if (matchOver)
+        {
+            await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask EndFieldGameAsync(GameField field, CancellationToken cancellationToken)
+    {
+        field.EndGame();
+        _logger.LogInformation("Room #{Number} match ended.", field.Number);
+
+        // UNKNOWN: meaning of the end byte; 0 is sent until the match result flow is implemented.
+        await BroadcastToFieldAsync(field, new FieldGameEndBroadcastPacket(0), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask BroadcastToFieldAsync(GameField field, IPacket packet, CancellationToken cancellationToken)
+    {
+        foreach (var member in field.Players)
+        {
+            await SendPacketAsync(member.Session, packet, cancellationToken).ConfigureAwait(false);
         }
     }
 

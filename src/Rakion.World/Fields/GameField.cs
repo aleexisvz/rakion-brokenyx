@@ -194,6 +194,98 @@ public sealed class GameField
         }
     }
 
+    /// <summary>
+    /// Host starts the match, following the legacy checks (RakionWorldServ.exe 0x4079D0, Observed): modes 1, 3 and 4
+    /// need equal team sizes, mode 2 needs two players, and every player other than the host must be ready.
+    /// Returns null when the request is ignored (not the host, or the match is already running).
+    /// </summary>
+    public byte? TryStartGame(FieldPlayer requester)
+    {
+        lock (_lock)
+        {
+            if (!requester.IsMaster || IsInProgress)
+            {
+                return null;
+            }
+
+            var players = _playersBySession.Values.ToList();
+            int red = players.Count(p => p.SlotIndex < 10);
+            int blue = players.Count - red;
+
+            // UNKNOWN: the legacy server skips these checks when a per-slot flag of the host is 1, and compares a
+            // second pair of per-team counters (result 2); neither is reproduced.
+            bool teamsOk = Mode switch
+            {
+                1 or 3 or 4 => red == blue,
+                2 => players.Count >= 2,
+                _ => true,
+            };
+            if (!teamsOk)
+            {
+                return FieldGameStartResponsePacket.TeamsNotBalanced;
+            }
+
+            if (players.Any(p => !p.IsMaster && !p.IsReady))
+            {
+                return FieldGameStartResponsePacket.NotAllReady;
+            }
+
+            IsInProgress = true;
+            foreach (var player in players)
+            {
+                player.IsInGame = true;
+            }
+
+            return FieldGameStartResponsePacket.Started;
+        }
+    }
+
+    /// <summary>
+    /// A room member joins the running match (RakionWorldServ.exe 0x407C70, Observed).
+    /// UNKNOWN: the legacy team-size check for late joiners (result 2) is not reproduced.
+    /// </summary>
+    public byte TryEnterGame(FieldPlayer player)
+    {
+        lock (_lock)
+        {
+            if (!IsInProgress)
+            {
+                return FieldGameEnterResponsePacket.NotRunning;
+            }
+
+            player.IsInGame = true;
+            return FieldGameEnterResponsePacket.Entered;
+        }
+    }
+
+    /// <summary>
+    /// A player leaves the running match back to the waiting room (RakionWorldServ.exe 0x407E00, Observed: the slot
+    /// goes back to "not ready"). Returns true when nobody is left in the match, which ends it.
+    /// </summary>
+    public bool ExitGame(FieldPlayer player)
+    {
+        lock (_lock)
+        {
+            player.IsInGame = false;
+            player.IsReady = player.IsMaster;
+            return IsInProgress && !_playersBySession.Values.Any(p => p.IsInGame);
+        }
+    }
+
+    /// <summary>Ends the match: the room goes back to waiting and every player to "not ready" (RakionWorldServ.exe 0x407BE0, Observed).</summary>
+    public void EndGame()
+    {
+        lock (_lock)
+        {
+            IsInProgress = false;
+            foreach (var player in _playersBySession.Values)
+            {
+                player.IsInGame = false;
+                player.IsReady = player.IsMaster;
+            }
+        }
+    }
+
     public bool TryAddPlayer(WorldSession session, string password, out FieldPlayer? newPlayer, out byte failureReason)
     {
         lock (_lock)

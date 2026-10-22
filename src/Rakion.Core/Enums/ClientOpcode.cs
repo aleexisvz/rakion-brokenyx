@@ -356,6 +356,24 @@ public enum ClientOpcode : ushort
     /// </summary>
     FieldChat = 0x0047,
 
+    /// <summary>
+    /// Host starts the match. No payload.
+    /// Evidence: Observed in engine.dll ?SendFieldGameStart@IScavengerWorldNet@@UAEXXZ (opcode 0x0043).
+    /// </summary>
+    FieldGameStart = 0x0043,
+
+    /// <summary>
+    /// Player enters the running match of its room. No payload.
+    /// Evidence: Observed in engine.dll ?SendFieldGameEnter@IScavengerWorldNet@@UAEXXZ (opcode 0x0045).
+    /// </summary>
+    FieldGameEnter = 0x0045,
+
+    /// <summary>
+    /// Player leaves the running match: (u8).
+    /// Evidence: Observed in engine.dll ?SendFieldGameExit@IScavengerWorldNet@@UAEXE@Z (opcode 0x0046).
+    /// </summary>
+    FieldGameExit = 0x0046,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch probe / keep-alive sent to UDP Port 1 (40708).
