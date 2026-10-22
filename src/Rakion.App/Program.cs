@@ -119,6 +119,7 @@ builder.Services.AddSingleton<AutoFetchServer>();
 
 builder.Services.AddSingleton<IChannelManager, ChannelManager>();
 builder.Services.AddSingleton<ISessionSender, WorldSessionSender>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IWorldOpcodeModule, InventoryModule>();
 builder.Services.AddSingleton<WorldPacketHandler>();
 builder.Services.AddSingleton<WorldUdpPacketHandler>();
