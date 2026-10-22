@@ -8,6 +8,23 @@ namespace Rakion.Database.Repositories;
 public interface IInventoryRepository
 {
     Task<ItemEntity?> GetItemTemplateAsync(int itemId, CancellationToken ct = default);
+
+    /// <summary>Inserts the templates or updates the existing rows with the same id. Returns the row count.</summary>
+    Task<int> UpsertItemTemplatesAsync(IReadOnlyList<ItemEntity> templates, CancellationToken ct = default);
+
+    /// <summary>
+    /// Charges the price and puts one new item into an empty account box slot, in one transaction.
+    /// Returns null (and changes nothing) when the balance is too low or the slot is no longer empty;
+    /// otherwise the balances after the purchase.
+    /// </summary>
+    Task<PurchaseOutcome?> PurchaseIntoBoxAsync(
+        int userId,
+        int itemId,
+        bool payWithGold,
+        int price,
+        byte slot,
+        byte level,
+        CancellationToken ct = default);
     Task<IReadOnlyList<UserItemEntity>> GetUserItemsAsync(int userId, int? characterId = null, CancellationToken ct = default);
     Task<UserItemEntity> AddUserItemAsync(UserItemEntity item, CancellationToken ct = default);
     Task<bool> RemoveUserItemAsync(int userItemId, int userId, CancellationToken ct = default);
