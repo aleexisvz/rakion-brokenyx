@@ -40,6 +40,7 @@ public sealed record WorldLoginResponsePacket(
     byte UnlockedSlots = 3,
     IReadOnlyList<CharacterSummary>? Characters = null,
     string Username = "",
+    bool TutorialCompleted = false,
     ushort ResponseOpcode = (ushort)ServerOpcode.WorldLogin) : IPacket
 {
     public ushort Opcode => ResponseOpcode;
@@ -85,7 +86,10 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteUInt32(Gold); // Gold (engine.dll 0x361960DA -> [AccountInfo + 0x64], RakionWorldServ 0x00427008)
         writer.WriteUInt32(Cash); // Cash (engine.dll 0x361960E8 -> [AccountInfo + 0x68], RakionWorldServ 0x00427002)
         writer.WriteByte(UnlockedSlots); // UnlockedSlots (engine.dll 0x361960F5 -> [AccountInfo + 0x6C], RakionWorldServ 0x00427032)
-        writer.WriteByte(0); // SelectedSlotIndex (engine.dll 0x36196100 -> [esp + 0x50], RakionWorldServ 0x00427050)
+        // Tutorial flag: engine.dll 0x36196100 reads it, rakion.bin 0x47E47D stores it at listener+0x7C, and
+        // rakion.bin 0x468C4B blocks character entry with a dialog while it is 0. Offsets Observed; meaning
+        // Derived (the legacy login query reads gold, tutorial, slot, bag from UserGameInfo).
+        writer.WriteByte(TutorialCompleted ? (byte)1 : (byte)0);
 
         var list = Characters ?? [];
         int totalSlots = Math.Min((int)UnlockedSlots, 4);
