@@ -205,7 +205,9 @@ public sealed class FieldIntegrationTests
         Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadExit, out var pExit));
         Assert.AreEqual((byte)10, pExit.SlotIndex);
 
-        // Guest also receives FieldList (to transition UI back to lobby) and ChannelCharacters
+        // Guest also receives ChannelEnter (rebuilds lobby UI), FieldList and ChannelCharacters
+        var (opGuestReenter, _) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, opGuestReenter);
         var (opGuestFieldList, payloadGuestFieldList) = await ReadServerPacketAsync(s2);
         Assert.AreEqual((ushort)ServerOpcode.FieldList, opGuestFieldList);
         var (opGuestRoster, payloadGuestRoster) = await ReadServerPacketAsync(s2);
@@ -224,7 +226,9 @@ public sealed class FieldIntegrationTests
         Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadHostExit, out var pHostExit));
         Assert.AreEqual((byte)0, pHostExit.SlotIndex);
 
-        // Host receives FieldList and ChannelCharacters
+        // Host receives ChannelEnter, FieldList and ChannelCharacters
+        var (opHostReenter, _) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, opHostReenter);
         var (opHostFieldList, payloadHostFieldList) = await ReadServerPacketAsync(s1);
         Assert.AreEqual((ushort)ServerOpcode.FieldList, opHostFieldList);
         var (opHostRoster, payloadHostRoster) = await ReadServerPacketAsync(s1);

@@ -1088,8 +1088,22 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 }
             }
 
-            // In v258 client, receiving FieldList (0x0036) while in WaitRoom (state 0x19) triggers
-            // transition back to SelectGame channel lobby (state 0x17).
+            // Observed (rakion.bin): FieldExit handler 0x00474410 only empties the slot, and the
+            // WaitRoom menu state is 0x1C (set near 0x00447030). The only code path that rebuilds
+            // the SelectGame lobby UI (ctor 0x00469320) from a room is the ChannelEnter handler
+            // 0x00473DA0 (case result 0, matching channel index). So re-send ChannelEnter.
+            var channel = session.ActiveChannel;
+            var reenter = new ChannelEnterResponsePacket(
+                ResultCode: 0,
+                ChannelIndex: channel.Index,
+                ServerId: 0,
+                ChannelName: channel.Name,
+                ChannelType: (byte)channel.Type,
+                MaxPlayers: channel.MaxPlayers,
+                Flags: 0);
+            await SendPacketAsync(session, reenter, cancellationToken).ConfigureAwait(false);
+
+            // Refresh the room list once the client is back in SelectGame (state 0x17).
             var fields = session.ActiveChannel.FieldManager.GetFields(session.ActiveChannel.Index);
             var pagedEntries = fields
                 .Take(6)
