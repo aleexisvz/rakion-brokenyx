@@ -192,6 +192,109 @@ public enum ClientOpcode : ushort
     /// </summary>
     ChannelChat = 0x0022,
 
+    // --- Inventory / Shop / Blacksmith (opcode read from the Send* export's immediate) ---
+    /// <summary>
+    /// Opens the inventory screen. No payload.
+    /// Evidence: Observed in engine.dll ?SendInventoryEnter@IScavengerWorldNet@@UAEXXZ (0x002C).
+    /// </summary>
+    InventoryEnter = 0x002C,
+
+    /// <summary>
+    /// Closes the inventory screen. No payload.
+    /// Evidence: Observed in engine.dll ?SendInventoryLeave@IScavengerWorldNet@@UAEXXZ (0x002D).
+    /// </summary>
+    InventoryLeave = 0x002D,
+
+    /// <summary>
+    /// Buys an item: (u16, u8, u8, u16).
+    /// Evidence: Observed in engine.dll ?SendInventoryBuy@IScavengerWorldNet@@UAEXGEEG@Z (0x002E).
+    /// </summary>
+    InventoryBuy = 0x002E,
+
+    /// <summary>
+    /// Sells an item: (u8).
+    /// Evidence: Observed in engine.dll ?SendInventorySell@IScavengerWorldNet@@UAEXE@Z (0x002F).
+    /// </summary>
+    InventorySell = 0x002F,
+
+    /// <summary>
+    /// Moves an item: (u8, u8, u8, u8).
+    /// Evidence: Observed in engine.dll ?SendInventoryMove@IScavengerWorldNet@@UAEXEEEE@Z (0x0031).
+    /// </summary>
+    InventoryMove = 0x0031,
+
+    /// <summary>
+    /// Buys a bag: (u8, u16).
+    /// Evidence: Observed in engine.dll ?SendInventoryBuyBag@IScavengerWorldNet@@UAEXEG@Z (0x0032).
+    /// </summary>
+    InventoryBuyBag = 0x0032,
+
+    /// <summary>
+    /// Spends one stat point: (u8).
+    /// Evidence: Observed in engine.dll ?SendInventoryAllocationPoint@IScavengerWorldNet@@UAEXE@Z (0x0033).
+    /// </summary>
+    InventoryAllocationPoint = 0x0033,
+
+    /// <summary>
+    /// Buys PowerUser time: (u8, u8, u16).
+    /// Evidence: Observed in engine.dll ?SendInventoryBuyPowerUser@IScavengerWorldNet@@UAEXEEG@Z (0x0034).
+    /// </summary>
+    InventoryBuyPowerUser = 0x0034,
+
+    /// <summary>
+    /// Buys a character slot: (u8, u16).
+    /// Evidence: Observed in engine.dll ?SendInventoryBuyCharacterSlot@IScavengerWorldNet@@UAEXEG@Z (0x0035).
+    /// </summary>
+    InventoryBuyCharacterSlot = 0x0035,
+
+    /// <summary>
+    /// Lists pending presents. No payload.
+    /// Evidence: Observed in engine.dll ?SendPresentPeek@IScavengerWorldNet@@UAEXXZ (0x006B).
+    /// </summary>
+    PresentPeek = 0x006B,
+
+    /// <summary>
+    /// Accepts a present: (u32, u16).
+    /// Evidence: Observed in engine.dll ?SendPresentAccept@IScavengerWorldNet@@UAEXKG@Z (0x006C).
+    /// </summary>
+    PresentAccept = 0x006C,
+
+    /// <summary>
+    /// Discards a present: (u32).
+    /// Evidence: Observed in engine.dll ?SendPresentDispose@IScavengerWorldNet@@UAEXK@Z (0x006D).
+    /// </summary>
+    PresentDispose = 0x006D,
+
+    /// <summary>
+    /// Buys a potion slot. No payload.
+    /// Evidence: Observed in engine.dll ?SendInventoryBuyPotionSlot@IScavengerWorldNet@@UAEXXZ (0x006F).
+    /// </summary>
+    InventoryBuyPotionSlot = 0x006F,
+
+    /// <summary>
+    /// Buys a stage rank clear. No payload.
+    /// Evidence: Observed in engine.dll ?SendInventoryBuyStageRankClear@IScavengerWorldNet@@UAEXXZ (0x0070).
+    /// </summary>
+    InventoryBuyStageRankClear = 0x0070,
+
+    /// <summary>
+    /// Buys stage level-free access. No payload.
+    /// Evidence: Observed in engine.dll ?SendInventoryBuyStageLevelFree@IScavengerWorldNet@@UAEXXZ (0x0071).
+    /// </summary>
+    InventoryBuyStageLevelFree = 0x0071,
+
+    /// <summary>
+    /// Stacks potions: (u8, u8).
+    /// Evidence: Observed in engine.dll ?SendInventoryStackPotion@IScavengerWorldNet@@UAEXEE@Z (0x0073).
+    /// </summary>
+    InventoryStackPotion = 0x0073,
+
+    /// <summary>
+    /// Blacksmith reinforce: (u8, u8, u8, u8*).
+    /// Evidence: Observed in engine.dll ?SendEncahntReinforce@IScavengerWorldNet@@UAEXEEEPAE@Z (0x0074).
+    /// </summary>
+    EnchantReinforce = 0x0074,
+
     // --- Fields / Rooms ---
     /// <summary>
     /// Requests the active field / room list in the channel.
