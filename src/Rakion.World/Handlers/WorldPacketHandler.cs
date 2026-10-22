@@ -959,6 +959,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             out var field,
             out var failureReason))
         {
+            field!.Rules = FieldRules.FromCreate(req);
             _logger.LogInformation(
                 "[{ConnectionId}] Room #{Number} '{Name}' created by '{Host}' in channel {Channel}.",
                 session.Connection.ConnectionId,
@@ -1008,8 +1009,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 player!.SlotIndex,
                 player.Team);
 
-            var response = new FieldCreateResponsePacket(ResultCode: 0, RoomNumber: field.Number);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            await AnnounceJoinAsync(field, player, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -1019,8 +1019,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 failureReason,
                 session.ActiveCharacter.Name);
 
-            var response = new FieldCreateResponsePacket(ResultCode: failureReason, RoomNumber: 0);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new FieldQuickEnterFailedPacket(), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -1048,15 +1047,93 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             out var player,
             out var failureReason))
         {
-            var response = new FieldCreateResponsePacket(ResultCode: 0, RoomNumber: field!.Number);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "[{ConnectionId}] '{Player}' entered room #{Number} (Slot: {Slot}).",
+                session.Connection.ConnectionId,
+                session.ActiveCharacter.Name,
+                field!.Number,
+                player!.SlotIndex);
+
+            await AnnounceJoinAsync(field, player, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            var response = new FieldCreateResponsePacket(ResultCode: failureReason, RoomNumber: 0);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "[{ConnectionId}] FieldEnter room #{Number} refused for '{Player}': result {Result}.",
+                session.Connection.ConnectionId,
+                req.RoomNumber,
+                session.ActiveCharacter.Name,
+                failureReason);
+
+            await SendPacketAsync(session, new FieldPlayerEnterPacket(failureReason), cancellationToken).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Legacy join order (RakionWorldServ.exe 0x407358..0x4074EF, Observed): the new member goes to the whole room
+    /// on 0x38, then the newcomer gets the room details on 0x37.
+    /// </summary>
+    private async ValueTask AnnounceJoinAsync(GameField field, FieldPlayer newcomer, CancellationToken cancellationToken)
+    {
+        var slots = field.SnapshotSlots();
+        var records = new Dictionary<FieldPlayer, FieldPlayerRecord>();
+        foreach (var (_, member) in slots)
+        {
+            if (member is not null)
+            {
+                records[member] = await BuildPlayerRecordAsync(member.Session, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var entered = new FieldPlayerEnterPacket(
+            FieldPlayerEnterPacket.Entered,
+            newcomer.SlotIndex,
+            GameField.SlotStateOf(newcomer),
+            PlayerIdOf(newcomer.Session),
+            0,
+            records[newcomer]);
+        await BroadcastToFieldAsync(field, entered, cancellationToken).ConfigureAwait(false);
+
+        var rules = field.Rules;
+        var info = new FieldInfoPacket(
+            field.Number,
+            field.IsInProgress ? (byte)2 : (byte)1,
+            field.MasterSlot,
+            rules.Kind,
+            rules.Mode,
+            rules.MinLevel,
+            rules.MaxLevel,
+            rules.Extra,
+            0,
+            rules.Option,
+            rules.TimeLimit,
+            rules.Goal,
+            field.Name,
+            field.Password,
+            rules.MapName,
+            slots.Select(s => s.Player is null
+                ? new FieldSlotInfo(s.State, 0, 0, null)
+                : new FieldSlotInfo(s.State, PlayerIdOf(s.Player.Session), 0, records[s.Player])).ToList());
+        await SendPacketAsync(newcomer.Session, info, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<FieldPlayerRecord> BuildPlayerRecordAsync(WorldSession member, CancellationToken cancellationToken)
+    {
+        var character = member.ActiveCharacter;
+        IReadOnlyList<ItemSlot>? equipment = null;
+        if (_accountInventory is not null && member.User is not null && character is not null)
+        {
+            var inventory = await _accountInventory
+                .GetAccountInventoryAsync(member.User.Id, member.GameInfo?.BagCount ?? 1, cancellationToken)
+                .ConfigureAwait(false);
+            equipment = inventory.EquipmentOf(character.Id);
+        }
+
+        return new FieldPlayerRecord(character?.Name ?? string.Empty, string.Empty, (byte)(character?.Class ?? 0), (byte)(character?.Level ?? 1), equipment);
+    }
+
+    // Inferred: the legacy id is the user's server slot index; the account id fills the same role here.
+    private static ushort PlayerIdOf(WorldSession member) => (ushort)(member.User?.Id ?? 0);
 
     private async ValueTask HandleFieldExitAsync(
         WorldSession session,
@@ -1318,6 +1395,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 req.SubMode,
                 (byte)0))
             {
+                field.Rules = field.Rules.With(req);
                 _logger.LogInformation(
                     "[{ConnectionId}] Room #{Number} rules updated by host '{Host}'.",
                     session.Connection.ConnectionId,

@@ -67,7 +67,10 @@ public sealed class GameFieldMatchTests
     private static (GameField Field, FieldPlayer Host) CreateField(byte mode)
     {
         var session = CreateSession(1);
-        var field = new GameField(1, 0, "room", string.Empty, mode, 0, 8, 10, 1, 0, 0, session);
+        var field = new GameField(1, 0, "room", string.Empty, 0, 0, 8, 10, 1, 0, 0, session)
+        {
+            Rules = FieldRules.Default with { Mode = mode },
+        };
         Assert.IsTrue(field.TryGetPlayer(session.Connection.ConnectionId, out var host));
         return (field, host!);
     }

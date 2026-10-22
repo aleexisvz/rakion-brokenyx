@@ -25,6 +25,10 @@ public sealed class GameField
     public byte SubMode { get; set; }
     public byte LevelLimit { get; set; }
     public bool IsInProgress { get; set; }
+
+    /// <summary>Rules with the legacy field meanings; the properties above keep the packet-record names.</summary>
+    public FieldRules Rules { get; set; } = FieldRules.Default;
+
     public uint HostUserId { get; private set; }
     public ushort HostLevel { get; private set; }
     public string HostCharacterName { get; private set; } = string.Empty;
@@ -89,6 +93,33 @@ public sealed class GameField
     public IReadOnlyCollection<FieldPlayer> Players => _playersBySession.Values.ToList();
 
     public bool IsSlotClosed(byte slotIndex) => slotIndex < _isSlotClosed.Length && _isSlotClosed[slotIndex];
+
+    /// <summary>
+    /// Wire state of every slot (see <see cref="FieldSlotInfo"/>) with its player. Inferred: the host shows as
+    /// waiting rather than ready, as the legacy start check never asks the host to be ready.
+    /// </summary>
+    public IReadOnlyList<(byte State, FieldPlayer? Player)> SnapshotSlots()
+    {
+        lock (_lock)
+        {
+            var slots = new (byte, FieldPlayer?)[_slots.Length];
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                slots[i] = _slots[i] is { } player
+                    ? (SlotStateOf(player), player)
+                    : (_isSlotClosed[i] ? FieldSlotInfo.Closed : FieldSlotInfo.Empty, null);
+            }
+
+            return slots;
+        }
+    }
+
+    public static byte SlotStateOf(FieldPlayer player) =>
+        player.IsInGame ? FieldSlotInfo.InGame
+        : player.IsReady && !player.IsMaster ? FieldSlotInfo.Ready
+        : FieldSlotInfo.Waiting;
+
+    public byte MasterSlot => _playersBySession.Values.FirstOrDefault(p => p.IsMaster)?.SlotIndex ?? 0;
 
     public bool TryGetPlayer(Guid connectionId, out FieldPlayer? player) =>
         _playersBySession.TryGetValue(connectionId, out player);
@@ -214,7 +245,7 @@ public sealed class GameField
 
             // UNKNOWN: the legacy server skips these checks when a per-slot flag of the host is 1, and compares a
             // second pair of per-team counters (result 2); neither is reproduced.
-            bool teamsOk = Mode switch
+            bool teamsOk = Rules.Mode switch
             {
                 1 or 3 or 4 => red == blue,
                 2 => players.Count >= 2,
@@ -292,27 +323,29 @@ public sealed class GameField
         {
             newPlayer = null;
 
-            if (HasPassword && !string.Equals(Password, password, StringComparison.Ordinal))
+            // Legacy order (RakionWorldServ.exe 0x406F40): running match, level range, free slot, password.
+            // MaxPlayers is not a capacity (it holds the mode byte, see FieldRules); open slots decide.
+            if (_playersBySession.ContainsKey(session.Connection.ConnectionId))
             {
-                failureReason = 1; // Wrong password
+                failureReason = FieldPlayerEnterPacket.RoomUnavailable;
                 return false;
             }
 
             if (IsInProgress)
             {
-                failureReason = 2; // Match already started
+                failureReason = FieldPlayerEnterPacket.InProgress;
                 return false;
             }
 
-            if (PlayerCount >= MaxPlayers)
+            if (Rules.Mode is >= 1 and <= 4 && !Rules.AllowsLevel(session.ActiveCharacter?.Level ?? 0))
             {
-                failureReason = 3; // Room full
+                failureReason = FieldPlayerEnterPacket.LevelOutOfRange;
                 return false;
             }
 
-            if (_playersBySession.ContainsKey(session.Connection.ConnectionId))
+            if (HasPassword && !string.Equals(Password, password, StringComparison.Ordinal))
             {
-                failureReason = 4; // Already inside
+                failureReason = FieldPlayerEnterPacket.WrongPassword;
                 return false;
             }
 
@@ -365,7 +398,7 @@ public sealed class GameField
 
             if (availableSlot < 0)
             {
-                failureReason = 3; // Room full
+                failureReason = FieldPlayerEnterPacket.RoomFull;
                 return false;
             }
 

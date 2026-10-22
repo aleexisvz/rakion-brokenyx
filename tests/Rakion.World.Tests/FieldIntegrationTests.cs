@@ -166,11 +166,21 @@ public sealed class FieldIntegrationTests
 
         var quickReq = new FieldQuickEnterRequestPacket();
         await SendClientPacketAsync(s2, 3, quickReq.Opcode, quickReq);
+        // The new member is announced to the whole room (0x0038), then the guest gets the room details (0x0037)
         var (opQuick, payloadQuick) = await ReadServerPacketAsync(s2);
-        Assert.AreEqual((ushort)ServerOpcode.FieldCreate, opQuick);
-        Assert.IsTrue(FieldCreateResponsePacket.TryParse(payloadQuick, out var pQuickEnter));
-        Assert.AreEqual((byte)0, pQuickEnter.ResultCode);
-        Assert.AreEqual((ushort)1, pQuickEnter.RoomNumber);
+        Assert.AreEqual((ushort)ServerOpcode.FieldEnter, opQuick);
+        Assert.IsTrue(FieldPlayerEnterPacket.TryParse(payloadQuick, out var pQuickEnter));
+        Assert.AreEqual(FieldPlayerEnterPacket.Entered, pQuickEnter.Result);
+        Assert.AreEqual("GuestNinja", pQuickEnter.Player!.Name);
+
+        var (opHostSeesGuest, _) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldEnter, opHostSeesGuest);
+
+        var (opInfo, payloadInfo) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldInfo, opInfo);
+        Assert.IsTrue(FieldInfoPacket.TryParse(payloadInfo, out var pInfo));
+        Assert.AreEqual((ushort)1, pInfo.RoomNumber);
+        Assert.AreEqual("GuestNinja", pInfo.Slots[pQuickEnter.SlotIndex].Player!.Name);
 
         // 5. Guest toggles ready (0x003D)
         var readyReq = new FieldReadyRequestPacket(ReadyState: 1);
@@ -296,8 +306,12 @@ public sealed class FieldIntegrationTests
 
         var quickReq = new FieldQuickEnterRequestPacket();
         await SendClientPacketAsync(s2, 13, quickReq.Opcode, quickReq);
-        var (opQuick, payloadQuick) = await ReadServerPacketAsync(s2);
-        Assert.AreEqual((ushort)ServerOpcode.FieldCreate, opQuick);
+        var (opQuick, _) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldEnter, opQuick);
+        var (opHostSeesGuest, _) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldEnter, opHostSeesGuest);
+        var (opInfo, _) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldInfo, opInfo);
 
         // 5. Guest switches team to Team 0 (slot 1)
         var teamReq = new FieldChangeTeamRequestPacket();
