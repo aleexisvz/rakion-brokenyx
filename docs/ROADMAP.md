@@ -5,6 +5,51 @@
 
 ---
 
+## Organización del Trabajo: Dos Carriles
+
+Dos agentes trabajan en paralelo, cada uno en su propio `git worktree` (`..\rakion-claude` y
+`..\rakion-gemini`). Nadie edita archivos en la carpeta del otro agente.
+
+| Carril | Dueño | Rutas | Fases |
+| :--- | :--- | :--- | :--- |
+| **A — Persistencia y economía** | Claude | `src/Rakion.Database/`, `src/Rakion.Broker/`, `src/Rakion.World/Features/Economy/`, `src/Rakion.Maintenance/` y sus tests | 4 y 7 |
+| **B — Mundo en tiempo real** | Gemini | `src/Rakion.World/` (excepto `Features/Economy/`), `src/Rakion.Relay/`, `src/Rakion.Network/` y sus tests | 5 y 6 |
+| **Compartido** | Un único dueño a la vez | `src/Rakion.Core/`, `src/Rakion.App/`, `config/appsettings.json`, `RakionBrokenyx.sln`, `Directory.Build.props` | Contratos |
+| **Integrador** | Mantenedor | Checkboxes de este archivo, `README.md` raíz, `AGENTS.md` | — |
+
+### Contratos Compartidos
+
+Cada contrato se entrega en un PR pequeño que se mergea antes de que el otro carril lo consuma.
+
+| ID | Contrato | Dueño | Consumidor | Bloquea |
+| :--- | :--- | :--- | :--- | :--- |
+| **C-0** | Separar `RakionOpcode` en `ClientOpcode` (C→S) y `ServerOpcode` (S→C) y eliminar alias con valores repetidos, sin cambiar bytes en el cable. | B | A, B | 4.1, 5.x |
+| **C-1** | `IWorldOpcodeModule`: registro tipado `opcode → handler` en World; `WorldPacketHandler` delega en él los opcodes que no maneja. | B | A (`EconomyModule`) | 4.1 |
+| **C-2** | `IWorldSessionView` (usuario, personaje, canal, sala, en partida) + `ISessionSender` (enviar a una sesión). | B | A | 4.1, 7.3, 7.4 |
+| **C-3** | Paquetes de inventario, tienda, herrería y estadísticas en `Rakion.Core/Packets/`. | A | B | 4.x |
+| **C-4** | `IMatchResultService` en Database: persistir EXP, oro, victorias/derrotas y `logdieplayer` en una transacción. | A | B | 6.4 |
+| **C-5** | `IChatCommandInterceptor`: el chat de canal y de sala lo consulta antes de difundir. | B | A | 7.3 |
+| **C-6** | `IWorldTelemetry`: sesiones, salas y partidas activas. | B | A | 7.4 |
+
+### Reglas de Integración
+
+1. Cada carril actualiza el README de sus módulos. Los checkboxes de este archivo solo los marca el integrador al mergear.
+2. Cada PR declara qué paquetes y contratos de `Rakion.Core` usa o modifica.
+3. Cada paquete tiene un test de round-trip (serializar → bytes → parsear). Quien lo añade es su dueño; el otro carril lo consume sin reescribirlo.
+4. Cada ítem lleva su etiqueta de evidencia y la marca "verificado con cliente real: sí/no".
+5. Si un carril necesita un opcode o layout del otro, no lo implementa: lo pide al mantenedor y se coordina.
+6. Antes de tocar una ruta compartida, el carril lo anuncia al mantenedor; el otro carril no la toca hasta que ese PR se mergee.
+
+### Resolución del Solapamiento UDP
+
+Los listeners UDP 40708/40709 ya existen en `Rakion.World` desde el ítem 3.1 y el mapa
+cookie → sesión vive allí. Por eso los sockets se quedan en World, y `Rakion.Relay` nace
+como librería sin sockets con la lógica de relevo (registro de endpoints por slot,
+tunneling `0x0401`, limitación de tasa). `WorldUdpPacketHandler` le despacha los paquetes.
+Así no se enlaza el mismo puerto en dos sitios y Relay se prueba sin red.
+
+---
+
 ## Estructura de la Solución Propuesta
 
 ```text
@@ -15,7 +60,8 @@ rakion-brokenyx/
 │   ├── Rakion.Database/         # Modelos de datos, Dapper, Repositorios MySQL/MariaDB
 │   ├── Rakion.Broker/           # Servidor de Handshake, Login y Entrega de ServerList (Puerto 40706)
 │   ├── Rakion.World/            # Servidor de Juego: Lobby, Salas, Inventario, Herrería (Puerto 40708 + UDP dual)
-│   ├── Rakion.Relay/            # Servidor UDP de Relevo P2P y Sincronización de Combate (40708/40709)
+│   ├── Rakion.Relay/            # Lógica de relevo UDP P2P (sin sockets; los listeners 40708/40709 viven en World)
+│   ├── Rakion.Maintenance/      # Rankings, antifraude y tareas programadas (fase 7)
 │   └── Rakion.App/              # Punto de entrada unificado / Daemon CLI para ejecutar todos los servicios
 ├── tests/
 │   ├── Rakion.Core.Tests/       # Pruebas unitarias de serialización de paquetes, opcodes y AES-128
@@ -68,7 +114,7 @@ rakion-brokenyx/
   - Repositorios desacoplados con Dapper (`IUserRepository`, `ICharacterRepository`, `IInventoryRepository`).
   - `IAccountBalanceRepository`: Operaciones transaccionales atómicas (`WHERE gold >= @Amount`) que erradican exploits de duplicación (*duping*) y condiciones de carrera.
 - [x] **1.4 Pruebas Automatizadas de Persistencia:**
-  - Pruebas unitarias de hasheo y 12 pruebas de integración en `tests/Rakion.Database.Tests` sobre SQLite en memoria validando transacciones de saldo, límites de slots, unicidad de personajes y CRUD de inventario.
+  - Pruebas unitarias de hasheo y pruebas de integración en `tests/Rakion.Database.Tests` sobre SQLite en memoria validando transacciones de saldo, límites de slots, unicidad de personajes y CRUD de inventario.
 
 ---
 
@@ -84,7 +130,7 @@ rakion-brokenyx/
   - **Resultado visual:** La pantalla de selección de servidores del cliente se dibuja correctamente con los servidores en verde.
 - [x] **2.3 Manejador del Opcode `0x1310` / `0x3000` / `0x4000` (SV_AUTH_LOGIN):**
   - Desempaquetar `UserID`, `Password` y versión del cliente (`LoginRequestPacket`).
-  - Autenticación dinámica de `NyxLauncher.exe`: descifrado AES-128-ECB de la clave estática `0x464FA0`, verificación de desafío de contraseña con clave de sesión `SHA-0` (`NyxLauncherCrypto`), y vinculación del usuario autenticado a la conexión TCP para que `0x4000` ("Start Game") emita el ticket de sesión al usuario real.
+  - Autenticación dinámica de `NyxLauncher.exe`: descifrado AES-128-ECB de la clave estática `0x464FA0`, verificación de desafío de contraseña con clave de sesión `SHA-0` (`NyxLauncherCrypto`), y vinculación del usuario autenticado a la conexión TCP para que `0x4000` (nombrado `SV_AUTH_LOGIN_4` en `BrokenServer`, **Observed**; su papel de "Start Game" es **Inferred** del flujo del launcher) emita el ticket de sesión al usuario real.
   - Validar contra la base de datos (`IUserRepository`), con actualización automática transparente a BCrypt de contraseñas heredadas (MD5 / plaintext).
   - Comprobar estado de baneo en `user_game_info` (`is_banned`, `ban_date`, `ban_reason`).
   - Responder con código de éxito (`LoginResultCode.Success`) o error de credenciales/baneo (`LoginResponsePacket`).
@@ -96,7 +142,7 @@ rakion-brokenyx/
 
 ### Fase 3: World Server (Gestión de Personajes, Canales y Lobby)
 > **Objetivo:** Lograr que el cliente entre al juego en el puerto 40708, cargue sus personajes, permita crear/borrar y acceda al canal de Lobby.
-> **Estado:** Fase 3 Completada al 100% (Items 3.1 a 3.6 terminados y verificados con pruebas automatizadas).
+> **Estado:** Completada (100%). Ítems 3.1 a 3.6 terminados con pruebas automatizadas. Verificado con cliente real: 3.1–3.5 sí; 3.6 pendiente de confirmar por el mantenedor.
 
 - [x] **3.1 Servidor TCP y Dual UDP en Puertos 40708/40709:** Listener principal TCP de sesiones de juego y listeners duales UDP para responder a sondeos de NAT traversal / keep-alive del cliente.
 - [x] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
@@ -117,84 +163,122 @@ rakion-brokenyx/
 
 ---
 
+> **Leyenda de ítems (fases 4–7):** cada ítem declara su **Evidencia** (Observed / Derived /
+> Inferred / Unknown, ver `AGENTS.md` §3) y si fue **verificado con cliente real** (sí/no).
+> Un ítem solo se marca `[x]` cuando su PR está mergeado; el integrador lo marca al mergear.
+
 ### Fase 4: Economía, Inventario, Tienda y Herrería
 > **Objetivo:** Permitir a los jugadores gestionar sus objetos, comprar en la tienda y mejorar equipamiento en la herrería.
+> **Carril:** A. **Código:** `src/Rakion.World/Features/Economy/`, `src/Rakion.Database/`, paquetes C-3 en `Rakion.Core`.
 
+- [ ] **4.0 Prerrequisitos:** contratos C-0, C-1 y C-2 mergeados en `main`.
 - [ ] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):**
   - Enviar al cliente el mapa de ranuras ocupadas (armas, cascos, pecheras, accesorios, criaturas invocables, pociones) con sus niveles de forja y duraciones.
-- [ ] **4.2 Tienda de Objetos (`SendInventoryBuy`):**
-  - Validar precio en oro o cash en el catálogo `ItemInfo`.
-  - Descontar saldo de forma atómica y asignar el item en `UserItemInfo`.
-- [ ] **4.3 Venta y Movimiento de Items (`SendInventorySell` y `SendInventoryMove`):**
+  - Evidencia: petición `SendInventoryEnter()` = opcode `0x002C` sin payload, y `SendInventoryLeave()` = `0x002D`, **Observed** (inmediato del opcode en `engine.dll`). Layout de la respuesta del servidor **Unknown** (requiere observar el parser del cliente). Lectura de inventario en BD: ya existe (`IInventoryRepository.GetUserItemsAsync`, 1.3).
+  - Verificado con cliente real: no.
+- [ ] **4.2 Tienda de Objetos (`SendInventoryBuy(uint16 itemId, uint8 type, uint8 period, uint16 price)`):**
+  - Validar precio en oro o cash contra el catálogo `ItemInfo` en servidor (el `price` enviado por el cliente nunca se usa como verdad).
+  - Descontar saldo de forma atómica y asignar el item en `UserItemInfo` en la misma transacción, con log.
+  - Evidencia: opcode `0x002E` y tipos `(u16, u8, u8, u16)` **Observed** (`engine.dll`); semántica de `type`/`period` **Inferred**; respuesta **Unknown**. Compras relacionadas: `BuyBag` `0x0032`, `BuyPowerUser` `0x0034`, `BuyCharacterSlot` `0x0035`, `BuyPotionSlot` `0x006F` (**Observed**).
+  - Verificado con cliente real: no.
+- [ ] **4.3 Venta y Movimiento de Items (`SendInventorySell(uint8)` y `SendInventoryMove(uint8, uint8, uint8, uint8)`):**
   - Permitir reorganizar objetos entre bolsas y vender items por oro.
-- [ ] **4.4 Asignación de Puntos de Nivel (`SendInventoryAllocationPoint`):**
+  - Evidencia: `Sell` = `0x002F`, `Move` = `0x0031` con 4 × `u8` **Observed**; significado de cada byte de `Move` **Inferred**; `StackPotion(u8, u8)` = `0x0073` **Observed**; `CUser::ulSellGold` **Observed** (símbolo), fórmula del precio de venta **Unknown** (configurable).
+  - Verificado con cliente real: no.
+- [ ] **4.4 Asignación y Reseteo de Puntos (`SendInventoryAllocationPoint(uint8 statIndex)`, `SendCharacterStateClear(uint8, uint16 cost)`):**
   - Permitir repartir puntos a las estadísticas primarias (`hit1`–`hit4`, `chit`, `hp`, `ap`, velocidad, CP) y recalcular atributos totales.
+  - Evidencia: opcode de `StateClear` `0x001B` **Observed**; mapeo `statIndex → estadística` **Inferred**; `AllocationPoint(u8)` = `0x0033` **Observed**.
+  - Verificado con cliente real: no.
 - [ ] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`):**
-  - Lógica matemática de refinamiento con gemas:
-    - Nivel 0 a +3: 100% éxito garantizado (protección contra destrucción).
-    - Nivel +4 a +15: Probabilidad configurable de éxito, degradación (-1) o rotura.
+  - Petición `SendEncahntReinforce(u8, u8, u8, u8*)` = `0x0074` **Observed**; significado de los parámetros **Inferred**.
+  - Cadena `"Not Destroy below lv3 Item!!"` en `CUser::CheckEnchantReinforce`: **Observed**. Prueba solo que los items por debajo de lv3 no se destruyen.
+  - "0 a +3 con 100 % de éxito": **Inferred** (no probado). Nivel máximo (+15) y probabilidades de éxito/degradación/rotura: **Unknown** → configurables en `appsettings.json`.
   - Sincronización instantánea de las nuevas estadísticas del item.
+  - Verificado con cliente real: no.
+- [ ] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*:
+  - Evidencia: `Peek()` `0x006B`, `Accept(u32, u16)` `0x006C`, `Dispose(u32)` `0x006D` **Observed**; respuestas **Unknown**.
+  - Verificado con cliente real: no.
 
 ---
 
 ### Fase 5: Sistema de Salas (Matchmaking y Modos de Juego)
 > **Objetivo:** Permitir la creación de salas de espera, cambio de equipos, selección de mapas y cuenta regresiva de inicio.
+> **Carril:** B. **Código:** `src/Rakion.World/` (excepto `Features/Economy/`).
 
-- [ ] **5.1 Lista de Salas (`SendFieldList`):** Retornar salas con paginación, mostrando nombre, anfitrión, modo, mapa y cantidad de jugadores actuales.
-- [ ] **5.2 Creación de Sala (`SendFieldCreate`):**
+- [ ] **5.1 Lista de Salas (`SendFieldList`, `0x0036`):** Retornar salas con paginación, mostrando nombre, anfitrión, modo, mapa y cantidad de jugadores actuales.
+  - Evidencia: opcode **Observed** (respuesta vacía ya enviada en 3.6); layout de cada entrada **Unknown**. Verificado con cliente real: no.
+- [ ] **5.2 Creación de Sala (`SendFieldCreate`, `0x0053`):**
   - Configurar parámetros: Título de la sala, contraseña opcional, modo de juego (Deathmatch individual, por equipos, Golem Wars, Leader Wars, Boss Raid, Escenarios PVE), mapa y límite de niveles.
   - Asignar al creador como Host / Master de la sala.
+  - Evidencia: opcode **Observed**; valores numéricos de `GameMode` **Inferred**. Verificado con cliente real: no.
 - [ ] **5.3 Sala de Espera (Lobby de Sala):**
-  - Asignación de slots (hasta 16 jugadores en 8v8).
-  - Cambio de equipo (Equipo Rojo / Equipo Azul) con `SendFieldChangeTeam`.
-  - Estado Preparado (`SendFieldReady`): Validar que todos los jugadores tengan el estado listo antes de que el Host pueda iniciar.
-  - Chat exclusivo de la sala de espera (`SendFieldChat`).
-  - Sistema de expulsión de la sala (`SendFieldKick` y votaciones `SendFieldGameVote`).
+  - Asignación de slots (capacidad máxima **Unknown**; "16 jugadores en 8v8" es **Inferred**).
+  - Cambio de equipo (Equipo Rojo / Equipo Azul) con `SendFieldChangeTeam` (opcode **Unknown**).
+  - Estado Preparado (`SendFieldReady`, `0x0061` **Observed**): validar que todos estén listos antes de que el Host pueda iniciar.
+  - Chat exclusivo de la sala de espera (`SendFieldChat`, `0x007F` **Observed**), entrada rápida (`0x004F` **Observed**) y salida (`0x0051` **Observed**).
+  - Sistema de expulsión de la sala (`SendFieldKick` y votaciones `SendFieldGameVote`; opcodes **Unknown**).
+  - Verificado con cliente real: no.
 - [ ] **5.4 Inicio de Partida (`SendFieldGameStart`):**
   - Notificar a todos los clientes para que comiencen la carga del mapa y los modelos 3D (`LevelsSV.xfs` y `ModelsSV.xfs`).
+  - Evidencia: nombre **Observed**; opcode **Unknown**. Verificado con cliente real: no.
 
 ---
 
-### Fase 6: Combate en Tiempo Real y Servidor UDP Relay
+### Fase 6: Combate en Tiempo Real y Relay UDP
 > **Objetivo:** Permitir que los jugadores jueguen la partida de forma fluida, intercambien golpes y el servidor registre muertes, rondas y recompensas.
+> **Carril:** B. **Código:** `src/Rakion.Relay/` (librería sin sockets), `src/Rakion.World/` (listeners UDP ya existentes desde 3.1). 6.4 consume el contrato C-4 del carril A.
 
-- [ ] **6.1 Servidor UDP en Puertos 40708 y 40709:**
-  - Sockets UDP de alta concurrencia para paquetes ligeros en tiempo real.
-  - Registro y mapeo de endpoints públicos de cada cliente (`SendSuccessUDP`, `SendFieldSlotUDP`) para resolver problemas de NAT estricto.
-- [ ] **6.2 Mecanismo de Relevo (Relay / Tunneling):**
-  - Implementar `SendFieldGameTunnelingOne` y `SendFieldGameTunnelingAll` para reenviar los paquetes de posición, ataques, invocaciones de criaturas y animaciones entre los jugadores de la misma sala cuando la conexión directa P2P no sea posible.
+- [ ] **6.1 Registro de Endpoints UDP por Slot de Sala (`SendFieldSlotUDP`):**
+  - El bind de los puertos UDP 40708/40709 y el sondeo `0x0201`/`0x0202`/`0x000E` ya están hechos en 3.1 (`Rakion.World`).
+  - Asociar a cada slot de sala el endpoint público observado de su cliente para resolver NAT estricto.
+  - Evidencia: nombre **Observed**; layout **Unknown**. Verificado con cliente real: no.
+- [ ] **6.2 Mecanismo de Relevo (Relay / Tunneling, `0x0401`):**
+  - Crear `Rakion.Relay` como librería pura (`RelayRouter`): enrutamiento `SendFieldGameTunnelingOne` / `SendFieldGameTunnelingAll` entre los miembros de la misma sala, con limitación de tasa. `WorldUdpPacketHandler` le despacha `0x0401`.
+  - Evidencia: opcode **Observed**; layout **Unknown**. Verificado con cliente real: no.
 - [ ] **6.3 Arbitraje de Eventos Críticos:**
-  - Muerte de jugadores (`SendFieldGameDiePlayer`): Registrar qué usuario asesinó a quién, el modo y la causa.
-  - Sincronización de entidades maestras: vida de Golems en Golem Wars (`SendFieldGameMasterGolem`) y jefes en Boss Raid (`SendFieldGameMasterBossHP`).
-- [ ] **6.4 Fin de Ronda y Partida (`SendFieldGameRoundEnd` y `SendFieldGameEnd`):**
+  - Muerte de jugadores (`SendFieldGameDiePlayer(uint8 victimSlot, uint8 cause)`): registrar quién mató a quién, el modo y la causa.
+  - Sincronización de entidades maestras: Golems (`SendFieldGameMasterGolem`) y jefes (`SendFieldGameMasterBossHP`).
+  - Evidencia: nombres **Observed**; parámetros **Derived** de las firmas; opcodes **Unknown**. Verificado con cliente real: no.
+- [ ] **6.4 Fin de Ronda y Partida (`SendFieldGameRoundEnd`, `SendFieldGameEnd`, `SendFieldGamePoint`):**
   - Determinar equipo ganador según las condiciones de victoria de cada modo.
-  - Cálculo de Puntuaciones (`SendFieldGamePoint`):
-    - Fórmula limpia de experiencia (EXP) y oro ganados según bajas, daño infligido y bonificaciones de victoria/PowerUser.
-  - Persistencia segura de estadísticas en la base de datos y envío de la pantalla final de recompensas.
+  - Fórmula de EXP y oro: **Unknown** en el original → diseño propio configurable.
+  - Persistencia mediante `IMatchResultService` (C-4, carril A) y envío de la pantalla de recompensas.
+  - Verificado con cliente real: no.
 
 ---
 
 ### Fase 7: Servicios de Mantenimiento, Rankings y Herramientas GM
 > **Objetivo:** Dotar al ecosistema de herramientas de administración en vivo, sistema de rangos y detección de tramposos.
+> **Carril:** A. **Código:** `src/Rakion.Maintenance/` (nuevo, hospedado por `Rakion.App`), `src/Rakion.Database/`.
 
 - [ ] **7.1 Motor de Rankings Atómicos (Reemplazo de `RankUpdate.exe`):**
-  - Tarea programada en C# (BackgroundService / Quartz.NET) que ejecute periódicamente el recálculo de clasificaciones generales y por clase con la técnica de doble buffer.
-  - Asignación automática de los Grados/Medallas del 26 al 15 (y grados superiores de ranking).
+  - `BackgroundService` que recalcule periódicamente las clasificaciones generales y por clase con doble buffer (`TotalRank` → `TotalRankP`, **Observed** en cadenas SQL de `RankUpdate.exe`).
+  - Tabla de grados 26 → 15 por EXP: **Inferred** hasta contrastarla con datos reales; grados 14 → 1: **Unknown**.
+  - Verificado con cliente real: no.
 - [ ] **7.2 Módulo Antifraude y Detector de Abusers:**
-  - Detección algorítmica de partidas arregladas (*win-trading* o bots) que superen umbrales anómalos de victorias, oro o experiencia en períodos de 24 horas.
+  - Umbrales `CheckWinSum=200`, `CheckExpSum=6000`, `CheckGoldSum=12000` y consulta de agregación de 24 h: **Observed** (`Config.ini` y SQL de `RankUpdate.exe`).
+  - Solo marca para revisión de un GM; no banea automáticamente.
+  - Verificado con cliente real: no aplica (proceso batch).
 - [ ] **7.3 Comandos de Administrador en el Chat (In-Game GM Commands):**
-  - `/notice <mensaje>`: Difusión de anuncios del servidor a todos los canales.
-  - `/kick <jugador>`, `/ban <jugador> <días>`: Moderación en vivo.
-  - `/givegold <jugador> <monto>`, `/givecash <jugador> <monto>`, `/giveitem <jugador> <itemId>`: Asignación de recursos y soporte a eventos.
+  - `/notice <mensaje>`, `/kick <jugador>`, `/ban <jugador> <días>`, `/givegold`, `/givecash`, `/giveitem`.
+  - Evidencia: sintaxis de **diseño propio** (sin evidencia de comandos en el retail). Requiere C-5. Toda asignación de oro/cash/items en transacción y con log.
+  - Verificado con cliente real: no.
 - [ ] **7.4 API REST de Telemetría y Monitoreo:**
-  - Dashboard web moderno para observar en tiempo real: jugadores conectados, salas en combate, uso de memoria y estado del servidor.
+  - Jugadores conectados, salas en combate, uso de memoria y estado del servidor. Requiere C-6. Escucha solo en `localhost` por defecto.
+  - Evidencia: diseño propio. Verificado con cliente real: no aplica.
+
+---
+
+### Transversal (lo asigna el integrador)
+
+- [ ] **T.1 Despliegue con Docker:** `Dockerfile` + `docker-compose.yml` con MariaDB (criterio de éxito 3).
+- [ ] **T.2 Golden tests:** test contra bytes capturados del cliente por cada paquete marcado "verificado con cliente real: sí".
 
 ---
 
 ## Criterios de Éxito de la Migración
 
 1. **Cliente Intacto:** El cliente de Rakion v258 debe poder conectarse, crear personajes, forjar armas, crear salas y jugar partidas completas sin crasheos y sin necesidad de loaders oscuros.
-2. **Cero Dependencias de 32 bits:** Todo el servidor se ejecutará en 64 bits con .NET 8/9.
-3. **Despliegue con un Solo Comando:** Contenedor Docker listo (`docker-compose up`) que levante MySQL y el servidor de juego configurado.
+2. **Cero Dependencias de 32 bits:** Todo el servidor se ejecutará en 64 bits con .NET 10 (LTS).
+3. **Despliegue con un Solo Comando:** Contenedor Docker listo (`docker-compose up`) que levante MySQL y el servidor de juego configurado (ítem T.1).
 4. **Mantenibilidad:** Código estructurado bajo principios SOLID, con logs claros (Serilog) y sin parches binarios en memoria.
-

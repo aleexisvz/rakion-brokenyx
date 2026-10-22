@@ -295,7 +295,7 @@ El archivo SQL contiene **61 tablas** diseñadas para MySQL. Sus módulos princi
 
 ### 6.1 Módulo de Usuarios y Seguridad
 - **`user`:** Contiene las credenciales principales: `id` (nombre de usuario, máx 11 caracteres), `password` (texto plano o hash MD5), `e_mail`, `country` (código de país para banderas), `Authority` (0 = usuario normal, valores superiores = Game Master / Administrador).
-- **`usergameinfo`:** Estado de la cuenta en el juego: `gold`, `tutorial`, `slot` (cantidad de personajes desbloqueados, default 4), `bag` (bolsas de inventario activas), `bandate` y `ban` (bloqueo de cuenta), `clanid`, `powertime` y `powerlevelpoint` (suscripción PowerUser).
+- **`usergameinfo`:** Estado de la cuenta en el juego: `gold`, `tutorial`, `slot` (cantidad de personajes desbloqueados, default 4 en el esquema heredado; el cliente v258 muestra 3 ranuras — Observed en el ítem 3.4 del roadmap), `bag` (bolsas de inventario activas), `bandate` y `ban` (bloqueo de cuenta), `clanid`, `powertime` y `powerlevelpoint` (suscripción PowerUser).
 - **`cash`:** Saldo de dinero real / Cash de la cuenta.
 
 ### 6.2 Módulo de Personajes y Atributos
