@@ -1104,14 +1104,17 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             }
         }
 
-        var entered = new FieldPlayerEnterPacket(
-            FieldPlayerEnterPacket.Entered,
-            newcomer.SlotIndex,
-            GameField.SlotStateOf(newcomer),
-            PlayerIdOf(newcomer.Session),
-            0,
-            records[newcomer]);
-        await BroadcastToFieldAsync(field, entered, cancellationToken).ConfigureAwait(false);
+        foreach (var member in field.Players)
+        {
+            var entered = new FieldPlayerEnterPacket(
+                FieldPlayerEnterPacket.Entered,
+                newcomer.SlotIndex,
+                GameField.SlotStateOf(newcomer),
+                PlayerIdOf(newcomer.Session, member.Session),
+                0,
+                records[newcomer]);
+            await SendPacketAsync(member.Session, entered, cancellationToken).ConfigureAwait(false);
+        }
 
         var rules = field.Rules;
         var info = new FieldInfoPacket(
@@ -1132,7 +1135,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             rules.MapName,
             slots.Select(s => s.Player is null
                 ? new FieldSlotInfo(s.State, 0, 0, null)
-                : new FieldSlotInfo(s.State, PlayerIdOf(s.Player.Session), 0, records[s.Player])).ToList());
+                : new FieldSlotInfo(s.State, PlayerIdOf(s.Player.Session, newcomer.Session), 0, records[s.Player])).ToList());
         await SendPacketAsync(newcomer.Session, info, cancellationToken).ConfigureAwait(false);
     }
 
@@ -1164,9 +1167,15 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private FieldListEntry ToFieldListEntry(GameField field) =>
         field.ToFieldListEntry(field.Master is { } master ? _udpEndpoints.Get(master.Session.UdpIndex) : default);
 
-    // The legacy id is the user's server slot index (RakionWorldServ.exe room slot + 0x124, Observed), the same
-    // index the client sends in its UDP probes.
-    private static ushort PlayerIdOf(WorldSession member) => member.UdpIndex;
+    /// <summary>
+    /// Room player id of <paramref name="member"/> as <paramref name="recipient"/> must see it. The client finds its
+    /// own entry by comparing this id with its own id from WorldLogin bytes [5..6] (rakion.bin 0x47A170 against
+    /// listener + 0x14 via 0x472B00, Observed). World sends 0 there (a non-zero value kept the client in character
+    /// select), so the recipient's own entry carries 0 and every other member its session index (Inferred
+    /// workaround; the legacy id is the user's server slot index for everyone).
+    /// </summary>
+    private static ushort PlayerIdOf(WorldSession member, WorldSession recipient) =>
+        ReferenceEquals(member, recipient) ? (ushort)0 : member.UdpIndex;
 
     /// <summary>
     /// Removes the session from its room and tells the remaining members (FieldExit with the freed slot). Returns
