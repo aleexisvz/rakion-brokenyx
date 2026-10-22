@@ -303,34 +303,46 @@ public enum ClientOpcode : ushort
     FieldList = 0x0036,
 
     /// <summary>
-    /// Quick join into an open room.
-    /// Evidence: Observed (79 / 0x4F) in WorldServer strings.
+    /// Player enters a field / room by room number: (u16 roomNumber, string password).
+    /// Evidence: Observed in engine.dll ?SendFieldEnter@IScavengerWorldNet@@UAEXGPAD@Z (opcode 0x0038).
     /// </summary>
-    FieldQuickEnter = 0x004F,
+    FieldEnter = 0x0038,
+
+    /// <summary>
+    /// Quick join into an open room.
+    /// Evidence: Observed in engine.dll ?SendFieldQuickEnter@IScavengerWorldNet@@UAEXXZ (opcode 0x0039).
+    /// </summary>
+    FieldQuickEnter = 0x0039,
 
     /// <summary>
     /// Player exits a field / room.
-    /// Evidence: Observed (81 / 0x51) in WorldServer strings.
+    /// Evidence: Observed in engine.dll ?SendFieldExit@IScavengerWorldNet@@UAEXXZ (opcode 0x003A).
     /// </summary>
-    FieldExit = 0x0051,
+    FieldExit = 0x003A,
 
     /// <summary>
     /// Host creates a new field / room.
-    /// Evidence: Observed (83 / 0x53) in WorldServer strings.
+    /// Evidence: Observed in engine.dll ?SendFieldCreate@IScavengerWorldNet@@UAEXPAD00EEEGEEEE@Z (opcode 0x003B).
     /// </summary>
-    FieldCreate = 0x0053,
+    FieldCreate = 0x003B,
+
+    /// <summary>
+    /// Host changes room settings / rules.
+    /// Evidence: Observed in engine.dll ?SendFieldChangeRule@IScavengerWorldNet@@UAEXPAD00EEGEE@Z (opcode 0x0041).
+    /// </summary>
+    FieldChangeRule = 0x0041,
 
     /// <summary>
     /// Player toggles ready state in waiting room.
-    /// Evidence: Observed (97 / 0x61) in WorldServer strings.
+    /// Evidence: Observed in engine.dll ?SendFieldReady@IScavengerWorldNet@@UAEXE@Z (opcode 0x003D).
     /// </summary>
-    FieldReady = 0x0061,
+    FieldReady = 0x003D,
 
     /// <summary>
-    /// Chat message inside a field / room.
-    /// Evidence: Observed (127 / 0x7F) in WorldServer strings.
+    /// Chat message inside a field / room sent by client.
+    /// Evidence: Observed in engine.dll ?SendFieldChat@IScavengerWorldNet@@UAEXPAD@Z (opcode 0x0047).
     /// </summary>
-    FieldChat = 0x007F,
+    FieldChat = 0x0047,
 
     // --- UDP (40708 / 40709) ---
     /// <summary>
