@@ -513,3 +513,238 @@ public sealed record FieldChatBroadcastPacket(
         return true;
     }
 }
+
+
+/// <summary>
+/// Player requests to switch team (Red &lt;-&gt; Blue) in waiting room.
+/// Evidence: Observed in engine.dll ?SendFieldChangeTeam@IScavengerWorldNet@@UAEXXZ (opcode 0x003E).
+/// </summary>
+public sealed record FieldChangeTeamRequestPacket : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.FieldChangeTeam;
+
+    public void Serialize(PacketWriter writer)
+    {
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeTeamRequestPacket packet)
+    {
+        packet = new FieldChangeTeamRequestPacket();
+        return true;
+    }
+}
+
+/// <summary>
+/// Broadcast or reply confirming player team change: [u8 Result, u8 OldSlot, u8 NewSlot].
+/// Evidence: Observed in engine.dll 0x36197649 -> 0x36193b0b and RakionWorldServ 0x40779D (opcode 0x003E).
+/// </summary>
+public sealed record FieldChangeTeamBroadcastPacket(
+    byte Result,
+    byte OldSlot,
+    byte NewSlot) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldChangeTeam;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        writer.WriteByte(OldSlot);
+        writer.WriteByte(NewSlot);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeTeamBroadcastPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        byte result = reader.ReadByte();
+        byte oldSlot = reader.Remaining >= 1 ? reader.ReadByte() : (byte)0;
+        byte newSlot = reader.Remaining >= 1 ? reader.ReadByte() : (byte)0;
+        packet = new FieldChangeTeamBroadcastPacket(result, oldSlot, newSlot);
+        return true;
+    }
+}
+
+/// <summary>
+/// Request from host to toggle slot status (Open / Closed): [u8 SlotIndex, u8 Status].
+/// Evidence: Observed in engine.dll ?SendFieldChangeSlotStatus@IScavengerWorldNet@@UAEXEE@Z (opcode 0x0042).
+/// </summary>
+public sealed record FieldChangeSlotStatusRequestPacket(
+    byte SlotIndex,
+    byte Status) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.FieldChangeSlotStatus;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(SlotIndex);
+        writer.WriteByte(Status);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeSlotStatusRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 2)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        byte slotIndex = reader.ReadByte();
+        byte status = reader.ReadByte();
+        packet = new FieldChangeSlotStatusRequestPacket(slotIndex, status);
+        return true;
+    }
+}
+
+/// <summary>
+/// Broadcast confirming slot status change: [u8 SlotIndex, u8 Status].
+/// Evidence: Observed in engine.dll 0x36197665 -> 0x36193c50 and RakionWorldServ 0x407980 (opcode 0x0042).
+/// </summary>
+public sealed record FieldChangeSlotStatusBroadcastPacket(
+    byte SlotIndex,
+    byte Status) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldChangeSlotStatus;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(SlotIndex);
+        writer.WriteByte(Status);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeSlotStatusBroadcastPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 2)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        byte slotIndex = reader.ReadByte();
+        byte status = reader.ReadByte();
+        packet = new FieldChangeSlotStatusBroadcastPacket(slotIndex, status);
+        return true;
+    }
+}
+
+/// <summary>
+/// Request from host to update room settings / rules.
+/// Evidence: Observed in engine.dll ?SendFieldChangeRule@IScavengerWorldNet@@UAEXPAD00EEGEE@Z (opcode 0x0041).
+/// </summary>
+public sealed record FieldChangeRuleRequestPacket(
+    string RoomName,
+    string Password,
+    string MapName,
+    byte Mode,
+    byte MaxPlayers,
+    ushort RoundTime,
+    byte Rounds,
+    byte SubMode,
+    byte LevelLimit) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.FieldChangeRule;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteNullTerminatedString(RoomName);
+        writer.WriteNullTerminatedString(Password);
+        writer.WriteNullTerminatedString(MapName);
+        writer.WriteByte(Mode);
+        writer.WriteByte(MaxPlayers);
+        writer.WriteUInt16(RoundTime);
+        writer.WriteByte(Rounds);
+        writer.WriteByte(SubMode);
+        writer.WriteByte(LevelLimit);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeRuleRequestPacket packet)
+    {
+        packet = null!;
+        var reader = new PacketReader(span);
+        string roomName = reader.ReadNullTerminatedString();
+        string password = reader.ReadNullTerminatedString();
+        string mapName = reader.ReadNullTerminatedString();
+        byte mode = reader.ReadByte();
+        byte maxPlayers = reader.ReadByte();
+        ushort roundTime = reader.ReadUInt16();
+        byte rounds = reader.ReadByte();
+        byte subMode = reader.ReadByte();
+        byte levelLimit = reader.Remaining > 0 ? reader.ReadByte() : (byte)0;
+
+        packet = new FieldChangeRuleRequestPacket(
+            roomName,
+            password,
+            mapName,
+            mode,
+            maxPlayers,
+            roundTime,
+            rounds,
+            subMode,
+            levelLimit);
+        return true;
+    }
+}
+
+/// <summary>
+/// Broadcast notifying members of updated room settings.
+/// Evidence: Observed in engine.dll 0x36197657 and RakionWorldServ 0x4077C0 (opcode 0x0041).
+/// </summary>
+public sealed record FieldChangeRuleBroadcastPacket(
+    string RoomName,
+    string Password,
+    string MapName,
+    byte Mode,
+    byte MaxPlayers,
+    ushort RoundTime,
+    byte Rounds,
+    byte SubMode,
+    byte LevelLimit) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldChangeRule;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteNullTerminatedString(RoomName);
+        writer.WriteNullTerminatedString(Password);
+        writer.WriteNullTerminatedString(MapName);
+        writer.WriteByte(Mode);
+        writer.WriteByte(MaxPlayers);
+        writer.WriteUInt16(RoundTime);
+        writer.WriteByte(Rounds);
+        writer.WriteByte(SubMode);
+        writer.WriteByte(LevelLimit);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldChangeRuleBroadcastPacket packet)
+    {
+        packet = null!;
+        var reader = new PacketReader(span);
+        string roomName = reader.ReadNullTerminatedString();
+        string password = reader.ReadNullTerminatedString();
+        string mapName = reader.ReadNullTerminatedString();
+        byte mode = reader.ReadByte();
+        byte maxPlayers = reader.ReadByte();
+        ushort roundTime = reader.ReadUInt16();
+        byte rounds = reader.ReadByte();
+        byte subMode = reader.ReadByte();
+        byte levelLimit = reader.Remaining > 0 ? reader.ReadByte() : (byte)0;
+
+        packet = new FieldChangeRuleBroadcastPacket(
+            roomName,
+            password,
+            mapName,
+            mode,
+            maxPlayers,
+            roundTime,
+            rounds,
+            subMode,
+            levelLimit);
+        return true;
+    }
+}

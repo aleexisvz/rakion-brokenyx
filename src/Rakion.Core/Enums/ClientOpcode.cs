@@ -339,6 +339,18 @@ public enum ClientOpcode : ushort
     FieldReady = 0x003D,
 
     /// <summary>
+    /// Player requests to switch team (Red &lt;-&gt; Blue) in waiting room.
+    /// Evidence: Observed in engine.dll ?SendFieldChangeTeam@IScavengerWorldNet@@UAEXXZ (opcode 0x003E).
+    /// </summary>
+    FieldChangeTeam = 0x003E,
+
+    /// <summary>
+    /// Host changes the open/close status of a player slot in waiting room.
+    /// Evidence: Observed in engine.dll ?SendFieldChangeSlotStatus@IScavengerWorldNet@@UAEXEE@Z (opcode 0x0042).
+    /// </summary>
+    FieldChangeSlotStatus = 0x0042,
+
+    /// <summary>
     /// Chat message inside a field / room sent by client.
     /// Evidence: Observed in engine.dll ?SendFieldChat@IScavengerWorldNet@@UAEXPAD@Z (opcode 0x0047).
     /// </summary>

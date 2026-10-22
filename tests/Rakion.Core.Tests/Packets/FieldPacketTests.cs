@@ -231,4 +231,109 @@ public sealed class FieldPacketTests
         Assert.IsTrue(sBcast);
         Assert.AreEqual("Player : Hello Room!", pBcast.Message);
     }
+
+    [TestMethod]
+    public void FieldChangeTeamPackets_SerializeAndParseCorrectly()
+    {
+        var req = new FieldChangeTeamRequestPacket();
+        using var wReq = new PacketWriter(req.Opcode);
+        req.Serialize(wReq);
+        byte[] reqBytes = wReq.Build();
+
+        Assert.AreEqual((ushort)ClientOpcode.FieldChangeTeam, req.Opcode);
+        Assert.AreEqual(0x003E, (ushort)req.Opcode);
+        bool sReq = FieldChangeTeamRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out _);
+        Assert.IsTrue(sReq);
+
+        var bcast = new FieldChangeTeamBroadcastPacket(Result: 0, OldSlot: 0, NewSlot: 10);
+        using var wBcast = new PacketWriter(bcast.Opcode);
+        bcast.Serialize(wBcast);
+        byte[] bcastBytes = wBcast.Build();
+
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeTeam, bcast.Opcode);
+        Assert.AreEqual(0x003E, (ushort)bcast.Opcode);
+        bool sBcast = FieldChangeTeamBroadcastPacket.TryParse(bcastBytes.AsSpan(PacketHeader.HeaderSize), out var pBcast);
+        Assert.IsTrue(sBcast);
+        Assert.AreEqual((byte)0, pBcast.Result);
+        Assert.AreEqual((byte)0, pBcast.OldSlot);
+        Assert.AreEqual((byte)10, pBcast.NewSlot);
+    }
+
+    [TestMethod]
+    public void FieldChangeSlotStatusPackets_SerializeAndParseCorrectly()
+    {
+        var req = new FieldChangeSlotStatusRequestPacket(SlotIndex: 4, Status: 0);
+        using var wReq = new PacketWriter(req.Opcode);
+        req.Serialize(wReq);
+        byte[] reqBytes = wReq.Build();
+
+        Assert.AreEqual((ushort)ClientOpcode.FieldChangeSlotStatus, req.Opcode);
+        Assert.AreEqual(0x0042, (ushort)req.Opcode);
+        bool sReq = FieldChangeSlotStatusRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out var pReq);
+        Assert.IsTrue(sReq);
+        Assert.AreEqual((byte)4, pReq.SlotIndex);
+        Assert.AreEqual((byte)0, pReq.Status);
+
+        var bcast = new FieldChangeSlotStatusBroadcastPacket(SlotIndex: 4, Status: 0);
+        using var wBcast = new PacketWriter(bcast.Opcode);
+        bcast.Serialize(wBcast);
+        byte[] bcastBytes = wBcast.Build();
+
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeSlotStatus, bcast.Opcode);
+        Assert.AreEqual(0x0042, (ushort)bcast.Opcode);
+        bool sBcast = FieldChangeSlotStatusBroadcastPacket.TryParse(bcastBytes.AsSpan(PacketHeader.HeaderSize), out var pBcast);
+        Assert.IsTrue(sBcast);
+        Assert.AreEqual((byte)4, pBcast.SlotIndex);
+        Assert.AreEqual((byte)0, pBcast.Status);
+    }
+
+    [TestMethod]
+    public void FieldChangeRulePackets_SerializeAndParseCorrectly()
+    {
+        var req = new FieldChangeRuleRequestPacket(
+            RoomName: "Updated Name",
+            Password: "",
+            MapName: "Colosseum",
+            Mode: 2,
+            MaxPlayers: 12,
+            RoundTime: 5,
+            Rounds: 3,
+            SubMode: 1,
+            LevelLimit: 20);
+
+        using var wReq = new PacketWriter(req.Opcode);
+        req.Serialize(wReq);
+        byte[] reqBytes = wReq.Build();
+
+        Assert.AreEqual((ushort)ClientOpcode.FieldChangeRule, req.Opcode);
+        Assert.AreEqual(0x0041, (ushort)req.Opcode);
+        bool sReq = FieldChangeRuleRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out var pReq);
+        Assert.IsTrue(sReq);
+        Assert.AreEqual("Updated Name", pReq.RoomName);
+        Assert.AreEqual("Colosseum", pReq.MapName);
+        Assert.AreEqual((byte)2, pReq.Mode);
+        Assert.AreEqual((byte)12, pReq.MaxPlayers);
+        Assert.AreEqual((ushort)5, pReq.RoundTime);
+
+        var bcast = new FieldChangeRuleBroadcastPacket(
+            RoomName: "Updated Name",
+            Password: "",
+            MapName: "Colosseum",
+            Mode: 2,
+            MaxPlayers: 12,
+            RoundTime: 5,
+            Rounds: 3,
+            SubMode: 1,
+            LevelLimit: 20);
+
+        using var wBcast = new PacketWriter(bcast.Opcode);
+        bcast.Serialize(wBcast);
+        byte[] bcastBytes = wBcast.Build();
+
+        Assert.AreEqual((ushort)ServerOpcode.FieldChangeRule, bcast.Opcode);
+        Assert.AreEqual(0x0041, (ushort)bcast.Opcode);
+        bool sBcast = FieldChangeRuleBroadcastPacket.TryParse(bcastBytes.AsSpan(PacketHeader.HeaderSize), out var pBcast);
+        Assert.IsTrue(sBcast);
+        Assert.AreEqual("Updated Name", pBcast.RoomName);
+    }
 }
