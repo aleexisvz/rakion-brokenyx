@@ -22,7 +22,8 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones y paquetes (tipo 10). Ítems PowerUser: solo con PowerUser activo, como el original. | pendiente de probar |
 | 4.4 Reparto de puntos | `InventoryAllocationPoint` `0x0033` (**Observed**) | Gasta un punto de nivel (o de PowerUser si no quedan) en una de las 10 estadísticas, en una transacción; tope 50 por estadística (**Inferred**). Reseteo (`0x001B`) pendiente. | pendiente de probar |
 | 4.2 PU Card | `InventoryBuyPowerUser` `0x0034` (**Observed**) | Compra nueva (8000 cash, caduca ahora + 30 días) o renovación (6000 cash, +30 días), +5 puntos PowerUser, tope de 180 días por delante; una transacción. Cupones rechazados. | pendiente de probar |
-| 4.5 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
+| 4.5 Herrería | `EnchantReinforce` `0x0074` (**Observed**) | Refinado de un ítem de equipo del Box con una piedra (13001–13005): valida como el original, sortea el resultado con probabilidades configurables (**Inferred**), consume la piedra y ajusta el nivel en una transacción. Sin rotura (como el original). Materiales 14001–14003 rechazados por ahora. | pendiente de probar |
+| 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
 
@@ -111,3 +112,14 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Diferencia propia: renovar una tarjeta ya caducada empieza desde ahora.
   - Pendiente: el estado PowerUser no se envía todavía en el login, así que tras volver a entrar el cliente puede no
     mostrarlo hasta localizar ese campo del paquete de login (fase 3, carril B).
+- Herrería (`0x0074`):
+  - Petición `[u8 slot del ítem][u8 slot de la piedra][u8 N ≤ 3][N × u8 slots de material]` (**Observed**; el
+    original desconecta si N > 3). Respuesta `[u8 resultado]` y, si es menor que 6, `[u8 ítem][u8 piedra][u8 N][N × u8]`.
+  - Resultados (cliente `rakion.bin` 0x478D80): 0 sube 1, 1 sin cambio, 2/3/4 baja 1/2/3, 5 se rompe; con 0–5 el
+    cliente quita la piedra y los materiales. 6 no refinable o en +15, 7 piedra/material inválido, 8 piedra no válida
+    para ese nivel (original 0x40C310). **Observed**; significados **Derived**.
+  - Reglas del original: el ítem debe ser equipo (id < 8000) y estar por debajo de +15; piedra 13001 solo por debajo
+    de +5; 13004 solo desde +10. La rotura nunca ocurre: el original la convierte en −3 (nivel ≤ 3) o en "sin cambio".
+  - Probabilidades: el original las lee de una tabla de configuración por piedra y materiales que no está en el
+    binario (**Unknown**). `EnchantOdds.DefaultFor` es provisional (**Inferred**): 100 % hasta +3 y después menos
+    éxito y algo de −1. Se puede sustituir al construir `BlacksmithModule`.
