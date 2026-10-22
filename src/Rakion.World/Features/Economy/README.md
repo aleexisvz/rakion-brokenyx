@@ -16,7 +16,7 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 
 | Ítem | Opcodes (cliente → servidor) | Estado | Verificado con cliente real |
 | :--- | :--- | :--- | :--- |
-| 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). La lista de ítems **no** viaja en esta respuesta; dónde viaja es **Unknown**. | no (respuesta pendiente de probar) |
+| 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo por personaje están pendientes. | `0x002C`: sí. Box: pendiente de probar |
 | 4.2 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
@@ -35,3 +35,15 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
     no responde y emite un error interno `0xB8` (semántica **Unknown**). Aquí la selección de
     personaje ya garantiza la pertenencia.
   - Uso del valor en el cliente (tiempo restante de ítems alquilados): **Inferred**.
+- Box de la cuenta (`AccountInventoryProvider`, `AccountBoxBlock`):
+  - El parser del cliente (`engine.dll` 0x36196B41..0x36196C71) lee: `u8 N` + N × `u16` (caducados),
+    un `u8` (**Unknown**), 120 × `u16` itemId, 120 × `u8` level, 120 × `u32`, 120 × `u32` y un `u32`
+    final (**Unknown**). **Observed.**
+  - Que los dos arrays de `u32` sean exp y limittime es **Derived** del orden de copia del servidor
+    original (`RakionWorldServ.exe` 0x412065..0x4120E6).
+  - Reglas del servidor original (`DBCommandCharacterList`), aplicadas igual: las filas con
+    `characterid = 0` van al slot indicado por `slot`; los alquileres con `limittime` ya pasado se
+    listan como caducados; las filas de personaje no entran en el Box.
+  - Diferencias propias: se ignoran (con aviso en el log) los slots fuera de 0..119 o repetidos y los
+    itemId que no caben en `u16`.
+  - `user_items.limit_time_minutes` debe guardarse en la unidad de `LegacyGameClock` (0 = permanente).

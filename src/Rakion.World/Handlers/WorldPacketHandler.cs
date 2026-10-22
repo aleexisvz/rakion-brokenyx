@@ -13,6 +13,7 @@ using Rakion.Database.Repositories;
 using Rakion.Network.Tcp;
 using Rakion.World.Channels;
 using Rakion.World.Configuration;
+using Rakion.World.Features.Economy;
 using Rakion.World.Modules;
 using Rakion.World.Session;
 
@@ -31,6 +32,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly ISessionTicketService _ticketService;
     private readonly IChannelManager _channelManager;
     private readonly ISessionSender _sender;
+    private readonly IAccountInventoryProvider? _accountInventory;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -46,6 +48,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         IChannelManager channelManager,
         IEnumerable<IWorldOpcodeModule> modules,
         ISessionSender sender,
+        IAccountInventoryProvider? accountInventory,
         ILogger<WorldPacketHandler> logger)
     {
         _options = options;
@@ -55,6 +58,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _ticketService = ticketService;
         _channelManager = channelManager;
         _sender = sender;
+        _accountInventory = accountInventory;
         _logger = logger;
 
         RegisterBuiltInHandlers();
@@ -72,7 +76,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ISessionTicketService ticketService,
         IChannelManager channelManager,
         ILogger<WorldPacketHandler> logger)
-        : this(options, userRepository, characterRepository, balanceRepository, ticketService, channelManager, [], WorldSessionSender.Instance, logger)
+        : this(options, userRepository, characterRepository, balanceRepository, ticketService, channelManager, [], WorldSessionSender.Instance, accountInventory: null, logger)
     {
     }
 
@@ -388,7 +392,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (session.IsEncrypted)
         {
             // Send Part 2 packet (Opcode 0x000D) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
-            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries), cancellationToken).ConfigureAwait(false);
+            AccountBoxBlock? accountBox = _accountInventory is null
+                ? null
+                : await _accountInventory.GetAccountBoxAsync(user.Id, cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries, AccountBox: accountBox), cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation(

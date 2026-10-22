@@ -94,6 +94,7 @@ public sealed class WorldOpcodeModuleTests
             new ChannelManager(_options, NullLogger<ChannelManager>.Instance),
             [module],
             WorldSessionSender.Instance,
+            accountInventory: null,
             NullLogger<WorldPacketHandler>.Instance);
 
     private sealed class RecordingModule(ClientOpcode opcode) : IWorldOpcodeModule
