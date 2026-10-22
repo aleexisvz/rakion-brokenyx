@@ -27,9 +27,9 @@ public sealed class WorldUdpPacketHandler : IUdpPacketHandler
     {
         if (UdpProbePacket.TryParseRequest(datagram.Span, out var probe))
         {
-            if (probe.Opcode is (ushort)RakionOpcode.UdpHolePunch1 or (ushort)RakionOpcode.UdpHolePunch2)
+            if (probe.Opcode is (ushort)ClientOpcode.UdpHolePunch1 or (ushort)ClientOpcode.UdpHolePunch2)
             {
-                byte flag = server.PortFlag != 0 || probe.Opcode == (ushort)RakionOpcode.UdpHolePunch2 ? (byte)1 : (byte)0;
+                byte flag = server.PortFlag != 0 || probe.Opcode == (ushort)ClientOpcode.UdpHolePunch2 ? (byte)1 : (byte)0;
                 byte[] response = UdpProbePacket.CreateResponse(probe.Cookie, flag);
                 await server.SendToAsync(response, remoteEndPoint, cancellationToken).ConfigureAwait(false);
 

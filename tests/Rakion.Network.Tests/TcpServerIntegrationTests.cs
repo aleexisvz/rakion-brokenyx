@@ -68,7 +68,7 @@ public sealed class TcpServerIntegrationTests
             Assert.IsNotNull(serverConn);
 
             // Build a packet using PacketWriter: Opcode 0xCDDF with 4 bytes payload
-            using var writer = new PacketWriter((ushort)RakionOpcode.ServerListRequest);
+            using var writer = new PacketWriter((ushort)ClientOpcode.ServerListRequest);
             writer.WriteInt32(123456);
             byte[] packetBytes = writer.Build();
 
@@ -81,7 +81,7 @@ public sealed class TcpServerIntegrationTests
             Assert.HasCount(1, handler.ReceivedPackets);
             var (header, payload) = handler.ReceivedPackets[0];
 
-            Assert.AreEqual((ushort)RakionOpcode.ServerListRequest, header.Opcode);
+            Assert.AreEqual((ushort)ClientOpcode.ServerListRequest, header.Opcode);
             Assert.AreEqual(packetBytes.Length, (int)header.TotalLength);
             Assert.HasCount(4, payload);
 
@@ -110,12 +110,12 @@ public sealed class TcpServerIntegrationTests
             await handler.ConnectedTcs.Task.WaitAsync(TimeSpan.FromSeconds(3));
 
             // Packet 1: 0x1310 (Login), Total length: 4 (header) + 4 (int) = 8 bytes
-            using var writer1 = new PacketWriter((ushort)RakionOpcode.Login);
+            using var writer1 = new PacketWriter((ushort)ClientOpcode.Login);
             writer1.WriteInt32(777);
             byte[] packet1 = writer1.Build();
 
             // Packet 2: 0x0101 (ServerListResponse), Total length: 4 (header) + 2 (short) = 6 bytes
-            using var writer2 = new PacketWriter((ushort)RakionOpcode.ServerListResponse);
+            using var writer2 = new PacketWriter((ushort)ServerOpcode.ServerListResponse);
             writer2.WriteInt16(99);
             byte[] packet2 = writer2.Build();
 
@@ -136,13 +136,13 @@ public sealed class TcpServerIntegrationTests
 
             // Verify packet 1
             var (h1, p1) = handler.ReceivedPackets[0];
-            Assert.AreEqual((ushort)RakionOpcode.Login, h1.Opcode);
+            Assert.AreEqual((ushort)ClientOpcode.Login, h1.Opcode);
             var r1 = new PacketReader(p1);
             Assert.AreEqual(777, r1.ReadInt32());
 
             // Verify packet 2
             var (h2, p2) = handler.ReceivedPackets[1];
-            Assert.AreEqual((ushort)RakionOpcode.ServerListResponse, h2.Opcode);
+            Assert.AreEqual((ushort)ServerOpcode.ServerListResponse, h2.Opcode);
             var r2 = new PacketReader(p2);
             Assert.AreEqual((short)99, r2.ReadInt16());
         }

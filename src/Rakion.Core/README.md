@@ -11,11 +11,11 @@
 ## Contenido del Módulo
 
 ### 1. Enums (`Rakion.Core.Enums`)
-- **`RakionOpcode`:** Opcodes observados en la ingeniería inversa del cliente y servidor:
-  - `0xCDDF` (`ServerListRequest`): Petición de lista de servidores.
-  - `0x0101` (`ServerListResponse`): Respuesta con los servidores disponibles.
-  - `0x1310` (`Login`): Login estándar de v258 (`SV_AUTH_LOGIN`).
-  - Opcodes de salas y canales (71 / `0x47`, 83 / `0x53`, 97 / `0x61`, 127 / `0x7F`, etc.).
+- **`ClientOpcode`** (cliente → servidor) y **`ServerOpcode`** (servidor → cliente): opcodes observados en la ingeniería inversa, separados por dirección (contrato C-0 del roadmap). Un mismo valor puede significar mensajes distintos en cada dirección (por ejemplo `0x001B` es `ClientOpcode.CharacterStateClear` y `ServerOpcode.GameGuard`), así que nunca se mezclan. Ningún enum tiene alias con valores repetidos; lo garantiza `OpcodeTests`.
+  - `0xCDDF` (`ClientOpcode.ServerListRequest`): Petición de lista de servidores.
+  - `0x0101` (`ServerOpcode.ServerListResponse`): Respuesta con los servidores disponibles.
+  - `0x1310` (`ClientOpcode.Login`): Login estándar de v258 (`SV_AUTH_LOGIN`).
+  - Opcodes de salas y canales (`0x0036`, 79 / `0x4F`, 83 / `0x53`, 97 / `0x61`, 127 / `0x7F`, etc.).
 - **`CharacterClass`:** Clases del juego (`Swordman = 0`, `Archer = 1`, `Blacksmith = 2`, `Mage = 3`, `Ninja = 4`).
 - **`GameMode`:** Modos de combate (`SoloDeathmatch`, `TeamDeathmatch`, `LeaderWars`, `Stage`, `GolemWars`, `BossRaid`).
 - **`ServerStatus`:** Estados de congestión (`Normal`, `Busy`, `Full`, `Offline`).

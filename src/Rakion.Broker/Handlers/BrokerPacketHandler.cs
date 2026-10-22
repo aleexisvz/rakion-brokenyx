@@ -65,7 +65,7 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
         if (payload.Length >= 2)
         {
             ushort subOpcode = BinaryPrimitives.ReadUInt16LittleEndian(payload.Span);
-            if (subOpcode == (ushort)RakionOpcode.LoginAlt2 || subOpcode == (ushort)RakionOpcode.LoginAlt3)
+            if (subOpcode == (ushort)ClientOpcode.LoginAlt2 || subOpcode == (ushort)ClientOpcode.LoginAlt3)
             {
                 _logger.LogInformation(
                     "[{ConnectionId}] NyxLauncher secondary login handshake (0x{SubOpcode:X4}) received via opcode 0x{Opcode:X4}. Sending CL_AUTH_LOGIN_2 success.",
@@ -77,25 +77,25 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
                 return;
             }
 
-            if (subOpcode == (ushort)RakionOpcode.Login || subOpcode == (ushort)RakionOpcode.LoginAlt4)
+            if (subOpcode == (ushort)ClientOpcode.Login || subOpcode == (ushort)ClientOpcode.LoginAlt4)
             {
                 await HandleLoginRequestAsync(connection, header.Opcode, payload, cancellationToken).ConfigureAwait(false);
                 return;
             }
         }
 
-        switch ((RakionOpcode)header.Opcode)
+        switch ((ClientOpcode)header.Opcode)
         {
-            case RakionOpcode.ServerListRequest:
-            case RakionOpcode.ServerListResponse:
+            case ClientOpcode.ServerListRequest:
+            case ClientOpcode.ServerListRequestAlt:
                 await HandleServerListRequestAsync(connection, payload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.Login:
-            case RakionOpcode.LoginAlt2:
-            case RakionOpcode.LoginAlt3:
-            case RakionOpcode.LoginAlt4:
-            case RakionOpcode.None:
+            case ClientOpcode.Login:
+            case ClientOpcode.LoginAlt2:
+            case ClientOpcode.LoginAlt3:
+            case ClientOpcode.LoginAlt4:
+            case ClientOpcode.None:
                 await HandleLoginRequestAsync(connection, header.Opcode, payload, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -289,7 +289,7 @@ public sealed class BrokerPacketHandler : ITcpPacketHandler
         }
 
         // NyxLauncher Start Game SV_AUTH_LOGIN_4 (0x4000) for "Rakion"
-        if (loginPacket.SubOpcode == (ushort)RakionOpcode.LoginAlt4 &&
+        if (loginPacket.SubOpcode == (ushort)ClientOpcode.LoginAlt4 &&
             (string.IsNullOrEmpty(loginPacket.Password) || loginPacket.Username.Equals("Rakion", StringComparison.OrdinalIgnoreCase)))
         {
             string username = _authenticatedUsers.TryGetValue(connection.ConnectionId, out string? authedUser) && !string.IsNullOrWhiteSpace(authedUser)

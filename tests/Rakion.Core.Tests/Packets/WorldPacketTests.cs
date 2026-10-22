@@ -16,7 +16,7 @@ public sealed class WorldPacketTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
-        Assert.AreEqual((ushort)RakionOpcode.GameGuardResponse, header.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.GameGuard, header.Opcode);
 
         bool parsed = GameGuardPacket.TryParseResponse(bytes.AsSpan(PacketHeader.HeaderSize), out var response);
         Assert.IsTrue(parsed);
@@ -32,7 +32,7 @@ public sealed class WorldPacketTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
-        Assert.AreEqual((ushort)RakionOpcode.WorldLogin, header.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.WorldLogin, header.Opcode);
 
         bool parsed = WorldLoginRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var roundtrip);
         Assert.IsTrue(parsed);
@@ -57,7 +57,7 @@ public sealed class WorldPacketTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
-        Assert.AreEqual((ushort)RakionOpcode.WorldLogin, header.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.WorldLogin, header.Opcode);
 
         bool parsed = WorldLoginResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var roundtrip);
         Assert.IsTrue(parsed);
@@ -228,7 +228,7 @@ public sealed class WorldPacketTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
-        Assert.AreEqual((ushort)RakionOpcode.WorldLoginPart2, header.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.WorldLoginPart2, header.Opcode);
 
         ReadOnlySpan<byte> payload = bytes.AsSpan(PacketHeader.HeaderSize);
         Assert.AreEqual(WorldLoginPart2Packet.BasePayloadSize, payload.Length);
@@ -255,7 +255,7 @@ public sealed class WorldPacketTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
-        Assert.AreEqual((ushort)RakionOpcode.UdpSuccess, header.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.UdpSuccess, header.Opcode);
 
         ReadOnlySpan<byte> payload = bytes.AsSpan(PacketHeader.HeaderSize);
         Assert.AreEqual(UdpSuccessPacket.PayloadSize, payload.Length);
@@ -400,7 +400,7 @@ public sealed class WorldPacketTests
         byte[] reqBytes = reqWriter.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(reqBytes.AsSpan(0, PacketHeader.HeaderSize), out var reqHeader));
-        Assert.AreEqual((ushort)RakionOpcode.CharacterChangeBuddyName, reqHeader.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.CharacterChangeBuddyName, reqHeader.Opcode);
         Assert.IsTrue(CharacterChangeBuddyNameRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out var roundtripReq));
         Assert.AreEqual("NinjaHero", roundtripReq.CharacterName);
 
@@ -411,7 +411,7 @@ public sealed class WorldPacketTests
         byte[] resBytes = resWriter.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(resBytes.AsSpan(0, PacketHeader.HeaderSize), out var resHeader));
-        Assert.AreEqual((ushort)RakionOpcode.CharacterChangeBuddyName, resHeader.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterChangeBuddyName, resHeader.Opcode);
         Assert.IsTrue(CharacterChangeBuddyNameResponsePacket.TryParse(resBytes.AsSpan(PacketHeader.HeaderSize), out var roundtripRes));
         Assert.AreEqual((byte)0, roundtripRes.ResultCode);
         Assert.AreEqual("NinjaHero", roundtripRes.CharacterName);

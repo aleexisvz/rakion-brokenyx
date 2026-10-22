@@ -21,7 +21,7 @@ public sealed record ChannelListRequestPacket(
     byte Category = 0,
     byte SubCategory = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelList;
+    public ushort Opcode => (ushort)ClientOpcode.ChannelList;
 
     public void Serialize(PacketWriter writer)
     {
@@ -46,7 +46,7 @@ public sealed record ChannelListRequestPacket(
 public sealed record ChannelListResponsePacket(
     IReadOnlyList<ChannelListEntry> Channels) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelList;
+    public ushort Opcode => (ushort)ServerOpcode.ChannelList;
 
     public void Serialize(PacketWriter writer)
     {
@@ -102,7 +102,7 @@ public sealed record ChannelEnterRequestPacket(
     byte ChannelIndex,
     string Password = "") : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelEnter;
+    public ushort Opcode => (ushort)ClientOpcode.ChannelEnter;
 
     public void Serialize(PacketWriter writer)
     {
@@ -147,7 +147,7 @@ public sealed record ChannelEnterResponsePacket(
     byte MaxPlayers = 100,
     uint Flags = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelEnter;
+    public ushort Opcode => (ushort)ServerOpcode.ChannelEnter;
 
     public void Serialize(PacketWriter writer)
     {
@@ -208,7 +208,7 @@ public sealed record ChannelEnterResponsePacket(
 /// </summary>
 public sealed record ChannelExitRequestPacket : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelExit;
+    public ushort Opcode => (ushort)ClientOpcode.ChannelExit;
 
     public void Serialize(PacketWriter writer)
     {
@@ -227,7 +227,7 @@ public sealed record ChannelExitRequestPacket : IPacket
 /// </summary>
 public sealed record ChannelExitResponsePacket(byte ResultCode = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelExit;
+    public ushort Opcode => (ushort)ServerOpcode.ChannelExit;
 
     public void Serialize(PacketWriter writer)
     {
@@ -254,7 +254,7 @@ public sealed record ChannelExitResponsePacket(byte ResultCode = 0) : IPacket
 /// </summary>
 public sealed record ChannelChatRequestPacket(string Message) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelChat;
+    public ushort Opcode => (ushort)ClientOpcode.ChannelChat;
 
     public void Serialize(PacketWriter writer)
     {
@@ -279,7 +279,7 @@ public sealed record ChannelChatBroadcastPacket(
     byte ChatType,
     string FormattedMessage) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelChat;
+    public ushort Opcode => (ushort)ServerOpcode.ChannelChat;
 
     public void Serialize(PacketWriter writer)
     {
@@ -320,7 +320,7 @@ public sealed record ChannelCharacterSummary(
 /// </summary>
 public sealed record ChannelCharactersRequestPacket : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelCharacters;
+    public ushort Opcode => (ushort)ClientOpcode.ChannelCharacters;
 
     public void Serialize(PacketWriter writer)
     {
@@ -345,7 +345,7 @@ public sealed record ChannelCharactersResponsePacket(
     string ServerName,
     IReadOnlyList<ChannelCharacterSummary> Characters) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ChannelCharacters;
+    public ushort Opcode => (ushort)ServerOpcode.ChannelCharacters;
 
     public void Serialize(PacketWriter writer)
     {
@@ -419,7 +419,7 @@ public sealed record CharacterWhisperRequestPacket(
     string TargetCharacterName,
     string Message) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterWhisper;
+    public ushort Opcode => (ushort)ClientOpcode.CharacterWhisper;
 
     public void Serialize(PacketWriter writer)
     {
@@ -447,7 +447,7 @@ public sealed record CharacterWhisperResponsePacket(
     string CharacterName = "",
     string Message = "") : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterWhisper;
+    public ushort Opcode => (ushort)ServerOpcode.CharacterWhisper;
 
     public void Serialize(PacketWriter writer)
     {

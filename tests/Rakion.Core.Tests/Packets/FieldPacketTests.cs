@@ -25,7 +25,7 @@ public sealed class FieldPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.FieldList, packet.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.FieldList, packet.Opcode);
         Assert.AreEqual(0x0036, (ushort)packet.Opcode);
         Assert.HasCount(14, bytes); // 4 header + 10 payload
 
@@ -50,7 +50,7 @@ public sealed class FieldPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.FieldList, packet.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.FieldList, packet.Opcode);
         Assert.AreEqual(0x0036, (ushort)packet.Opcode);
         Assert.HasCount(5, bytes); // 4 header + 1 payload (count = 0)
         Assert.AreEqual(0, bytes[4]);

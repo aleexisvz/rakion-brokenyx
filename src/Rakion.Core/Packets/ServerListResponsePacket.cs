@@ -25,7 +25,7 @@ public sealed record GameServerEntry(
 /// </summary>
 public sealed record ServerListResponsePacket(IReadOnlyList<GameServerEntry> Servers) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ServerListResponse;
+    public ushort Opcode => (ushort)ServerOpcode.ServerListResponse;
 
     public void Serialize(PacketWriter writer)
     {

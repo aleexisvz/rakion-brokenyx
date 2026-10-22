@@ -17,7 +17,7 @@ public sealed class PacketHeaderTests
 
         Assert.IsTrue(success);
         Assert.AreEqual((ushort)16, header.TotalLength);
-        Assert.AreEqual((ushort)RakionOpcode.ServerListRequest, header.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ServerListRequest, header.Opcode);
         Assert.AreEqual(12, header.PayloadLength);
     }
 
@@ -35,12 +35,12 @@ public sealed class PacketHeaderTests
     [TestMethod]
     public void WriteTo_SerializesCorrectLittleEndianBytes()
     {
-        var header = new PacketHeader(100, (ushort)RakionOpcode.Login);
+        var header = new PacketHeader(100, (ushort)ClientOpcode.Login);
         Span<byte> destination = stackalloc byte[4];
 
         header.WriteTo(destination);
 
         Assert.AreEqual(100, destination[0] | (destination[1] << 8));
-        Assert.AreEqual((ushort)RakionOpcode.Login, (ushort)(destination[2] | (destination[3] << 8)));
+        Assert.AreEqual((ushort)ClientOpcode.Login, (ushort)(destination[2] | (destination[3] << 8)));
     }
 }

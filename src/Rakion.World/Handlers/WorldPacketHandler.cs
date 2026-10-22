@@ -124,45 +124,45 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             packetPayload = payload;
         }
 
-        switch ((RakionOpcode)opcode)
+        switch ((ClientOpcode)opcode)
         {
-            case RakionOpcode.WorldLogin:
-            case RakionOpcode.WorldLoginLegacy:
+            case ClientOpcode.WorldLogin:
+            case ClientOpcode.WorldLoginLegacy:
                 await HandleWorldLoginAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.GameGuard:
+            case ClientOpcode.GameGuard:
                 await HandleGameGuardAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.KeepAlive:
+            case ClientOpcode.KeepAlive:
                 HandleKeepAlive(session);
                 break;
 
-            case RakionOpcode.UdpSuccess:
+            case ClientOpcode.UdpSuccess:
                 await HandleUdpSuccessAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.CharacterCreate:
-            case RakionOpcode.CharacterCreateRetail:
+            case ClientOpcode.CharacterCreate:
+            case ClientOpcode.CharacterCreateRetail:
                 await HandleCharacterCreateAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.CharacterDelete:
-            case RakionOpcode.CharacterDeleteRetail:
+            case ClientOpcode.CharacterDelete:
+            case ClientOpcode.CharacterDeleteRetail:
                 await HandleCharacterDeleteAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.CharacterSelect:
-            case RakionOpcode.CharacterSelectRetail:
+            case ClientOpcode.CharacterSelect:
+            case ClientOpcode.CharacterSelectRetail:
                 await HandleCharacterSelectAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.CharacterChangeBuddyName:
+            case ClientOpcode.CharacterChangeBuddyName:
                 await HandleCharacterChangeBuddyNameAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.CharacterTutorialClear:
+            case ClientOpcode.CharacterTutorialClear:
                 if (session.User is not null)
                 {
                     await _userRepository.SetTutorialCompletedAsync(session.User.Id, true, cancellationToken).ConfigureAwait(false);
@@ -178,31 +178,31 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 }
                 break;
 
-            case RakionOpcode.ChannelList:
+            case ClientOpcode.ChannelList:
                 await HandleChannelListAsync(session, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.ChannelEnter:
+            case ClientOpcode.ChannelEnter:
                 await HandleChannelEnterAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.ChannelExit:
+            case ClientOpcode.ChannelExit:
                 await HandleChannelExitAsync(session, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.ChannelCharacters:
+            case ClientOpcode.ChannelCharacters:
                 await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.ChannelChat:
+            case ClientOpcode.ChannelChat:
                 await HandleChannelChatAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.CharacterWhisper:
+            case ClientOpcode.CharacterWhisper:
                 await HandleCharacterWhisperAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case RakionOpcode.FieldList:
+            case ClientOpcode.FieldList:
                 await HandleFieldListAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 

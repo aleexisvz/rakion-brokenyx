@@ -80,7 +80,7 @@ public static class UdpProbePacket
         }
 
         // Response opcode is always 0x0201 for both ports in retail RakionWorldServ
-        BinaryPrimitives.WriteUInt16LittleEndian(destination[..2], (ushort)RakionOpcode.UdpHolePunch1);
+        BinaryPrimitives.WriteUInt16LittleEndian(destination[..2], (ushort)ClientOpcode.UdpHolePunch1);
         BinaryPrimitives.WriteUInt32LittleEndian(destination[2..6], cookie);
 
         destination[6] = portFlag;

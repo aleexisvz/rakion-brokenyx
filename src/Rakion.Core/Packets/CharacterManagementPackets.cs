@@ -11,7 +11,7 @@ public sealed record CharacterDeleteRequestPacket(
     uint CharacterId,
     string DeleteKey) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterDelete;
+    public ushort Opcode => (ushort)ClientOpcode.CharacterDelete;
 
     public void Serialize(PacketWriter writer)
     {
@@ -46,7 +46,7 @@ public sealed record CharacterDeleteResponsePacket(
     byte ResultCode,
     uint CharacterId) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterDeleteResponse;
+    public ushort Opcode => (ushort)ServerOpcode.CharacterDelete;
 
     public void Serialize(PacketWriter writer)
     {
@@ -86,7 +86,7 @@ public sealed record CharacterDeleteResponsePacket(
 public sealed record CharacterSelectRequestPacket(
     uint CharacterId) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterSelect;
+    public ushort Opcode => (ushort)ClientOpcode.CharacterSelect;
 
     public void Serialize(PacketWriter writer)
     {
@@ -125,7 +125,7 @@ public sealed record CharacterSelectResponsePacket(
     byte ResultCode,
     uint CharacterId) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterSelectResponse;
+    public ushort Opcode => (ushort)ServerOpcode.CharacterSelect;
 
     public void Serialize(PacketWriter writer)
     {
@@ -165,7 +165,7 @@ public sealed record CharacterSelectResponsePacket(
 public sealed record CharacterChangeBuddyNameRequestPacket(
     string CharacterName) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterChangeBuddyName;
+    public ushort Opcode => (ushort)ClientOpcode.CharacterChangeBuddyName;
 
     public void Serialize(PacketWriter writer)
     {
@@ -198,7 +198,7 @@ public sealed record CharacterChangeBuddyNameResponsePacket(
     byte ResultCode,
     string CharacterName) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.CharacterChangeBuddyName;
+    public ushort Opcode => (ushort)ServerOpcode.CharacterChangeBuddyName;
 
     public void Serialize(PacketWriter writer)
     {

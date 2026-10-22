@@ -19,7 +19,7 @@ public sealed class PacketSerializationTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes, out var header));
-        Assert.AreEqual((ushort)RakionOpcode.ServerListRequest, header.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ServerListRequest, header.Opcode);
 
         Assert.IsTrue(ServerListRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
         Assert.AreEqual((ushort)1026, parsed.ClientVersion);
@@ -40,7 +40,7 @@ public sealed class PacketSerializationTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes, out var header));
-        Assert.AreEqual((ushort)RakionOpcode.ServerListResponse, header.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ServerListResponse, header.Opcode);
 
         Assert.IsTrue(ServerListResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed));
         Assert.HasCount(2, parsed.Servers);
@@ -67,7 +67,7 @@ public sealed class PacketSerializationTests
         byte[] bytes = writer.Build();
 
         Assert.IsTrue(PacketHeader.TryParse(bytes, out var header));
-        Assert.AreEqual((ushort)RakionOpcode.Login, header.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.Login, header.Opcode);
 
         Assert.IsTrue(LoginRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), header.Opcode, out var parsed));
         Assert.AreEqual("TestPlayer", parsed.Username);
@@ -85,7 +85,7 @@ public sealed class PacketSerializationTests
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), 0x1310);
         System.Text.Encoding.Latin1.GetBytes("admin").CopyTo(payload.AsSpan(10));
 
-        bool success = LoginRequestPacket.TryParse(payload, (ushort)RakionOpcode.None, out var parsed);
+        bool success = LoginRequestPacket.TryParse(payload, (ushort)ClientOpcode.None, out var parsed);
 
         Assert.IsTrue(success);
         Assert.AreEqual("admin", parsed.Username);
@@ -100,7 +100,7 @@ public sealed class PacketSerializationTests
         byte[] payload = Convert.FromHexString(
             "1013A41302F43298A2CC6E856CAC2F628061F7F7F4B7A4A1AFCCF8B0B3F24B75002A8287540DE9DF09084CC74B7DBB3DBDD4789BFD4FF2D467FF80CD2BF5D6BF8E61");
 
-        bool success = LoginRequestPacket.TryParse(payload, (ushort)RakionOpcode.None, out var parsed);
+        bool success = LoginRequestPacket.TryParse(payload, (ushort)ClientOpcode.None, out var parsed);
 
         Assert.IsTrue(success);
         Assert.AreEqual("admin", parsed.Username);
@@ -117,7 +117,7 @@ public sealed class PacketSerializationTests
         byte[] packet = NyxLauncherCrypto.BuildPacket("PlayerOne", "mypassword123", salt: 0x99887766, clientVersion: 1026);
 
         // Header is 4 bytes (len=70, opcode=0), payload starts at offset 4
-        bool success = LoginRequestPacket.TryParse(packet.AsSpan(PacketHeader.HeaderSize), (ushort)RakionOpcode.None, out var parsed);
+        bool success = LoginRequestPacket.TryParse(packet.AsSpan(PacketHeader.HeaderSize), (ushort)ClientOpcode.None, out var parsed);
 
         Assert.IsTrue(success);
         Assert.AreEqual("PlayerOne", parsed.Username);

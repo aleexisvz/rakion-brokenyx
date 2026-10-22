@@ -118,7 +118,7 @@ public sealed record FieldListRequestPacket(
     byte Filter6 = 0,
     byte Filter7 = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.FieldList;
+    public ushort Opcode => (ushort)ClientOpcode.FieldList;
 
     public void Serialize(PacketWriter writer)
     {
@@ -167,7 +167,7 @@ public sealed record FieldListResponsePacket(
 {
     public static readonly FieldListResponsePacket Empty = new(Array.Empty<FieldListEntry>());
 
-    public ushort Opcode => (ushort)RakionOpcode.FieldList;
+    public ushort Opcode => (ushort)ServerOpcode.FieldList;
 
     public void Serialize(PacketWriter writer)
     {

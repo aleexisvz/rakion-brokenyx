@@ -69,7 +69,7 @@ public sealed class LoginIntegrationTests
         await _userRepository.CreateUserAsync(user);
 
         // Act
-        var response = await SendLoginPacketAsync("Warrior01", "secret123", (ushort)RakionOpcode.Login);
+        var response = await SendLoginPacketAsync("Warrior01", "secret123", (ushort)ClientOpcode.Login);
 
         // Assert
         Assert.AreEqual(LoginResultCode.Success, response.Result);
@@ -96,7 +96,7 @@ public sealed class LoginIntegrationTests
         int userId = await _userRepository.CreateUserAsync(user);
 
         // Act
-        var response = await SendLoginPacketAsync("OldPlayer", "legacy_pass", (ushort)RakionOpcode.Login);
+        var response = await SendLoginPacketAsync("OldPlayer", "legacy_pass", (ushort)ClientOpcode.Login);
 
         // Assert
         Assert.AreEqual(LoginResultCode.Success, response.Result);
@@ -115,7 +115,7 @@ public sealed class LoginIntegrationTests
         await _userRepository.CreateUserAsync(new UserEntity { Username = "TargetUser", PasswordHash = hash });
 
         // Act
-        var response = await SendLoginPacketAsync("TargetUser", "WRONG_PASSWORD", (ushort)RakionOpcode.Login);
+        var response = await SendLoginPacketAsync("TargetUser", "WRONG_PASSWORD", (ushort)ClientOpcode.Login);
 
         // Assert
         Assert.AreEqual(LoginResultCode.InvalidCredentials, response.Result);
@@ -124,7 +124,7 @@ public sealed class LoginIntegrationTests
     [TestMethod]
     public async Task Login_NonExistentUser_ReturnsInvalidCredentials()
     {
-        var response = await SendLoginPacketAsync("DoesNotExist", "any_password", (ushort)RakionOpcode.Login);
+        var response = await SendLoginPacketAsync("DoesNotExist", "any_password", (ushort)ClientOpcode.Login);
         Assert.AreEqual(LoginResultCode.InvalidCredentials, response.Result);
     }
 
@@ -142,7 +142,7 @@ public sealed class LoginIntegrationTests
             new { BanDate = DateTime.UtcNow.AddDays(7), UserId = userId });
 
         // Act
-        var response = await SendLoginPacketAsync("Cheater99", "valid_pass", (ushort)RakionOpcode.Login);
+        var response = await SendLoginPacketAsync("Cheater99", "valid_pass", (ushort)ClientOpcode.Login);
 
         // Assert
         Assert.AreEqual(LoginResultCode.AccountBanned, response.Result);
@@ -154,7 +154,7 @@ public sealed class LoginIntegrationTests
         string hash = _hasher.HashPassword("alt_pass");
         await _userRepository.CreateUserAsync(new UserEntity { Username = "AltUser", PasswordHash = hash });
 
-        var response = await SendLoginPacketAsync("AltUser", "alt_pass", (ushort)RakionOpcode.LoginAlt2);
+        var response = await SendLoginPacketAsync("AltUser", "alt_pass", (ushort)ClientOpcode.LoginAlt2);
 
         Assert.AreEqual(LoginResultCode.Success, response.Result);
         Assert.AreEqual((ushort)0xEBD3, response.HeaderOpcode);
@@ -167,7 +167,7 @@ public sealed class LoginIntegrationTests
         string hash = _hasher.HashPassword("alt4_pass");
         await _userRepository.CreateUserAsync(new UserEntity { Username = "Alt4User", PasswordHash = hash });
 
-        var response = await SendLoginPacketAsync("Alt4User", "alt4_pass", (ushort)RakionOpcode.LoginAlt4);
+        var response = await SendLoginPacketAsync("Alt4User", "alt4_pass", (ushort)ClientOpcode.LoginAlt4);
 
         Assert.AreEqual(LoginResultCode.Success, response.Result);
         Assert.AreEqual((ushort)0x1BAF, response.HeaderOpcode);
@@ -273,7 +273,7 @@ public sealed class LoginIntegrationTests
             "00400652616B696F6E000000001450656E7469756D3F49492028302E323520B56D29580B0000FFFFFF7F0000FFFF");
         byte[] startGamePacket = new byte[PacketHeader.HeaderSize + startPayload.Length];
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(0, 2), (ushort)startGamePacket.Length);
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(2, 2), (ushort)RakionOpcode.None);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(2, 2), (ushort)ClientOpcode.None);
         startPayload.CopyTo(startGamePacket.AsSpan(PacketHeader.HeaderSize));
 
         await stream.WriteAsync(startGamePacket);
@@ -392,8 +392,8 @@ public sealed class LoginIntegrationTests
         // 6-byte packet: TotalLength=6, Opcode=0xCDDF, Payload=0x3000
         byte[] packet = new byte[6];
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), 6);
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)RakionOpcode.ServerListRequest); // 0xCDDF
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(4, 2), (ushort)RakionOpcode.LoginAlt2); // 0x3000
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)ClientOpcode.ServerListRequest); // 0xCDDF
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(4, 2), (ushort)ClientOpcode.LoginAlt2); // 0x3000
 
         var endPoint = (IPEndPoint)_server.LocalEndPoint!;
         using var client = new TcpClient();
@@ -425,7 +425,7 @@ public sealed class LoginIntegrationTests
 
         byte[] packet = new byte[PacketHeader.HeaderSize + payload.Length];
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(0, 2), (ushort)packet.Length);
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)RakionOpcode.None);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(packet.AsSpan(2, 2), (ushort)ClientOpcode.None);
         payload.CopyTo(packet.AsSpan(PacketHeader.HeaderSize));
 
         var endPoint = (IPEndPoint)_server.LocalEndPoint!;
@@ -516,7 +516,7 @@ public sealed class LoginIntegrationTests
             "00400652616B696F6E000000001450656E7469756D3F49492028302E323520B56D29580B0000FFFFFF7F0000FFFF");
         byte[] startGamePacket = new byte[PacketHeader.HeaderSize + startPayload.Length];
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(0, 2), (ushort)startGamePacket.Length);
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(2, 2), (ushort)RakionOpcode.None);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(startGamePacket.AsSpan(2, 2), (ushort)ClientOpcode.None);
         startPayload.CopyTo(startGamePacket.AsSpan(PacketHeader.HeaderSize));
 
         await stream.WriteAsync(startGamePacket);

@@ -9,7 +9,7 @@ namespace Rakion.Core.Packets;
 /// </summary>
 public sealed record ServerListRequestPacket(ushort ClientVersion = 0) : IPacket
 {
-    public ushort Opcode => (ushort)RakionOpcode.ServerListRequest;
+    public ushort Opcode => (ushort)ClientOpcode.ServerListRequest;
 
     public void Serialize(PacketWriter writer)
     {

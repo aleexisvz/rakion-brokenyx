@@ -15,7 +15,7 @@ public sealed class ChannelPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelList, packet.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ChannelList, packet.Opcode);
         bool success = ChannelListRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
         Assert.AreEqual(1, parsed.Category);
@@ -37,7 +37,7 @@ public sealed class ChannelPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelList, packet.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelList, packet.Opcode);
         bool success = ChannelListResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
         Assert.HasCount(3, parsed.Channels);
@@ -65,7 +65,7 @@ public sealed class ChannelPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, packet.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ChannelEnter, packet.Opcode);
         bool success = ChannelEnterRequestPacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
         Assert.AreEqual((byte)1, parsed.ChannelIndex);
@@ -88,7 +88,7 @@ public sealed class ChannelPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, packet.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, packet.Opcode);
         bool success = ChannelEnterResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
         Assert.AreEqual((byte)0, parsed.ResultCode);
@@ -108,7 +108,7 @@ public sealed class ChannelPacketTests
         packet.Serialize(writer);
         byte[] bytes = writer.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelEnter, packet.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, packet.Opcode);
         bool success = ChannelEnterResponsePacket.TryParse(bytes.AsSpan(PacketHeader.HeaderSize), out var parsed);
         Assert.IsTrue(success);
         Assert.AreEqual((byte)2, parsed.ResultCode);
@@ -122,7 +122,7 @@ public sealed class ChannelPacketTests
         req.Serialize(reqWriter);
         byte[] reqBytes = reqWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelExit, req.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ChannelExit, req.Opcode);
         Assert.IsTrue(ChannelExitRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out _));
 
         var resp = new ChannelExitResponsePacket(ResultCode: 0);
@@ -130,7 +130,7 @@ public sealed class ChannelPacketTests
         resp.Serialize(respWriter);
         byte[] respBytes = respWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelExit, resp.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelExit, resp.Opcode);
         Assert.IsTrue(ChannelExitResponsePacket.TryParse(respBytes.AsSpan(PacketHeader.HeaderSize), out var parsedResp));
         Assert.AreEqual((byte)0, parsedResp.ResultCode);
     }
@@ -143,7 +143,7 @@ public sealed class ChannelPacketTests
         req.Serialize(reqWriter);
         byte[] reqBytes = reqWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelChat, req.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ChannelChat, req.Opcode);
         Assert.IsTrue(ChannelChatRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out var parsedReq));
         Assert.AreEqual("Hello everyone in channel!", parsedReq.Message);
 
@@ -152,7 +152,7 @@ public sealed class ChannelPacketTests
         broadcast.Serialize(bWriter);
         byte[] bBytes = bWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelChat, broadcast.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelChat, broadcast.Opcode);
         Assert.IsTrue(ChannelChatBroadcastPacket.TryParse(bBytes.AsSpan(PacketHeader.HeaderSize), out var parsedB));
         Assert.AreEqual((byte)0, parsedB.ChatType);
         Assert.AreEqual("Warrior01 : Hello everyone in channel!", parsedB.FormattedMessage);
@@ -166,7 +166,7 @@ public sealed class ChannelPacketTests
         req.Serialize(reqWriter);
         byte[] reqBytes = reqWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, req.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.ChannelCharacters, req.Opcode);
         Assert.IsTrue(ChannelCharactersRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out _));
 
         var chars = new List<ChannelCharacterSummary>
@@ -187,7 +187,7 @@ public sealed class ChannelPacketTests
         resp.Serialize(respWriter);
         byte[] respBytes = respWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.ChannelCharacters, resp.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, resp.Opcode);
         Assert.IsTrue(ChannelCharactersResponsePacket.TryParse(respBytes.AsSpan(PacketHeader.HeaderSize), out var parsedResp));
         Assert.AreEqual((byte)1, parsedResp.ChannelIndex);
         Assert.AreEqual((byte)2, parsedResp.CharacterCount);
@@ -213,7 +213,7 @@ public sealed class ChannelPacketTests
         req.Serialize(reqWriter);
         byte[] reqBytes = reqWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.CharacterWhisper, req.Opcode);
+        Assert.AreEqual((ushort)ClientOpcode.CharacterWhisper, req.Opcode);
         Assert.IsTrue(CharacterWhisperRequestPacket.TryParse(reqBytes.AsSpan(PacketHeader.HeaderSize), out var parsedReq));
         Assert.AreEqual("FriendPlayer", parsedReq.TargetCharacterName);
         Assert.AreEqual("Hey, want to party up?", parsedReq.Message);
@@ -224,7 +224,7 @@ public sealed class ChannelPacketTests
         successResp.Serialize(sWriter);
         byte[] sBytes = sWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.CharacterWhisper, successResp.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterWhisper, successResp.Opcode);
         Assert.IsTrue(CharacterWhisperResponsePacket.TryParse(sBytes.AsSpan(PacketHeader.HeaderSize), out var parsedS));
         Assert.AreEqual((byte)0, parsedS.ResultCode);
         Assert.AreEqual("SenderHero", parsedS.CharacterName);
@@ -236,7 +236,7 @@ public sealed class ChannelPacketTests
         errorResp.Serialize(eWriter);
         byte[] eBytes = eWriter.Build();
 
-        Assert.AreEqual((ushort)RakionOpcode.CharacterWhisper, errorResp.Opcode);
+        Assert.AreEqual((ushort)ServerOpcode.CharacterWhisper, errorResp.Opcode);
         Assert.IsTrue(CharacterWhisperResponsePacket.TryParse(eBytes.AsSpan(PacketHeader.HeaderSize), out var parsedE));
         Assert.AreEqual((byte)1, parsedE.ResultCode);
         Assert.AreEqual("OfflinePlayer", parsedE.CharacterName);
