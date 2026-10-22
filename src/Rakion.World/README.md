@@ -34,7 +34,12 @@
   - **`CharacterWhisper` (`0x0016`):** Enrutamiento bidireccional de susurros (mensajes privados) entre personajes conectados en el servidor.
   - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
 
-### 3. `ChannelManager` (`Rakion.World.Channels`)
+### 3. Registro de opcodes (`Rakion.World.Modules`, contrato C-1)
+- `WorldPacketHandler` ya no usa un `switch`: descifra el paquete y busca el handler en `WorldOpcodeRegistry`, un mapa explícito y tipado `ClientOpcode → WorldOpcodeHandler`.
+- Los handlers propios de World se registran en `RegisterBuiltInHandlers()`. Otras funcionalidades (por ejemplo la economía del carril A, en `Features/Economy/`) implementan `IWorldOpcodeModule` y se registran en DI; no editan `WorldPacketHandler`.
+- Cada opcode tiene un único dueño: si un módulo intenta mapear un opcode ya enlazado, el constructor del handler lanza `InvalidOperationException` al arrancar.
+
+### 4. `ChannelManager` (`Rakion.World.Channels`)
 - Gestor concurrente en memoria de canales de juego (`LobbyChannel`).
 - Provee aislamiento de salas de chat y lista de usuarios por canal con soporte para restricciones por nivel y límites de jugadores.
 
