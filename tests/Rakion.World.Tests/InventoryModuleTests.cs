@@ -1,10 +1,10 @@
 using System.Net.Sockets;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Rakion.Core.Enums;
+using Rakion.Core.Packets;
+using Rakion.Core.Protocol;
+using Rakion.Core.Utilities;
 using Rakion.Database.Entities;
-using Rakion.Database.Repositories;
-using Rakion.Database.Tests.TestUtilities;
 using Rakion.Network.Tcp;
 using Rakion.World.Features.Economy;
 using Rakion.World.Modules;
@@ -15,25 +15,17 @@ namespace Rakion.World.Tests;
 [TestClass]
 public sealed class InventoryModuleTests
 {
-    private SqliteTestConnectionFactory _dbFactory = null!;
-    private InventoryRepository _inventoryRepository = null!;
-    private ListLogger _logger = null!;
+    private static readonly DateTime Now = new(2026, 10, 21, 22, 15, 30);
+
+    private RecordingSender _sender = null!;
     private WorldOpcodeRegistry _registry = null!;
 
     [TestInitialize]
     public void Setup()
     {
-        _dbFactory = new SqliteTestConnectionFactory($"Data Source=world_inventory_test_{Guid.NewGuid():N};Mode=Memory;Cache=Shared");
-        _inventoryRepository = new InventoryRepository(_dbFactory);
-        _logger = new ListLogger();
+        _sender = new RecordingSender();
         _registry = new WorldOpcodeRegistry();
-        new InventoryModule(_inventoryRepository, _logger).Register(_registry);
-    }
-
-    [TestCleanup]
-    public void Cleanup()
-    {
-        _dbFactory.Dispose();
+        new InventoryModule(_sender, new FixedTimeProvider(Now), NullLogger<InventoryModule>.Instance).Register(_registry);
     }
 
     [TestMethod]
@@ -45,33 +37,39 @@ public sealed class InventoryModuleTests
     }
 
     [TestMethod]
-    public async Task InventoryEnter_WithActiveCharacter_LoadsAccountItems()
+    public async Task InventoryEnter_WithActiveCharacter_RepliesSuccessWithServerTime()
     {
-        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 5, CharacterId = 0, ItemId = 100, SlotIndex = 1 });
-        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 5, CharacterId = 9, ItemId = 101, SlotIndex = 2 });
-        await _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = 6, CharacterId = 0, ItemId = 102, SlotIndex = 1 });
-
         var session = CreateSession();
         session.User = new UserEntity { Id = 5, Username = "bob" };
         session.ActiveCharacter = new CharacterEntity { Id = 9, UserId = 5, Name = "Bobby" };
 
         await DispatchAsync(session, ClientOpcode.InventoryEnter);
 
-        Assert.IsTrue(
-            _logger.Messages.Any(m => m.Contains("'Bobby': 2 items loaded")),
-            string.Join(Environment.NewLine, _logger.Messages));
+        Assert.HasCount(1, _sender.Sent);
+        Assert.AreSame(session, _sender.Sent[0].Session);
+        var response = (InventoryEnterResponsePacket)_sender.Sent[0].Packet;
+        Assert.AreEqual((ushort)ServerOpcode.InventoryEnter, response.Opcode);
+        Assert.AreEqual(InventoryEnterResponsePacket.ResultSuccess, response.Result);
+        Assert.AreEqual(LegacyGameClock.ToMinutes(Now), response.ServerTimeMinutes);
     }
 
     [TestMethod]
-    public async Task InventoryEnter_WithoutActiveCharacter_IsRejected()
+    public async Task InventoryEnter_WithoutActiveCharacter_SendsNothing()
     {
         var session = CreateSession();
         session.User = new UserEntity { Id = 5, Username = "bob" };
 
         await DispatchAsync(session, ClientOpcode.InventoryEnter);
 
-        Assert.IsTrue(_logger.Messages.Any(m => m.Contains("InventoryEnter rejected")));
-        Assert.IsFalse(_logger.Messages.Any(m => m.Contains("items loaded")));
+        Assert.IsEmpty(_sender.Sent);
+    }
+
+    [TestMethod]
+    public async Task InventoryLeave_SendsNothing()
+    {
+        await DispatchAsync(CreateSession(), ClientOpcode.InventoryLeave);
+
+        Assert.IsEmpty(_sender.Sent);
     }
 
     private async Task DispatchAsync(WorldSession session, ClientOpcode opcode)
@@ -83,18 +81,21 @@ public sealed class InventoryModuleTests
     private static WorldSession CreateSession() =>
         new(new TcpConnection(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), null!, NullLogger.Instance));
 
-    private sealed class ListLogger : ILogger<InventoryModule>
+    private sealed class RecordingSender : ISessionSender
     {
-        public List<string> Messages { get; } = [];
+        public List<(IWorldSessionView Session, IPacket Packet)> Sent { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        public ValueTask SendAsync(IWorldSessionView session, IPacket packet, CancellationToken cancellationToken)
         {
-            Messages.Add(formatter(state, exception));
+            Sent.Add((session, packet));
+            return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class FixedTimeProvider(DateTime utcNow) : TimeProvider
+    {
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+
+        public override DateTimeOffset GetUtcNow() => new(utcNow, TimeSpan.Zero);
     }
 }

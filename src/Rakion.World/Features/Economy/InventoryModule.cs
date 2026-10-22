@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
-using Rakion.Database.Repositories;
+using Rakion.Core.Utilities;
 using Rakion.World.Modules;
 using Rakion.World.Session;
 
@@ -13,12 +13,14 @@ namespace Rakion.World.Features.Economy;
 /// </summary>
 public sealed class InventoryModule : IWorldOpcodeModule
 {
-    private readonly IInventoryRepository _inventoryRepository;
+    private readonly ISessionSender _sender;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<InventoryModule> _logger;
 
-    public InventoryModule(IInventoryRepository inventoryRepository, ILogger<InventoryModule> logger)
+    public InventoryModule(ISessionSender sender, TimeProvider timeProvider, ILogger<InventoryModule> logger)
     {
-        _inventoryRepository = inventoryRepository;
+        _sender = sender;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -36,7 +38,10 @@ public sealed class InventoryModule : IWorldOpcodeModule
         IWorldSessionView view = session;
         InventoryEnterRequestPacket.TryParse(payload.Span, out _);
 
-        if (view.UserId is not int userId || view.CharacterId is null)
+        // The legacy server checks that the character belongs to the account and otherwise sends no
+        // 0x002C reply (it reports error code 0xB8 instead, whose semantics are Unknown). Here character
+        // select already enforces ownership, so a missing character is the only rejection.
+        if (view.UserId is null || view.CharacterId is null)
         {
             _logger.LogWarning(
                 "[{ConnectionId}] InventoryEnter rejected: no authenticated user with an active character.",
@@ -44,17 +49,15 @@ public sealed class InventoryModule : IWorldOpcodeModule
             return;
         }
 
-        // Inferred: inventory is account-wide (CharacterId 0 = shared), so every row of the user is loaded.
-        var items = await _inventoryRepository.GetUserItemsAsync(userId, characterId: null, cancellationToken).ConfigureAwait(false);
+        uint serverTimeMinutes = LegacyGameClock.ToMinutes(_timeProvider.GetLocalNow().DateTime);
+        var response = new InventoryEnterResponsePacket(InventoryEnterResponsePacket.ResultSuccess, serverTimeMinutes);
+        await _sender.SendAsync(view, response, cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
-            "[{ConnectionId}] InventoryEnter for '{CharacterName}': {ItemCount} items loaded.",
+            "[{ConnectionId}] InventoryEnter for '{CharacterName}': accepted (server time {ServerTimeMinutes} min).",
             view.ConnectionId,
             view.CharacterName,
-            items.Count);
-
-        // UNKNOWN: layout of the server's inventory list response to 0x002C has not been observed yet,
-        // so no reply is sent. It must be read from the client before it is implemented.
+            serverTimeMinutes);
     }
 
     private ValueTask HandleInventoryLeaveAsync(

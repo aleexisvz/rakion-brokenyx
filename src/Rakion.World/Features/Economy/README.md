@@ -16,7 +16,7 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 
 | Ítem | Opcodes (cliente → servidor) | Estado | Verificado con cliente real |
 | :--- | :--- | :--- | :--- |
-| 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Petición recibida; los items de la cuenta se cargan de BD. **No se envía respuesta**: el layout de la lista de inventario es **Unknown**. | no |
+| 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). La lista de ítems **no** viaja en esta respuesta; dónde viaja es **Unknown**. | no (respuesta pendiente de probar) |
 | 4.2 – 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
@@ -24,7 +24,14 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 - Opcodes: leídos del inmediato con el que cada `IScavengerWorldNet::Send*` de `engine.dll`
   (v258) escribe el opcode. El método se validó con `SendAlive` (`0x000F`) y
   `SendCharacterStateClear` (`0x001B`), que ya estaban confirmados.
-- El inventario se carga por cuenta (`characterId: null`): **Inferred** de la columna
-  `character_id` (0 = compartido) del esquema heredado.
-- Pendiente para cerrar 4.1: observar en el cliente el parser de la respuesta a `0x002C`
-  (requiere un desensamblador configurado en `rea`).
+- Respuesta a `0x002C` (observada en el desensamblado, sin copiar código):
+  - `RakionWorldServ.exe` 0x427A9D envía 7 bytes (opcode, `u8` resultado, `u32` valor) y
+    `engine.dll` 0x36193650 lee exactamente `u8` + `u32`.
+  - `DBCommandInventoryEnter` comprueba la pertenencia con
+    `SELECT userid=%u FROM characterinfo WHERE id=%u` y obtiene el valor con
+    `SELECT (to_days(now())*24+hour(now()))*60+minute(now())`. Ese valor es la hora del
+    servidor en minutos; lo reproduce `LegacyGameClock`, con hora local como `now()` de MySQL.
+  - Resultado `0` = éxito, `1` = error de BD. Si el personaje no es de la cuenta, el original
+    no responde y emite un error interno `0xB8` (semántica **Unknown**). Aquí la selección de
+    personaje ya garantiza la pertenencia.
+  - Uso del valor en el cliente (tiempo restante de ítems alquilados): **Inferred**.
