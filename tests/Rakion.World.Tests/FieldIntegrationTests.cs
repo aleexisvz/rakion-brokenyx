@@ -205,6 +205,12 @@ public sealed class FieldIntegrationTests
         Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadExit, out var pExit));
         Assert.AreEqual((byte)10, pExit.SlotIndex);
 
+        // Guest also receives FieldList (to transition UI back to lobby) and ChannelCharacters
+        var (opGuestFieldList, payloadGuestFieldList) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.FieldList, opGuestFieldList);
+        var (opGuestRoster, payloadGuestRoster) = await ReadServerPacketAsync(s2);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, opGuestRoster);
+
         // Host receives exit broadcast for Guest (Slot 10)
         var (opHostExitBroadcast, payloadHostExitBroadcast) = await ReadServerPacketAsync(s1);
         Assert.AreEqual((ushort)ServerOpcode.FieldExit, opHostExitBroadcast);
@@ -217,6 +223,12 @@ public sealed class FieldIntegrationTests
         Assert.AreEqual((ushort)ServerOpcode.FieldExit, opHostExit);
         Assert.IsTrue(FieldExitResponsePacket.TryParse(payloadHostExit, out var pHostExit));
         Assert.AreEqual((byte)0, pHostExit.SlotIndex);
+
+        // Host receives FieldList and ChannelCharacters
+        var (opHostFieldList, payloadHostFieldList) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.FieldList, opHostFieldList);
+        var (opHostRoster, payloadHostRoster) = await ReadServerPacketAsync(s1);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, opHostRoster);
 
         // FieldList is empty again
         await SendClientPacketAsync(s1, 7, listReq.Opcode, listReq);

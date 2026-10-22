@@ -1075,7 +1075,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 field?.Number ?? 0,
                 roomDestroyed);
 
-            // Notify exiting player with their slot index so client knows to exit room UI
+            // Notify exiting player with their slot index so client knows to empty slot
             var response = new FieldExitResponsePacket(SlotIndex: exitingSlot);
             await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
 
@@ -1087,6 +1087,21 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                     await SendPacketAsync(member.Session, response, cancellationToken).ConfigureAwait(false);
                 }
             }
+
+            // In v258 client, receiving FieldList (0x0036) while in WaitRoom (state 0x19) triggers
+            // transition back to SelectGame channel lobby (state 0x17).
+            var fields = session.ActiveChannel.FieldManager.GetFields(session.ActiveChannel.Index);
+            var pagedEntries = fields
+                .Take(6)
+                .Select(f => f.ToFieldListEntry())
+                .ToList();
+            var fieldListResp = pagedEntries.Count == 0
+                ? FieldListResponsePacket.Empty
+                : new FieldListResponsePacket(pagedEntries);
+            await SendPacketAsync(session, fieldListResp, cancellationToken).ConfigureAwait(false);
+
+            // Send updated channel character roster
+            await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
         }
     }
 
