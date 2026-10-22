@@ -30,8 +30,9 @@
   - **`ChannelEnter` (`0x001F`):** Procesa la entrada del jugador a un canal, validando restricciones de nivel (ej. nivel máximo 15 en Principiante) y capacidad de jugadores.
   - **`ChannelExit` (`0x0020`):** Procesa la salida limpia del canal activo y confirma la desvinculación de sesión.
   - **`ChannelCharacters` (`0x001E`):** Entrega la lista de personajes presentes en el lobby del canal actual.
-  - **`ChannelChat` (`0x0022`):** Recibe mensajes de chat de lobby y los difunde a todas las sesiones activas en el mismo canal.
+  - **`ChannelChat` (`0x0022`):** Recibe mensajes de chat de lobby y los difunde a todas las sesiones activas en el mismo canal (tolerante al formato cliente que antepone `"{Personaje} : "`).
   - **`CharacterWhisper` (`0x0016`):** Enrutamiento bidireccional de susurros (mensajes privados) entre personajes conectados en el servidor.
+  - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
 
 ### 3. `ChannelManager` (`Rakion.World.Channels`)
 - Gestor concurrente en memoria de canales de juego (`LobbyChannel`).
