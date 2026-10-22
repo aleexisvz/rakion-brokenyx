@@ -19,7 +19,9 @@ Reference documents (source of truth for scope and order of work):
 - [`docs/DESGLOSE.md`](docs/DESGLOSE.md) — original reverse-engineering report of the legacy server.
 
 Work follows the roadmap phase order unless the maintainer says otherwise.
-Update the roadmap checkboxes in the same branch that completes an item.
+Work is split into two lanes with path ownership and shared Core contracts
+(see "Organización del Trabajo" in the roadmap). Roadmap checkboxes are
+marked only by the integrator when a PR is merged, never in a feature branch.
 
 ## 2. Clean-room policy (non-negotiable)
 
@@ -64,12 +66,14 @@ src/
   Rakion.Database/   MySQL/MariaDB persistence (repositories, migrations)
   Rakion.Broker/     login + server list (TCP 40706)
   Rakion.World/      lobby, characters, inventory, rooms (TCP 40708)
-  Rakion.Relay/      UDP relay / tunneling (40708/40709)
+  Rakion.Relay/      UDP relay routing logic — no sockets; the 40708/40709
+                     listeners live in World
+  Rakion.Maintenance/ rankings, anti-abuse, scheduled jobs (phase 7)
   Rakion.App/        host/composition root, configuration, logging
 tests/
 ```
 
-- Dependencies flow inward: `Core` ← `Network`/`Database` ← `Broker`/`World`/`Relay` ← `App`.
+- Dependencies flow inward: `Core` ← `Network`/`Database`/`Relay` ← `Broker`/`World`/`Maintenance` ← `App`.
   `Core` must not reference sockets, SQL or hosting.
 - One owner per concept: a packet layout is defined once (in `Core`) and every
   consumer uses it. No ad-hoc byte parsing in handlers.
@@ -137,23 +141,24 @@ dotnet format --verify-no-changes
   ```
 
   - Types: `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`, `style`, `revert`.
-  - Scopes: `core`, `network`, `db`, `broker`, `world`, `relay`, `app`, `docs`, `repo`.
+  - Scopes: `core`, `network`, `db`, `broker`, `world`, `relay`, `maintenance`, `app`, `docs`, `repo`.
   - Breaking changes: `feat(core)!: …` or a `BREAKING CHANGE:` footer.
   - Examples:
     - `feat(core): add little-endian PacketWriter`
     - `test(core): cover PacketReader bounds checks`
     - `feat(broker): answer 0xCDDF with server list packet 0x0101`
-    - `docs(roadmap): mark phase 0.3 as done`
+    - `docs(roadmap): mark phase 0.3 as done` (integrator only)
 
 ### 6.4 Finishing a branch — strictly gated by user approval
 
 Under NO circumstances should the agent push to GitHub, open a PR, or merge a PR without the maintainer's explicit prior approval.
 
-When the change or fix is **complete** (builds, tests pass, docs and roadmap updated):
+When the change or fix is **complete** (builds, tests pass, module docs updated):
 
 1. Commit all changes locally to the Git repository using atomic Conventional Commits.
 2. Run `dotnet build && dotnet test` to ensure zero errors and passing tests locally.
-3. Update module `README.md` files and `docs/ROADMAP.md` locally.
+3. Update the module `README.md` files owned by your lane. Do not tick
+   `docs/ROADMAP.md` checkboxes; the integrator does that on merge.
 4. **STOP and ask the maintainer for approval.** Inform the user that local commits and tests are complete, and explicitly ask if they want to review or test the code locally before pushing to GitHub.
 5. **Only upon receiving explicit approval from the maintainer**, execute:
    a. `git fetch origin && git rebase origin/main` (resolve conflicts locally).
