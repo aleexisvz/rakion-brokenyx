@@ -18,13 +18,13 @@
     - Servidor -> Cliente: `[0..1] ushort Opcode`, `[2..] Payload bytes` (sin Sequence ID, relleno PKCS7 a múltiplo de 16 bytes).
   - **`WorldLogin` (`0x000C`):** Procesa la credencial de autenticación inicial presentada por el cliente contra el ticket emitido por el Broker Server. Responde con `0x000C` conteniendo la lista de personajes serializados, 3 ranuras habilitadas (`UnlockedSlots = 3`), oro (offset 40) y cash (offset 48).
   - **`WorldLoginPart2` (`0x000D`):** Handshake secundario de inicialización de mundo.
-  - **`SendGameGuard` (`0x0001`):** Responde con éxito (`0x0002`), eliminando la necesidad de emuladores GameGuard o DLLs anticheat legadas.
+  - **`SendGameGuard` (`0x0010`):** Responde con éxito (`0x001B`), eliminando la necesidad de emuladores GameGuard o DLLs anticheat legadas.
   - **`KeepAlive` (`0x000F`):** Pings periódicos de actividad en lobby y selección de personajes (`?SendAlive@IScavengerWorldNet`).
   - **`UdpSuccess` (`0x000E`):** Al concluir el sondeo UDP de hole punching, el cliente emite Opcode `0x000E`. El servidor confirma con la estructura de 13 bytes (`Result = 0`, `IP1`, `Port1`, `IP2`, `Port2`), cerrando el temporizador y el diálogo modal *"Waiting for response from the world."* de forma definitiva.
-  - **`CharacterCreate` (`0x0012`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y responde con `0x002B`.
-  - **`CharacterDelete` (`0x0013`):** Verifica la clave de borrado y retira el personaje (`0x002D`), aceptando claves vacías o de bypass (`sirmaster`) sin fallar ante la falta de diálogo de clave en el cliente retail v258.
+  - **`CharacterCreate` (`0x0012`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y responde con `0x0012`.
+  - **`CharacterDelete` (`0x0013`):** Verifica la clave de borrado y retira el personaje (respuesta `0x0013`; el valor legacy de RakionWorldServ era `0x002D`), aceptando claves vacías o de bypass (`sirmaster`) sin fallar ante la falta de diálogo de clave en el cliente retail v258.
   - **`CharacterChangeBuddyName` (`0x0015`):** Notificación de actualización del nombre de personaje para el sistema de mensajería (Buddy system) emitida por el cliente tras la creación de un personaje. El servidor confirma con código 0 y el nombre del personaje, cerrando el diálogo modal *"Notice: change request of character's name for messenger"* y habilitando la interactividad de la interfaz.
-  - **`CharacterSelect` (`0x0014`):** Selecciona el personaje activo y responde con `0x002E`, autorizando la transición a la pantalla de lobby/tutorial/canales.
+  - **`CharacterSelect` (`0x0014`):** Selecciona el personaje activo y responde con `0x0014` (legacy `0x002E`), autorizando la transición a la pantalla de lobby/tutorial/canales.
   - **`CharacterTutorialClear` (`0x001A`):** Notificación emitida por el cliente tras completar el tutorial (`?SendCharacterTutorialClear@IScavengerWorldNet`).
   - **`ChannelList` (`0x001D`):** Retorna la lista de canales activos en el servidor (Canal Principiante, Canal Libre, Canal de Clanes) con su tipo, concurrencia actual y capacidad máxima.
   - **`ChannelEnter` (`0x001F`):** Procesa la entrada del jugador a un canal, validando restricciones de nivel (ej. nivel máximo 15 en Principiante) y capacidad de jugadores.
@@ -34,11 +34,16 @@
   - **`CharacterWhisper` (`0x0016`):** Enrutamiento bidireccional de susurros (mensajes privados) entre personajes conectados en el servidor.
   - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
 
-### 3. `ChannelManager` (`Rakion.World.Channels`)
+### 3. Registro de opcodes (`Rakion.World.Modules`, contrato C-1)
+- `WorldPacketHandler` ya no usa un `switch`: descifra el paquete y busca el handler en `WorldOpcodeRegistry`, un mapa explícito y tipado `ClientOpcode → WorldOpcodeHandler`.
+- Los handlers propios de World se registran en `RegisterBuiltInHandlers()`. Otras funcionalidades (por ejemplo la economía del carril A, en `Features/Economy/`) implementan `IWorldOpcodeModule` y se registran en DI; no editan `WorldPacketHandler`.
+- Cada opcode tiene un único dueño: si un módulo intenta mapear un opcode ya enlazado, el constructor del handler lanza `InvalidOperationException` al arrancar.
+
+### 4. `ChannelManager` (`Rakion.World.Channels`)
 - Gestor concurrente en memoria de canales de juego (`LobbyChannel`).
 - Provee aislamiento de salas de chat y lista de usuarios por canal con soporte para restricciones por nivel y límites de jugadores.
 
-### 4. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
+### 5. `WorldUdpPacketHandler` (`Rakion.World.Handlers`)
 - Procesa datagramas UDP enviados por el cliente al entrar a la selección de personaje (`CMenuSelectCharacter`):
   - Recibe `0x0201` en el puerto 40708 (UDP 1) y `0x0202` en el puerto 40709 (UDP 2).
   - Responde con el datagrama de 12 bytes reflejando la Cookie enviada por el cliente y las banderas de puerto correspondientes (`0` para UDP 1, `1` para UDP 2).
