@@ -209,6 +209,30 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldChat = 0x0047,
 
+    /// <summary>
+    /// Match start result: [u8 Result].
+    /// Evidence: Observed in engine.dll jump table opcode 0x43 (0x36197673 -> 0x36193c80) and RakionWorldServ 0x4079D0.
+    /// </summary>
+    FieldGameStart = 0x0043,
+
+    /// <summary>
+    /// Match end broadcast: [u8 Value].
+    /// Evidence: Observed in engine.dll jump table opcode 0x44 (0x36197681 -> 0x36193ca0) and RakionWorldServ 0x407BE0.
+    /// </summary>
+    FieldGameEnd = 0x0044,
+
+    /// <summary>
+    /// Match enter result: [u8 Result][u8 SlotIndex].
+    /// Evidence: Observed in engine.dll jump table opcode 0x45 (0x3619768f -> 0x36193cc0) and RakionWorldServ 0x407C70.
+    /// </summary>
+    FieldGameEnter = 0x0045,
+
+    /// <summary>
+    /// Match exit broadcast: [u8 Value].
+    /// Evidence: Observed in engine.dll jump table opcode 0x46 (0x3619769d -> 0x36193cf0) and RakionWorldServ 0x407E00.
+    /// </summary>
+    FieldGameExit = 0x0046,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).
