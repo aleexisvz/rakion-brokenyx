@@ -375,6 +375,24 @@ public enum ClientOpcode : ushort
     FieldGameExit = 0x0046,
 
     /// <summary>
+    /// The client finished loading the map and is ready for the round. No payload.
+    /// Evidence: Observed in engine.dll ?SendFieldGameRoundStart@IScavengerWorldNet@@UAEXXZ (opcode 0x0048).
+    /// </summary>
+    FieldGameRoundStart = 0x0048,
+
+    /// <summary>
+    /// In-game player data for every other member: (u16 length, data).
+    /// Evidence: Observed in engine.dll ?SendFieldGameAddPlayer@IScavengerWorldNet@@UAEXGPAD@Z (opcode 0x004B).
+    /// </summary>
+    FieldGameAddPlayer = 0x004B,
+
+    /// <summary>
+    /// In-game player data for one member: (u8 target slot, u16 length, data).
+    /// Evidence: Observed in engine.dll ?SendFieldGameAddPlayerReply@IScavengerWorldNet@@UAEXEGPAD@Z (opcode 0x004C).
+    /// </summary>
+    FieldGameAddPlayerReply = 0x004C,
+
+    /// <summary>
     /// Network check towards another room member: (u8 target slot).
     /// Evidence: Observed in engine.dll ?SendFieldSlotUDP@IScavengerWorldNet@@UAEXE@Z (opcode 0x0062).
     /// </summary>

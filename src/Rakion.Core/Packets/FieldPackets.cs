@@ -481,25 +481,34 @@ public sealed record FieldChatRequestPacket(
 }
 
 /// <summary>
-/// Room chat broadcast sent to all members in the room.
-/// Evidence: Observed in engine.dll 0x361976ab -> 0x36193b70 (opcode 0x0047).
+/// Room chat broadcast sent to all members in the room: [u8 SenderSlot][string Message].
+/// Evidence: Observed in engine.dll 0x361976ab -> 0x36193d10 (opcode 0x0047: reads one byte, then the string).
+/// The byte's meaning is Inferred (sender slot); without it the client dropped the first letter of the message.
 /// </summary>
 public sealed record FieldChatBroadcastPacket(
-    string Message) : IPacket
+    string Message,
+    byte SenderSlot = 0) : IPacket
 {
     public ushort Opcode => (ushort)ServerOpcode.FieldChat;
 
     public void Serialize(PacketWriter writer)
     {
+        writer.WriteByte(SenderSlot);
         writer.WriteNullTerminatedString(Message);
     }
 
     public static bool TryParse(ReadOnlySpan<byte> span, out FieldChatBroadcastPacket packet)
     {
         packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
         var reader = new PacketReader(span);
+        byte slot = reader.ReadByte();
         string message = reader.ReadNullTerminatedString();
-        packet = new FieldChatBroadcastPacket(message);
+        packet = new FieldChatBroadcastPacket(message, slot);
         return true;
     }
 }

@@ -96,6 +96,7 @@ public sealed record FieldSlotInfo(byte State, ushort PlayerId, byte Flag, Field
     public const byte Waiting = 1;
     public const byte Ready = 2;
     public const byte InGame = 3;
+    public const byte Loaded = 4;
     public const byte Closed = 5;
 
     public bool HasPlayer => State is not (Empty or Closed);
