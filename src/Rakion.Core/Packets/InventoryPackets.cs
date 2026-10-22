@@ -622,3 +622,79 @@ public sealed record InventorySellResponsePacket(byte Result, uint Gold, uint Ca
     }
 }
 
+/// <summary>
+/// Client request to spend one stat point: [u8 Stat].
+/// Evidence: Observed in engine.dll ?SendInventoryAllocationPoint@IScavengerWorldNet@@UAEXE@Z (0x0033, 3-byte message).
+/// </summary>
+public sealed record InventoryAllocationPointRequestPacket(CharacterStat Stat) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.InventoryAllocationPoint;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte((byte)Stat);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryAllocationPointRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        packet = new InventoryAllocationPointRequestPacket((CharacterStat)span[0]);
+        return true;
+    }
+}
+
+/// <summary>
+/// Server result for <see cref="InventoryAllocationPointRequestPacket"/>:
+/// [u8 Result][u16 LevelPoints][u16 PowerPoints][u8 Stat][u16 NewValue].
+/// Evidence: Observed in engine.dll 0x361938A0. rakion.bin 0x47DBB0 applies it only on Result 0: NewValue goes
+/// to the stat chosen by Stat, LevelPoints to the character record (+0x34) and PowerPoints to account+0x58
+/// (meanings Derived). Result codes Observed in RakionWorldServ.exe 0x40B3D0 (meanings Derived): 0 spent,
+/// 3 no points left, 4 stat at its maximum, 5 unknown stat.
+/// </summary>
+public sealed record InventoryAllocationPointResponsePacket(
+    byte Result,
+    ushort LevelPoints,
+    ushort PowerPoints,
+    CharacterStat Stat,
+    ushort NewValue) : IPacket
+{
+    public const byte ResultSuccess = 0;
+    public const byte ResultNoPoints = 3;
+    public const byte ResultStatAtMaximum = 4;
+    public const byte ResultUnknownStat = 5;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventoryAllocationPoint;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        writer.WriteUInt16(LevelPoints);
+        writer.WriteUInt16(PowerPoints);
+        writer.WriteByte((byte)Stat);
+        writer.WriteUInt16(NewValue);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryAllocationPointResponsePacket packet)
+    {
+        packet = null!;
+        if (span.Length < 8)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new InventoryAllocationPointResponsePacket(
+            reader.ReadByte(),
+            reader.ReadUInt16(),
+            reader.ReadUInt16(),
+            (CharacterStat)reader.ReadByte(),
+            reader.ReadUInt16());
+        return true;
+    }
+}
+

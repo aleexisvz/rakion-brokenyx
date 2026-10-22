@@ -111,6 +111,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventorySell = 0x002F,
 
+    /// <summary>
+    /// Stat point allocation result: [u8 Result][u16 LevelPoints][u16 PowerPoints][u8 Stat][u16 NewValue].
+    /// Evidence: Observed in engine.dll 0x361938A0 (reader) and rakion.bin 0x47DBB0 (callback).
+    /// </summary>
+    InventoryAllocationPoint = 0x0033,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.
