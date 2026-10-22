@@ -801,14 +801,19 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
-        string formattedMessage = $"{session.ActiveCharacter.Name} : {req.Message}";
+        // Retail v258 client prepends "{CharacterName} : " before sending Opcode 0x0022.
+        // We ensure the prefix is present without duplicating it.
+        string messageToBroadcast = req.Message.StartsWith($"{session.ActiveCharacter.Name} : ", StringComparison.OrdinalIgnoreCase)
+            ? req.Message
+            : $"{session.ActiveCharacter.Name} : {req.Message}";
+
         _logger.LogInformation(
             "[{ConnectionId}] ChannelChat in [{Index}]: {Message}",
             session.Connection.ConnectionId,
             session.ActiveChannel.Index,
-            formattedMessage);
+            messageToBroadcast);
 
-        var broadcast = new ChannelChatBroadcastPacket(ChatType: 0, FormattedMessage: formattedMessage);
+        var broadcast = new ChannelChatBroadcastPacket(ChatType: 0, FormattedMessage: messageToBroadcast);
         foreach (var member in session.ActiveChannel.Sessions.Values)
         {
             await SendPacketAsync(member, broadcast, cancellationToken).ConfigureAwait(false);
