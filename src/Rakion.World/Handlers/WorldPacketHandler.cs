@@ -11,6 +11,7 @@ using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
 using Rakion.Database.Repositories;
 using Rakion.Network.Tcp;
+using Rakion.World.Channels;
 using Rakion.World.Configuration;
 using Rakion.World.Session;
 
@@ -27,6 +28,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly ICharacterRepository _characterRepository;
     private readonly IAccountBalanceRepository _balanceRepository;
     private readonly ISessionTicketService _ticketService;
+    private readonly IChannelManager _channelManager;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly ConcurrentDictionary<Guid, WorldSession> _sessions = new();
@@ -37,6 +39,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ICharacterRepository characterRepository,
         IAccountBalanceRepository balanceRepository,
         ISessionTicketService ticketService,
+        IChannelManager channelManager,
         ILogger<WorldPacketHandler> logger)
     {
         _options = options;
@@ -44,7 +47,19 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _characterRepository = characterRepository;
         _balanceRepository = balanceRepository;
         _ticketService = ticketService;
+        _channelManager = channelManager;
         _logger = logger;
+    }
+
+    public WorldPacketHandler(
+        IOptions<WorldOptions> options,
+        IUserRepository userRepository,
+        ICharacterRepository characterRepository,
+        IAccountBalanceRepository balanceRepository,
+        ISessionTicketService ticketService,
+        ILogger<WorldPacketHandler> logger)
+        : this(options, userRepository, characterRepository, balanceRepository, ticketService, new ChannelManager(options, Microsoft.Extensions.Logging.Abstractions.NullLogger<ChannelManager>.Instance), logger)
+    {
     }
 
     public int ActiveSessionCount => _sessions.Count;
@@ -148,10 +163,47 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 break;
 
             case RakionOpcode.CharacterTutorialClear:
-                _logger.LogInformation(
-                    "[{ConnectionId}] Character tutorial clear notification received for user '{Username}'.",
-                    connection.ConnectionId,
-                    session.User?.Username ?? "Unknown");
+                if (session.User is not null)
+                {
+                    await _userRepository.SetTutorialCompletedAsync(session.User.Id, true, cancellationToken).ConfigureAwait(false);
+                    if (session.GameInfo is not null)
+                    {
+                        session.GameInfo.TutorialCompleted = true;
+                    }
+
+                    _logger.LogInformation(
+                        "[{ConnectionId}] Character tutorial clear notification received and saved for user '{Username}'.",
+                        connection.ConnectionId,
+                        session.User.Username);
+                }
+                break;
+
+            case RakionOpcode.ChannelList:
+                await HandleChannelListAsync(session, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case RakionOpcode.ChannelEnter:
+                await HandleChannelEnterAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case RakionOpcode.ChannelExit:
+                await HandleChannelExitAsync(session, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case RakionOpcode.ChannelCharacters:
+                await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case RakionOpcode.ChannelChat:
+                await HandleChannelChatAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case RakionOpcode.CharacterWhisper:
+                await HandleCharacterWhisperAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case RakionOpcode.FieldList:
+                await HandleFieldListAsync(session, packetPayload, cancellationToken).ConfigureAwait(false);
                 break;
 
             default:
@@ -168,6 +220,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     {
         if (_sessions.TryRemove(connection.ConnectionId, out var session))
         {
+            _channelManager.LeaveChannel(session);
+
             if (session.User is not null)
             {
                 _logger.LogInformation(
@@ -462,8 +516,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             AttackSpeed: 100, Speed: 100, MaxCp: 100,
             (uint)newChar.WinCount, (uint)newChar.LossCount, (uint)newChar.DrawCount);
 
-        _logger.LogInformation("[{ConnectionId}] Character '{Name}' (Class: {Class}, Slot: {Slot}) created successfully.", session.Connection.ConnectionId, newChar.Name, newChar.Class, newChar.SlotIndex);
-        await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 0, summary), cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("[{ConnectionId}] Character '{Name}' (Class: {Class}, Slot: {Slot}) created successfully (Id={Id}).", session.Connection.ConnectionId, newChar.Name, newChar.Class, newChar.SlotIndex, newChar.Id);
+        await SendPacketAsync(session, new CharacterCreateResponsePacket(ResultCode: 0, (uint)newChar.Id), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleCharacterDeleteAsync(
@@ -528,6 +582,22 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         var ch = await _characterRepository.GetCharacterByIdAsync((int)req.CharacterId, cancellationToken).ConfigureAwait(false);
+
+        // Fallback 1: Client previously received composite (CharacterId << 8) | SlotIndex (e.g. 0x0702 = 1794)
+        if ((ch is null || ch.UserId != session.User.Id) && req.CharacterId > 255)
+        {
+            uint extractedId = req.CharacterId >> 8;
+            ch = await _characterRepository.GetCharacterByIdAsync((int)extractedId, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Fallback 2: Check by slot index or match across user's active characters
+        if (ch is null || ch.UserId != session.User.Id)
+        {
+            var userChars = await _characterRepository.GetCharactersByUserIdAsync(session.User.Id, cancellationToken).ConfigureAwait(false);
+            byte targetSlot = (byte)(req.CharacterId & 0xFF);
+            ch = userChars.FirstOrDefault(c => c.SlotIndex == targetSlot || c.Id == (int)req.CharacterId);
+        }
+
         if (ch is null || ch.UserId != session.User.Id)
         {
             _logger.LogWarning("[{ConnectionId}] CharacterSelect failed: character {CharId} does not belong to user.", session.Connection.ConnectionId, req.CharacterId);
@@ -536,8 +606,45 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
 
         session.ActiveCharacter = ch;
-        _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id);
+        _logger.LogInformation("[{ConnectionId}] Character '{Name}' ({CharId}, Slot: {Slot}) selected for active play.", session.Connection.ConnectionId, ch.Name, ch.Id, ch.SlotIndex);
+
+        // 1. Confirm character selection (Opcode 0x0014) to confirm active character selection and trigger stat computation
         await SendPacketAsync(session, new CharacterSelectResponsePacket(ResultCode: 0, req.CharacterId), cancellationToken).ConfigureAwait(false);
+
+        // 2. Automatically assign character to appropriate channel (Beginner if level <= 15, otherwise Free)
+        byte targetChannelIndex = ch.Level <= 15 ? (byte)0 : (byte)1;
+        if (!_channelManager.TryEnterChannel(targetChannelIndex, session, string.Empty, out _))
+        {
+            _channelManager.TryEnterChannel(1, session, string.Empty, out _);
+        }
+
+        if (session.ActiveChannel is not null)
+        {
+            var activeCh = session.ActiveChannel;
+            var enterResp = new ChannelEnterResponsePacket(
+                ResultCode: 0,
+                ChannelIndex: activeCh.Index,
+                ServerId: 0,
+                ChannelName: activeCh.Name,
+                ChannelType: (byte)activeCh.Type,
+                MaxPlayers: activeCh.MaxPlayers,
+                Flags: 0);
+
+            // 3. Send ChannelEnter response (Opcode 0x001F) to transition client from CharacterSelectDialog to ChannelSelectDialog (Lobby)
+            await SendPacketAsync(session, enterResp, cancellationToken).ConfigureAwait(false);
+
+            // 4. Send ChannelCharacters response (Opcode 0x001E)
+            await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
+
+            // 5. Broadcast user entrance to other players in this channel
+            foreach (var member in activeCh.Sessions.Values)
+            {
+                if (member.Connection.ConnectionId != session.Connection.ConnectionId)
+                {
+                    await SendPacketAsync(member, enterResp, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     private async ValueTask HandleCharacterChangeBuddyNameAsync(
@@ -564,6 +671,223 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         // Confirmation packet: ResultCode = 0 (Success), CharacterName
         await SendPacketAsync(session, new CharacterChangeBuddyNameResponsePacket(ResultCode: 0, charName), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleChannelListAsync(
+        WorldSession session,
+        CancellationToken cancellationToken)
+    {
+        var channels = _channelManager.GetChannels();
+        var entries = new List<ChannelListEntry>(channels.Count);
+        for (int i = 0; i < channels.Count; i++)
+        {
+            var c = channels[i];
+            entries.Add(new ChannelListEntry(
+                c.Index,
+                c.Type,
+                c.CurrentPlayers,
+                c.MaxPlayers,
+                c.Name));
+        }
+
+        _logger.LogInformation(
+            "[{ConnectionId}] Serving ChannelList with {Count} channels to '{Username}'.",
+            session.Connection.ConnectionId,
+            entries.Count,
+            session.User?.Username ?? "Unknown");
+
+        await SendPacketAsync(session, new ChannelListResponsePacket(entries), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleChannelEnterAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.User is null)
+        {
+            return;
+        }
+
+        if (!ChannelEnterRequestPacket.TryParse(payload.Span, out var req))
+        {
+            await SendPacketAsync(session, new ChannelEnterResponsePacket(ResultCode: 1), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        if (_channelManager.TryEnterChannel(req.ChannelIndex, session, req.Password, out byte reason))
+        {
+            var ch = session.ActiveChannel!;
+            var resp = new ChannelEnterResponsePacket(
+                ResultCode: 0,
+                ChannelIndex: ch.Index,
+                ServerId: 0,
+                ChannelName: ch.Name,
+                ChannelType: (byte)ch.Type,
+                MaxPlayers: ch.MaxPlayers,
+                Flags: 0);
+
+            await SendPacketAsync(session, resp, cancellationToken).ConfigureAwait(false);
+
+            // Broadcast entrance to other players in the newly entered channel
+            foreach (var member in ch.Sessions.Values)
+            {
+                if (member.Connection.ConnectionId != session.Connection.ConnectionId)
+                {
+                    await SendPacketAsync(member, resp, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            // Send channel character roster
+            await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await SendPacketAsync(session, new ChannelEnterResponsePacket(ResultCode: reason != 0 ? reason : (byte)1), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask HandleChannelExitAsync(
+        WorldSession session,
+        CancellationToken cancellationToken)
+    {
+        _channelManager.LeaveChannel(session);
+        await SendPacketAsync(session, new ChannelExitResponsePacket(ResultCode: 0), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleChannelCharactersAsync(
+        WorldSession session,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel is null)
+        {
+            return;
+        }
+
+        var members = session.ActiveChannel.Sessions.Values
+            .Where(s => s.ActiveCharacter is not null)
+            .Select(s => new ChannelCharacterSummary(
+                Slot: 0,
+                Grade: (ushort)s.ActiveCharacter!.Level,
+                Name: s.ActiveCharacter.Name,
+                Class: (byte)s.ActiveCharacter.Class,
+                Level: s.ActiveCharacter.Level,
+                ClanId: 0))
+            .ToList();
+
+        var resp = new ChannelCharactersResponsePacket(
+            session.ActiveChannel.Index,
+            (byte)members.Count,
+            PageIndex: 0,
+            ChannelName: session.ActiveChannel.Name,
+            ServerName: _options.Value.ServerName,
+            Characters: members);
+
+        await SendPacketAsync(session, resp, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleChannelChatAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel is null || session.ActiveCharacter is null)
+        {
+            return;
+        }
+
+        if (!ChannelChatRequestPacket.TryParse(payload.Span, out var req) || string.IsNullOrEmpty(req.Message))
+        {
+            return;
+        }
+
+        // Retail v258 client prepends "{CharacterName} : " before sending Opcode 0x0022.
+        // We ensure the prefix is present without duplicating it.
+        string messageToBroadcast = req.Message.StartsWith($"{session.ActiveCharacter.Name} : ", StringComparison.OrdinalIgnoreCase)
+            ? req.Message
+            : $"{session.ActiveCharacter.Name} : {req.Message}";
+
+        _logger.LogInformation(
+            "[{ConnectionId}] ChannelChat in [{Index}]: {Message}",
+            session.Connection.ConnectionId,
+            session.ActiveChannel.Index,
+            messageToBroadcast);
+
+        var broadcast = new ChannelChatBroadcastPacket(ChatType: 0, FormattedMessage: messageToBroadcast);
+        foreach (var member in session.ActiveChannel.Sessions.Values)
+        {
+            await SendPacketAsync(member, broadcast, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask HandleCharacterWhisperAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveCharacter is null)
+        {
+            return;
+        }
+
+        if (!CharacterWhisperRequestPacket.TryParse(payload.Span, out var req) || string.IsNullOrEmpty(req.TargetCharacterName))
+        {
+            await SendPacketAsync(session, new CharacterWhisperResponsePacket(ResultCode: 1, string.Empty, string.Empty), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        WorldSession? targetSession = null;
+        foreach (var s in _sessions.Values)
+        {
+            if (s.ActiveCharacter is not null && string.Equals(s.ActiveCharacter.Name, req.TargetCharacterName, StringComparison.OrdinalIgnoreCase))
+            {
+                targetSession = s;
+                break;
+            }
+        }
+
+        if (targetSession is null)
+        {
+            _logger.LogInformation(
+                "[{ConnectionId}] Whisper from '{Sender}' to '{Target}' failed: recipient not online.",
+                session.Connection.ConnectionId,
+                session.ActiveCharacter.Name,
+                req.TargetCharacterName);
+
+            await SendPacketAsync(session, new CharacterWhisperResponsePacket(ResultCode: 1, req.TargetCharacterName, string.Empty), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        _logger.LogInformation(
+            "[{ConnectionId}] Whisper from '{Sender}' delivered to '{Target}': {Message}",
+            session.Connection.ConnectionId,
+            session.ActiveCharacter.Name,
+            req.TargetCharacterName,
+            req.Message);
+
+        // Deliver incoming whisper to target
+        var targetPacket = new CharacterWhisperResponsePacket(ResultCode: 0, session.ActiveCharacter.Name, req.Message);
+        await SendPacketAsync(targetSession, targetPacket, cancellationToken).ConfigureAwait(false);
+
+        // Send confirmation echo to sender
+        var senderConfirmation = new CharacterWhisperResponsePacket(ResultCode: 0, session.ActiveCharacter.Name, req.Message);
+        await SendPacketAsync(session, senderConfirmation, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task HandleFieldListAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[{ConnectionId}] Processing FieldList request (Opcode 0x0036) for user '{Username}'.",
+            session.Connection.ConnectionId,
+            session.User?.Username ?? "Unknown");
+
+        // When room system is not yet populated with rooms (Phase 4), respond with empty room list (0 rooms).
+        // This dismisses the client's "Waiting for game list from the world." modal dialog and displays the lobby.
+        var response = FieldListResponsePacket.Empty;
+        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
     }
 
     private static async ValueTask SendPacketAsync(WorldSession session, IPacket packet, CancellationToken cancellationToken)

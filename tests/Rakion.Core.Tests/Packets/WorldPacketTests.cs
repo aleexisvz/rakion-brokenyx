@@ -96,8 +96,7 @@ public sealed class WorldPacketTests
         Assert.AreEqual(CharacterClass.Mage, roundtripReq.Class);
         Assert.AreEqual((byte)2, roundtripReq.Slot);
 
-        var summary = new CharacterSummary(201, "MageHero", 2, CharacterClass.Mage, 1, 0, 0);
-        var response = new CharacterCreateResponsePacket(0, summary);
+        var response = new CharacterCreateResponsePacket(0, 201u);
         using var resWriter = new PacketWriter(response.Opcode);
         response.Serialize(resWriter);
         byte[] resBytes = resWriter.Build();
@@ -105,9 +104,7 @@ public sealed class WorldPacketTests
         bool resParsed = CharacterCreateResponsePacket.TryParse(resBytes.AsSpan(PacketHeader.HeaderSize), out var roundtripRes);
         Assert.IsTrue(resParsed);
         Assert.AreEqual((byte)0, roundtripRes.ResultCode);
-        Assert.IsNotNull(roundtripRes.Character);
-        Assert.AreEqual(201u, roundtripRes.Character.Id);
-        Assert.AreEqual("MageHero", roundtripRes.Character.Name);
+        Assert.AreEqual(201u, roundtripRes.CharacterId);
     }
 
     [TestMethod]

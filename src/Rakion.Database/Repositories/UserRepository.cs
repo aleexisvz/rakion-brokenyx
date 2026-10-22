@@ -180,6 +180,21 @@ public sealed class UserRepository : IUserRepository
             cancellationToken: ct));
     }
 
+    public async Task SetTutorialCompletedAsync(int userId, bool completed = true, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        const string sql = """
+            UPDATE user_game_info
+            SET tutorial_completed = @Completed
+            WHERE user_id = @UserId;
+            """;
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            sql,
+            new { UserId = userId, Completed = completed ? 1 : 0 },
+            cancellationToken: ct));
+    }
+
     private static async Task<int> GetLastInsertedIdAsync(DbConnection conn, DbTransaction? tx, CancellationToken ct)
     {
         string query = conn.GetType().Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)

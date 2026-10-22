@@ -11,8 +11,9 @@ using Rakion.Core.Utilities;
 using Rakion.Database.Connection;
 using Rakion.Database.Repositories;
 using Rakion.Database.Security;
-using Rakion.World.Configuration;
 using Rakion.Database.Entities;
+using Rakion.World.Channels;
+using Rakion.World.Configuration;
 using Rakion.World.Handlers;
 using Rakion.World.Hosting;
 
@@ -113,6 +114,7 @@ builder.Services.AddSingleton<BrokerPacketHandler>();
 builder.Services.AddSingleton<BrokerServer>();
 builder.Services.AddSingleton<AutoFetchServer>();
 
+builder.Services.AddSingleton<IChannelManager, ChannelManager>();
 builder.Services.AddSingleton<WorldPacketHandler>();
 builder.Services.AddSingleton<WorldUdpPacketHandler>();
 builder.Services.AddSingleton<WorldServer>();
