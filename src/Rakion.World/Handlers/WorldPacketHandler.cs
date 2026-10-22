@@ -371,7 +371,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 (uint)ce.Exp,
                 ce.LevelPoint,
                 ce.Hit1, ce.Hit2, ce.Hit3, ce.Hit4, ce.Chit, ce.Hp, ce.Ap,
-                AttackSpeed: 100, Speed: 100, MaxCp: 100,
+                ce.AttackSpeed, ce.Speed, ce.MaxCp,
                 (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount,
                 inventory?.EquipmentOf(ce.Id)));
         }
@@ -515,7 +515,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             (uint)newChar.Exp,
             newChar.LevelPoint,
             newChar.Hit1, newChar.Hit2, newChar.Hit3, newChar.Hit4, newChar.Chit, newChar.Hp, newChar.Ap,
-            AttackSpeed: 100, Speed: 100, MaxCp: 100,
+            newChar.AttackSpeed, newChar.Speed, newChar.MaxCp,
             (uint)newChar.WinCount, (uint)newChar.LossCount, (uint)newChar.DrawCount);
 
         _logger.LogInformation("[{ConnectionId}] Character '{Name}' (Class: {Class}, Slot: {Slot}) created successfully (Id={Id}).", session.Connection.ConnectionId, newChar.Name, newChar.Class, newChar.SlotIndex, newChar.Id);
