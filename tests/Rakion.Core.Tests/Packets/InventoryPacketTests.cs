@@ -241,6 +241,23 @@ public sealed class InventoryPacketTests
         Assert.AreEqual(response, parsedResponse);
     }
 
+    [TestMethod]
+    public void InventoryAllocationPoint_RequestAndResponse_RoundTrip()
+    {
+        var request = new InventoryAllocationPointRequestPacket(CharacterStat.MaxCp);
+        var response = new InventoryAllocationPointResponsePacket(0, 9, 2, CharacterStat.MaxCp, 7);
+
+        byte[] requestBytes = Build(request);
+        byte[] responseBytes = Build(response);
+
+        CollectionAssert.AreEqual(new byte[] { 0x05, 0x00, 0x33, 0x00, 0x09 }, requestBytes);
+        CollectionAssert.AreEqual(new byte[] { 0x0C, 0x00, 0x33, 0x00, 0x00, 0x09, 0x00, 0x02, 0x00, 0x09, 0x07, 0x00 }, responseBytes);
+        Assert.IsTrue(InventoryAllocationPointRequestPacket.TryParse(requestBytes.AsSpan(PacketHeader.HeaderSize), out var parsedRequest));
+        Assert.IsTrue(InventoryAllocationPointResponsePacket.TryParse(responseBytes.AsSpan(PacketHeader.HeaderSize), out var parsedResponse));
+        Assert.AreEqual(request, parsedRequest);
+        Assert.AreEqual(response, parsedResponse);
+    }
+
     private static byte[] Build(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);
