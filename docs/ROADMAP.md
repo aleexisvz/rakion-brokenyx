@@ -14,7 +14,7 @@ Dos agentes trabajan en paralelo, cada uno en su propio `git worktree` (`..\raki
 | :--- | :--- | :--- | :--- |
 | **A — Persistencia y economía** | Claude | `src/Rakion.Database/`, `src/Rakion.Broker/`, `src/Rakion.World/Features/Economy/`, `src/Rakion.Maintenance/` y sus tests | 4 y 7 |
 | **B — Mundo en tiempo real** | Gemini | `src/Rakion.World/` (excepto `Features/Economy/`), `src/Rakion.Relay/`, `src/Rakion.Network/` y sus tests | 5 y 6 |
-| **Compartido** | Un único dueño a la vez | `src/Rakion.Core/`, `src/Rakion.App/`, `config/appsettings.json`, `RakionBrokenyx.sln`, `Directory.Build.props` | Contratos |
+| **Compartido** | Un único dueño a la vez (ver regla 6) | `src/Rakion.Core/`, `src/Rakion.App/`, `config/appsettings.json`, `RakionBrokenyx.sln`, `Directory.Build.props` | Contratos |
 | **Integrador** | Mantenedor | Checkboxes de este archivo, `README.md` raíz, `AGENTS.md` | — |
 
 ### Contratos Compartidos
@@ -38,7 +38,7 @@ Cada contrato se entrega en un PR pequeño que se mergea antes de que el otro ca
 3. Cada paquete tiene un test de round-trip (serializar → bytes → parsear). Quien lo añade es su dueño; el otro carril lo consume sin reescribirlo.
 4. Cada ítem lleva su etiqueta de evidencia y la marca "verificado con cliente real: sí/no".
 5. Si un carril necesita un opcode o layout del otro, no lo implementa: lo pide al mantenedor y se coordina.
-6. Antes de tocar una ruta compartida, el carril lo anuncia al mantenedor; el otro carril no la toca hasta que ese PR se mergee.
+6. En `Rakion.Core`, cada carril añade sin pedir turno sus propios paquetes, en sus propios archivos (por ejemplo `FieldPackets.cs` para B e `InventoryPackets.cs` para A), y sus opcodes en su propia sección de `ClientOpcode` / `ServerOpcode`. Nadie modifica los paquetes ni los opcodes del otro carril. Para el resto de rutas compartidas (`PacketReader`/`PacketWriter`, `PacketHeader`, criptografía, `Rakion.App/Program.cs`, `config/appsettings.json`, `.sln`, `Directory.Build.props`), el carril lo anuncia al mantenedor y el otro no las toca hasta que ese PR se mergee.
 
 ### Resolución del Solapamiento UDP
 
