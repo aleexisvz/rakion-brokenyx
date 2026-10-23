@@ -1,3 +1,4 @@
+using Dapper;
 using Rakion.Core.Enums;
 using Rakion.Database.Entities;
 using Rakion.Database.Import;
@@ -87,5 +88,59 @@ public sealed class MatchResultRepositoryTests
         var rows = LegacyClassLevelParser.Parse(new StringReader(dump));
 
         CollectionAssert.AreEqual(new[] { new ClassLevelEntity(0, 0, 0), new ClassLevelEntity(3, 1, 70) }, rows.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ApplyRoundReward_CountsTheRoundResult()
+    {
+        await _repository.ApplyRoundRewardAsync(_userId, _characterId, 0, 0, RoundResult.Win);
+        await _repository.ApplyRoundRewardAsync(_userId, _characterId, 0, 0, RoundResult.Draw);
+        var outcome = await _repository.ApplyRoundRewardAsync(_userId, _characterId, 0, 0, RoundResult.Win);
+
+        Assert.AreEqual((2, 0, 1), (outcome!.Wins, outcome.Losses, outcome.Draws));
+        var stored = await new CharacterRepository(_dbFactory).GetCharacterByIdAsync(_characterId);
+        Assert.AreEqual(2, stored!.WinCount);
+        Assert.AreEqual(1, stored.DrawCount);
+    }
+
+    [TestMethod]
+    public async Task ApplyRoundReward_AddsCappedCreatureExp_AndLevelsCreaturesUp()
+    {
+        await _repository.UpsertCreatureLevelsAsync(
+        [
+            new CreatureLevelEntity(15, 1, 0),
+            new CreatureLevelEntity(15, 2, 35),
+            new CreatureLevelEntity(15, 3, 105),
+        ]);
+        await using (var connection = await _dbFactory.CreateConnectionAsync())
+        {
+            const string insert = "INSERT INTO user_items (user_id, character_id, item_id, level, slot_index, exp) VALUES (@UserId, @CharacterId, @ItemId, @Level, @Slot, @Exp);";
+            await connection.ExecuteAsync(insert, new { UserId = _userId, CharacterId = _characterId, ItemId = 8015, Level = 2, Slot = 10, Exp = 30 });
+            await connection.ExecuteAsync(insert, new { UserId = _userId, CharacterId = _characterId, ItemId = 8015, Level = 2, Slot = 12, Exp = 0 });
+            await connection.ExecuteAsync(insert, new { UserId = _userId, CharacterId = 0, ItemId = 8015, Level = 1, Slot = 11, Exp = 0 });
+        }
+
+        var outcome = await _repository.ApplyRoundRewardAsync(_userId, _characterId, 0, 0, creatureExp: [500, 7, 4]);
+
+        Assert.AreEqual((byte)4, outcome!.Creature1Level, "130 exp passes 35 and 105, then no row for level 4");
+        Assert.AreEqual((byte)0, outcome.Creature2Level, "slot 11 holds no equipped creature");
+        Assert.AreEqual((byte)2, outcome.Creature3Level);
+        Assert.IsTrue(outcome.CreatureLeveledUp);
+        await using var check = await _dbFactory.CreateConnectionAsync();
+        var exps = (await check.QueryAsync<long>("SELECT exp FROM user_items WHERE user_id = @UserId ORDER BY slot_index;", new { UserId = _userId })).ToList();
+        CollectionAssert.AreEqual(new long[] { 130, 0, 4 }, exps);
+    }
+
+    [TestMethod]
+    public void LegacyCreatureLevelParser_ReadsDumpRows_UpToLevel99()
+    {
+        const string dump = """
+            INSERT INTO `npcinfo` VALUES ('0', '2', '35', '1');
+            INSERT INTO `npcinfo` VALUES ('0', '120', '999', '1');
+            """;
+
+        var rows = LegacyCreatureLevelParser.Parse(new StringReader(dump));
+
+        CollectionAssert.AreEqual(new[] { new CreatureLevelEntity(0, 2, 35) }, rows.ToArray());
     }
 }

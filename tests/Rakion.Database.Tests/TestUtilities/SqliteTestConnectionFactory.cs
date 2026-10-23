@@ -133,6 +133,13 @@ public sealed class SqliteTestConnectionFactory : IDbConnectionFactory, IDisposa
                 PRIMARY KEY (class_id, level)
             );
 
+            CREATE TABLE IF NOT EXISTS creature_level_info (
+                npc INTEGER NOT NULL,
+                level INTEGER NOT NULL,
+                exp INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (npc, level)
+            );
+
             CREATE TABLE IF NOT EXISTS user_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
