@@ -138,6 +138,21 @@ public sealed class FieldJoinPacketTests
             PayloadOf(new AccountUpgradeResponsePacket(ServerOpcode.InventoryBuyBag, 0, 1, 2, 3)));
     }
 
+    [TestMethod]
+    public void VotePackets_MatchTheClientLayouts()
+    {
+        var open = new FieldGameVoteOpenRequestPacket(4, "afk");
+        Assert.IsTrue(FieldGameVoteOpenRequestPacket.TryParse(PayloadOf(open), out var parsed));
+        Assert.AreEqual(open, parsed);
+        Assert.IsTrue(FieldGameVoteRequestPacket.TryParse([2], out var vote));
+        Assert.AreEqual(FieldGameVoteRequestPacket.No, vote.Choice);
+        Assert.IsFalse(FieldGameVoteRequestPacket.TryParse([4], out _));
+
+        CollectionAssert.AreEqual(new byte[] { 4, (byte)'a', (byte)'f', (byte)'k', 0 }, PayloadOf(new FieldGameVoteOpenPacket(4, "afk")));
+        CollectionAssert.AreEqual(new byte[] { 7 }, PayloadOf(new FieldGameVoteResultPacket(FieldGameVoteResultPacket.TargetIsMaster)));
+        CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 1, 1, 0, 4 }, PayloadOf(new FieldGameVoteResultPacket(0, true, 3, 1, 1, 0, 4)));
+    }
+
     private static byte[] PayloadOf(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

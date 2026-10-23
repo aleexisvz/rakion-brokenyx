@@ -314,6 +314,18 @@ public enum ServerOpcode : ushort
     InventoryBuyBag = 0x0032,
 
     /// <summary>
+    /// Kick vote opened: [u8 target slot][string reason].
+    /// Evidence: Observed in engine.dll jump table opcode 0x5D (0x361977ED -> 0x36194360).
+    /// </summary>
+    FieldGameVoteOpen = 0x005D,
+
+    /// <summary>
+    /// Kick vote refusal or result (see FieldGameVoteResultPacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x5F (0x361977FB -> 0x361943D0).
+    /// </summary>
+    FieldGameVoteResult = 0x005F,
+
+    /// <summary>
     /// Potion slot purchase answer (see AccountUpgradeResponsePacket).
     /// Evidence: Observed in engine.dll jump table opcode 0x6F (0x361975AF -> 0x36195AC0).
     /// </summary>
