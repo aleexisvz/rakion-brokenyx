@@ -295,6 +295,7 @@ public sealed partial class GameField
 
     private void ResetMatch()
     {
+        _voteActive = false;
         Round = 0;
         _roundState = RoundState.WaitingForLoad;
         _deadline = DateTimeOffset.MaxValue;
