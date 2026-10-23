@@ -26,6 +26,19 @@ public sealed record EnchantOdds(int LevelUp, int NoChange, int Down1, int Down2
         return new EnchantOdds(levelUp, 100 - levelUp - down1, down1, 0, 0);
     }
 
+    /// <summary>
+    /// Scales the three downgrade weights (rounded down) and moves what they lose to "no change", so the level-up
+    /// chance stays the same. A scale of 1 returns the same odds.
+    /// </summary>
+    public EnchantOdds WithDowngradeScale(double scale)
+    {
+        scale = Math.Clamp(scale, 0, 1);
+        int down1 = (int)(Down1 * scale);
+        int down2 = (int)(Down2 * scale);
+        int down3 = (int)(Down3 * scale);
+        return new EnchantOdds(LevelUp, NoChange + (Down1 - down1) + (Down2 - down2) + (Down3 - down3), down1, down2, down3);
+    }
+
     /// <summary>Picks an outcome code (0..4) from a roll in [0, Total).</summary>
     public byte Pick(int roll)
     {

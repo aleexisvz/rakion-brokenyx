@@ -1827,6 +1827,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         long nowMinutes = LegacyGameClock.ToMinutes(DateTime.Now);
         bool powerUser = session.GameInfo is { } info && info.PowerTime > nowMinutes;
         int exp = (int)(powerUser ? report.Exp * 3 / 2 : report.Exp);
+        var rewards = _options.Value.Rewards;
+        exp = (int)Math.Min((long)exp * Math.Max(rewards.ExpMultiplier, 1), int.MaxValue);
+        int gold = (int)Math.Min((long)report.Gold * Math.Max(rewards.GoldMultiplier, 1), int.MaxValue);
 
         // The legacy server decides the outcome itself and counts a draw when the report's u16 is 0 (0x424E80, Observed).
         byte result = report.Value != 0 ? field.RoundOutcomeFor(player) : GameField.RoundOutcomeDraw;
@@ -1835,7 +1838,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 session.User.Id,
                 session.ActiveCharacter.Id,
                 exp,
-                (int)report.Gold,
+                gold,
                 result,
                 [(int)Math.Min(report.CreatureExp1, int.MaxValue), (int)Math.Min(report.CreatureExp2, int.MaxValue), (int)Math.Min(report.CreatureExp3, int.MaxValue)],
                 cancellationToken)
@@ -1857,7 +1860,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             session.ActiveCharacter.Name,
             exp,
             powerUser ? " (PowerUser +50 %)" : string.Empty,
-            report.Gold,
+            gold,
             outcome.Level,
             outcome.Exp,
             outcome.Gold,

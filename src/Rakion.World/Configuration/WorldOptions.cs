@@ -17,6 +17,8 @@ public sealed class WorldOptions
     public string ServerName { get; set; } = "WorldServer 1";
     public ushort MaxUsers { get; set; } = 500;
 
+    public RewardOptions Rewards { get; set; } = new();
+
     /// <summary>
     /// Configured lobby channels. Defaults to Beginner 01, Free 01, and Clan 01.
     /// </summary>

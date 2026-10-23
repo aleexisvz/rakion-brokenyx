@@ -114,6 +114,16 @@ public sealed class BlacksmithModuleTests
         return (EnchantReinforceResponsePacket)_sender.Sent.Last().Packet;
     }
 
+    [TestMethod]
+    public void WithDowngradeScale_MovesTheLostChanceToNoChange()
+    {
+        var odds = new EnchantOdds(42, 29, 29, 0, 0).WithDowngradeScale(0.7);
+
+        Assert.AreEqual(new EnchantOdds(42, 38, 20, 0, 0), odds);
+        Assert.AreEqual(100, odds.Total);
+        Assert.AreEqual(EnchantOdds.DefaultFor(12), EnchantOdds.DefaultFor(12).WithDowngradeScale(1));
+    }
+
     private sealed class RecordingSender : ISessionSender
     {
         public List<(IWorldSessionView Session, IPacket Packet)> Sent { get; } = [];
