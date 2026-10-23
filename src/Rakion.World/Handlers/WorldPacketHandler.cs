@@ -1787,7 +1787,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     /// computed; the server accepts it only after a round end, rejects values above the mode's limit
     /// ("Wrong Game Point!"), adds 50 % experience to PowerUsers, stores both and announces a level up with 0x51.
     /// Inferred: the legacy +50 % flag (user + 0x236C) is the PowerUser state. The legacy server disconnects a cheater
-    /// (error 0x97); here the report is only dropped and logged. Creature experience is not stored yet.
+    /// (error 0x97); here the report is only dropped and logged. The round outcome is counted and creature experience
+    /// is stored in the same transaction; a level change is broadcast to the room with 0x52.
     /// </summary>
     private async ValueTask HandleFieldGamePointAsync(
         WorldSession session,
@@ -1827,8 +1828,17 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         bool powerUser = session.GameInfo is { } info && info.PowerTime > nowMinutes;
         int exp = (int)(powerUser ? report.Exp * 3 / 2 : report.Exp);
 
+        // The legacy server decides the outcome itself and counts a draw when the report's u16 is 0 (0x424E80, Observed).
+        byte result = report.Value != 0 ? field.RoundOutcomeFor(player) : GameField.RoundOutcomeDraw;
         var outcome = await _matchResults
-            .ApplyRoundRewardAsync(session.User.Id, session.ActiveCharacter.Id, exp, (int)report.Gold, cancellationToken)
+            .ApplyRoundRewardAsync(
+                session.User.Id,
+                session.ActiveCharacter.Id,
+                exp,
+                (int)report.Gold,
+                result,
+                [(int)Math.Min(report.CreatureExp1, int.MaxValue), (int)Math.Min(report.CreatureExp2, int.MaxValue), (int)Math.Min(report.CreatureExp3, int.MaxValue)],
+                cancellationToken)
             .ConfigureAwait(false);
         if (outcome is null)
         {
@@ -1838,8 +1848,11 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         session.ActiveCharacter.Level = outcome.Level;
         session.ActiveCharacter.Exp = outcome.Exp;
         session.ActiveCharacter.LevelPoint = (byte)outcome.LevelPoint;
+        session.ActiveCharacter.WinCount = outcome.Wins;
+        session.ActiveCharacter.LossCount = outcome.Losses;
+        session.ActiveCharacter.DrawCount = outcome.Draws;
         _logger.LogInformation(
-            "[{ConnectionId}] '{Character}' earned {Exp} exp{PowerUser} and {Gold} gold: level {Level}, exp {Total}, gold {TotalGold}.",
+            "[{ConnectionId}] '{Character}' earned {Exp} exp{PowerUser} and {Gold} gold: level {Level}, exp {Total}, gold {TotalGold}, W/L/D {Wins}/{Losses}/{Draws} (result {Result}), creatures {C1}/{C2}/{C3}.",
             session.Connection.ConnectionId,
             session.ActiveCharacter.Name,
             exp,
@@ -1847,11 +1860,25 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             report.Gold,
             outcome.Level,
             outcome.Exp,
-            outcome.Gold);
+            outcome.Gold,
+            outcome.Wins,
+            outcome.Losses,
+            outcome.Draws,
+            result,
+            outcome.Creature1Level,
+            outcome.Creature2Level,
+            outcome.Creature3Level);
 
         if (outcome.LeveledUp)
         {
             await SendPacketAsync(session, new CharacterLevelUpPacket(outcome.Level, (ushort)outcome.LevelPoint), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (outcome.LeveledUp || outcome.CreatureLeveledUp)
+        {
+            // Every room member learns the new levels (0x424E1F, sent to all occupied slots by 0x4061F0).
+            var levels = new FieldPlayerLevelPacket(player.SlotIndex, outcome.Level, outcome.Creature1Level, outcome.Creature2Level, outcome.Creature3Level);
+            await BroadcastToFieldAsync(field, levels, cancellationToken).ConfigureAwait(false);
         }
     }
 
