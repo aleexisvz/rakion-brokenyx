@@ -371,6 +371,29 @@ public sealed partial class GameField
     }
 
     /// <summary>
+    /// Stage end reported by the master's client (RakionWorldServ.exe 0x405A90, Observed): only in Stage (mode 0)
+    /// while the round runs; reason 2 clears the stage (red wins), 3 fails it (blue wins). Any other reason, or a
+    /// sender who is not the master, is ignored. Returns the round end, or null.
+    /// </summary>
+    public FieldGameRoundEndPacket? EndStage(FieldPlayer sender, byte reason, DateTimeOffset now)
+    {
+        lock (_lock)
+        {
+            if (Rules.Mode != 0 || _roundState != RoundState.Running || !sender.IsMaster)
+            {
+                return null;
+            }
+
+            return reason switch
+            {
+                FieldGameRoundEndRequestPacket.Cleared => EndRound(FieldGameRoundEndPacket.RedWins, reason, now),
+                FieldGameRoundEndRequestPacket.Failed => EndRound(FieldGameRoundEndPacket.BlueWins, reason, now),
+                _ => null,
+            };
+        }
+    }
+
+    /// <summary>
     /// The player's outcome of the last ended round (RakionWorldServ.exe 0x405980, Observed): in the team modes
     /// (1, 3, 4) a win or loss by the player's side, otherwise and on a draw <see cref="RoundOutcomeDraw"/>.
     /// Returns 1 win, 2 loss, 3 draw, as the legacy counters use them (0x40BB60).

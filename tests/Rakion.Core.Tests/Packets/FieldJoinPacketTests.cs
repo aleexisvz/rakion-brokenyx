@@ -99,6 +99,27 @@ public sealed class FieldJoinPacketTests
         Assert.AreEqual(FieldSlotInfo.Closed, parsed.Slots[19].State);
     }
 
+    [TestMethod]
+    public void StagePoint_RoundTrips_AndRejectsOutOfRangeHeaders()
+    {
+        var report = new FieldGameStagePointRequestPacket(12, 5, [8001, 13002], 300, 120, 4, 0, 9);
+        byte[] payload = PayloadOf(report);
+
+        Assert.HasCount(3 + 4 + 20, payload);
+        Assert.IsTrue(FieldGameStagePointRequestPacket.TryParse(payload, out var parsed));
+        CollectionAssert.AreEqual(new ushort[] { 8001, 13002 }, parsed.Items.ToArray());
+        Assert.AreEqual((300u, 120u, 9u), (parsed.Exp, parsed.Gold, parsed.CreatureExp3));
+        Assert.IsFalse(FieldGameStagePointRequestPacket.TryParse([100, 1, 0], out _), "stage 100");
+        Assert.IsFalse(FieldGameStagePointRequestPacket.TryParse([1, 6, 0], out _), "rank 6");
+        Assert.IsFalse(FieldGameStagePointRequestPacket.TryParse([1, 1, 5], out _), "5 items");
+        Assert.IsFalse(FieldGameStagePointRequestPacket.TryParse(payload[..^1], out _), "truncated");
+
+        CollectionAssert.AreEqual(new byte[] { 0, 12, 5, 1, 0x41, 0x1F }, PayloadOf(new FieldGameStagePointPacket(0, 12, 5, [8001])));
+        CollectionAssert.AreEqual(new byte[] { 1 }, PayloadOf(new FieldGameStagePointPacket(FieldGameStagePointPacket.NotStored)));
+        Assert.IsTrue(FieldGameRoundEndRequestPacket.TryParse([3], out var end));
+        Assert.AreEqual(FieldGameRoundEndRequestPacket.Failed, end.Reason);
+    }
+
     private static byte[] PayloadOf(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

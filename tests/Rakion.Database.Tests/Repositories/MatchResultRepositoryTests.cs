@@ -143,4 +143,34 @@ public sealed class MatchResultRepositoryTests
 
         CollectionAssert.AreEqual(new[] { new CreatureLevelEntity(0, 2, 35) }, rows.ToArray());
     }
+
+    [TestMethod]
+    public async Task ApplyStageClear_PaysOnlyForABetterRank_AndStoresDrops()
+    {
+        await using (var connection = await _dbFactory.CreateConnectionAsync())
+        {
+            await connection.ExecuteAsync("INSERT INTO item_templates (id) VALUES (8001);");
+            await connection.ExecuteAsync("INSERT INTO user_items (user_id, character_id, item_id, slot_index) VALUES (@UserId, 0, 8001, 0);", new { UserId = _userId });
+        }
+
+        var first = await _repository.ApplyStageClearAsync(_userId, _characterId, stage: 3, rank: 2, drops: [8001, 9999], exp: 10, gold: 5);
+        var same = await _repository.ApplyStageClearAsync(_userId, _characterId, stage: 3, rank: 2, drops: [8001], exp: 10, gold: 5);
+        var better = await _repository.ApplyStageClearAsync(_userId, _characterId, stage: 3, rank: 4, drops: [], exp: 10, gold: 5);
+
+        Assert.IsTrue(first!.Improved);
+        Assert.AreEqual(0, first.PreviousRank);
+        CollectionAssert.AreEqual(new[] { ((byte)1, (ushort)8001) }, first.Drops.ToArray(), "unknown item skipped, slot 0 taken");
+        Assert.AreEqual(1, first.Reward!.Draws);
+        Assert.AreEqual(105L, first.Reward.Gold);
+        Assert.IsFalse(same!.Improved);
+        Assert.IsNull(same.Reward);
+        Assert.IsTrue(better!.Improved);
+        Assert.AreEqual(2, better.PreviousRank);
+        Assert.AreEqual(110L, better.Reward!.Gold, "the repeated rank paid nothing");
+
+        var ranks = await _repository.GetStageRanksAsync([_characterId, 999]);
+        Assert.AreEqual((byte)4, ranks[_characterId][3]);
+        Assert.HasCount(100, ranks[999]);
+        Assert.IsNull(await _repository.ApplyStageClearAsync(_userId + 1, _characterId, 1, 1, [], 0, 0));
+    }
 }

@@ -411,6 +411,18 @@ public enum ClientOpcode : ushort
     FieldGameMasterGolem = 0x004D,
 
     /// <summary>
+    /// Stage end decided by the room master's client: (u8 reason; 2 cleared, 3 failed).
+    /// Evidence: Observed in engine.dll ?SendFieldGameRoundEnd@IScavengerWorldNet@@UAEXE@Z (opcode 0x004A).
+    /// </summary>
+    FieldGameRoundEnd = 0x004A,
+
+    /// <summary>
+    /// Stage clear report: (u8 stage, u8 rank, u8 n, n x u16 item, u32 exp, u32 gold, 3 x u32 creature exp).
+    /// Evidence: Observed in engine.dll ?SendFieldGameStagePoint@IScavengerWorldNet@@UAEXEEEPAGKKKKK@Z (opcode 0x0053).
+    /// </summary>
+    FieldGameStagePoint = 0x0053,
+
+    /// <summary>
     /// Leader health in leader wars: (u8 leader slot, u16 health).
     /// Evidence: Observed in engine.dll ?SendFieldGameMasterBossHP@IScavengerWorldNet@@UAEXEG@Z (opcode 0x0060).
     /// </summary>

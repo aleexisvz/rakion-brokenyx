@@ -218,6 +218,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldKick, HandleFieldKickAsync);
         _registry.Map(ClientOpcode.FieldGamePoint, HandleFieldGamePointAsync);
         _registry.Map(ClientOpcode.FieldGameMasterGolem, HandleFieldGameGolemAsync);
+        _registry.Map(ClientOpcode.FieldGameRoundEnd, HandleFieldGameStageEndAsync);
+        _registry.Map(ClientOpcode.FieldGameStagePoint, HandleFieldGameStagePointAsync);
         _registry.Map(ClientOpcode.FieldGameMasterBossHp, HandleFieldGameLeaderHpAsync);
         _registry.Map(ClientOpcode.FieldGameAddPlayer, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: false, ct));
         _registry.Map(ClientOpcode.FieldGameAddPlayerReply, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: true, ct));
@@ -397,6 +399,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             ? null
             : await _accountInventory.GetAccountInventoryAsync(user.Id, gameInfo?.BagCount ?? 1, cancellationToken).ConfigureAwait(false);
 
+        var stageRanks = _matchResults is null
+            ? null
+            : await _matchResults.GetStageRanksAsync(characterEntities.Select(c => c.Id).ToList(), cancellationToken).ConfigureAwait(false);
+
         var summaries = new List<CharacterSummary>(characterEntities.Count);
         for (int i = 0; i < characterEntities.Count; i++)
         {
@@ -412,7 +418,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 ce.Hit1, ce.Hit2, ce.Hit3, ce.Hit4, ce.Chit, ce.Hp, ce.Ap,
                 ce.AttackSpeed, ce.Speed, ce.MaxCp,
                 (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount,
-                inventory?.EquipmentOf(ce.Id)));
+                inventory?.EquipmentOf(ce.Id),
+                stageRanks?.GetValueOrDefault(ce.Id)));
         }
 
         byte unlockedSlots = gameInfo?.SlotCount ?? 3;
@@ -1880,6 +1887,133 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (outcome.LeveledUp || outcome.CreatureLeveledUp)
         {
             // Every room member learns the new levels (0x424E1F, sent to all occupied slots by 0x4061F0).
+            var levels = new FieldPlayerLevelPacket(player.SlotIndex, outcome.Level, outcome.Creature1Level, outcome.Creature2Level, outcome.Creature3Level);
+            await BroadcastToFieldAsync(field, levels, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask HandleFieldGameStageEndAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameRoundEndRequestPacket.TryParse(payload.Span, out var request) ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null)
+        {
+            return;
+        }
+
+        if (field.EndStage(player, request.Reason, DateTimeOffset.UtcNow) is { } roundEnd)
+        {
+            _logger.LogInformation("Room #{Number} stage round {Round} ended by the master: reason {Reason}.", field.Number, field.Round, request.Reason);
+            await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Stage clear report (RakionWorldServ.exe 0x425010, Observed): accepted only in Stage after a round end and
+    /// within the mode's limits. A rank that does not beat the stored one is ignored, as in the legacy server;
+    /// otherwise the rank, the drops and the reward (counted as a draw) are stored together, the client gets 0x53
+    /// with the stage, rank and drops, and level changes are announced with 0x51 / 0x52.
+    /// </summary>
+    private async ValueTask HandleFieldGameStagePointAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameStagePointRequestPacket.TryParse(payload.Span, out var report))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldGameStagePoint report ({Length} bytes).", session.Connection.ConnectionId, payload.Length);
+            return;
+        }
+
+        if (session.User is null || session.ActiveCharacter is null || _matchResults is null ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null || field.Rules.Mode != 0 || !field.AcceptsPointReport)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGameStagePoint ignored: no ended stage round to report.", session.Connection.ConnectionId);
+            return;
+        }
+
+        var (maxExp, maxGold) = field.PointReportLimits;
+        if (report.Exp > maxExp || report.Gold > maxGold)
+        {
+            _logger.LogWarning(
+                "[{ConnectionId}] Wrong Game Point! Exp : {Exp}, Gold : {Gold} (limits {MaxExp} / {MaxGold}, stage {Stage}); report dropped.",
+                session.Connection.ConnectionId,
+                report.Exp,
+                report.Gold,
+                maxExp,
+                maxGold,
+                report.Stage);
+            return;
+        }
+
+        long nowMinutes = LegacyGameClock.ToMinutes(DateTime.Now);
+        bool powerUser = session.GameInfo is { } info && info.PowerTime > nowMinutes;
+        int exp = (int)(powerUser ? report.Exp * 3 / 2 : report.Exp);
+        var rewards = _options.Value.Rewards;
+        exp = (int)Math.Min((long)exp * Math.Max(rewards.ExpMultiplier, 1), int.MaxValue);
+        int gold = (int)Math.Min((long)report.Gold * Math.Max(rewards.GoldMultiplier, 1), int.MaxValue);
+
+        var clear = await _matchResults
+            .ApplyStageClearAsync(
+                session.User.Id,
+                session.ActiveCharacter.Id,
+                report.Stage,
+                report.Rank,
+                report.Items,
+                exp,
+                gold,
+                [(int)Math.Min(report.CreatureExp1, int.MaxValue), (int)Math.Min(report.CreatureExp2, int.MaxValue), (int)Math.Min(report.CreatureExp3, int.MaxValue)],
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (clear is null)
+        {
+            return;
+        }
+
+        if (!clear.Improved || clear.Reward is not { } outcome)
+        {
+            _logger.LogInformation(
+                "[{ConnectionId}] '{Character}' cleared stage {Stage} with rank {Rank}, not better than {Previous}: no reward.",
+                session.Connection.ConnectionId,
+                session.ActiveCharacter.Name,
+                report.Stage,
+                report.Rank,
+                clear.PreviousRank);
+            return;
+        }
+
+        var drops = clear.Drops.Select(drop => drop.ItemId).ToArray();
+        await SendPacketAsync(session, new FieldGameStagePointPacket(FieldGameStagePointPacket.Accepted, report.Stage, report.Rank, drops), cancellationToken).ConfigureAwait(false);
+
+        session.ActiveCharacter.Level = outcome.Level;
+        session.ActiveCharacter.Exp = outcome.Exp;
+        session.ActiveCharacter.LevelPoint = (byte)outcome.LevelPoint;
+        session.ActiveCharacter.DrawCount = outcome.Draws;
+        _logger.LogInformation(
+            "[{ConnectionId}] '{Character}' cleared stage {Stage} with rank {Rank} (was {Previous}): {Exp} exp, {Gold} gold, drops [{Drops}]; level {Level}, exp {Total}, gold {TotalGold}.",
+            session.Connection.ConnectionId,
+            session.ActiveCharacter.Name,
+            report.Stage,
+            report.Rank,
+            clear.PreviousRank,
+            exp,
+            gold,
+            string.Join(", ", clear.Drops.Select(drop => $"{drop.ItemId}@{drop.Slot}")),
+            outcome.Level,
+            outcome.Exp,
+            outcome.Gold);
+
+        if (outcome.LeveledUp)
+        {
+            await SendPacketAsync(session, new CharacterLevelUpPacket(outcome.Level, (ushort)outcome.LevelPoint), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (outcome.LeveledUp || outcome.CreatureLeveledUp)
+        {
             var levels = new FieldPlayerLevelPacket(player.SlotIndex, outcome.Level, outcome.Creature1Level, outcome.Creature2Level, outcome.Creature3Level);
             await BroadcastToFieldAsync(field, levels, cancellationToken).ConfigureAwait(false);
         }
