@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Rakion.Core.Packets;
 using Rakion.World.Session;
 
 namespace Rakion.World.Fields;
@@ -127,13 +128,13 @@ public sealed class FieldManager : IFieldManager
 
             if (_sessionLocations.ContainsKey(session.Connection.ConnectionId))
             {
-                failureReason = 4; // Already in a field
+                failureReason = FieldPlayerEnterPacket.RoomUnavailable; // Already in a field
                 return false;
             }
 
             if (!TryGetField(channelIndex, roomNumber, out field) || field is null)
             {
-                failureReason = 5; // Room does not exist
+                failureReason = FieldPlayerEnterPacket.RoomUnavailable; // Room does not exist
                 return false;
             }
 
@@ -162,18 +163,18 @@ public sealed class FieldManager : IFieldManager
 
             if (_sessionLocations.ContainsKey(session.Connection.ConnectionId))
             {
-                failureReason = 4;
+                failureReason = FieldPlayerEnterPacket.RoomUnavailable;
                 return false;
             }
 
             var availableFields = GetFields(channelIndex)
-                .Where(f => !f.HasPassword && !f.IsInProgress && f.PlayerCount < f.MaxPlayers)
+                .Where(f => !f.HasPassword && !f.IsInProgress)
                 .OrderBy(f => f.PlayerCount)
                 .ToList();
 
             if (availableFields.Count == 0)
             {
-                failureReason = 5; // No available room
+                failureReason = FieldPlayerEnterPacket.RoomUnavailable; // No available room
                 return false;
             }
 
@@ -188,7 +189,7 @@ public sealed class FieldManager : IFieldManager
                 }
             }
 
-            failureReason = 3; // All candidate rooms full
+            failureReason = FieldPlayerEnterPacket.RoomFull; // All candidate rooms full
             return false;
         }
     }

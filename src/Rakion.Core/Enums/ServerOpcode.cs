@@ -162,6 +162,24 @@ public enum ServerOpcode : ushort
     FieldList = 0x0036,
 
     /// <summary>
+    /// Room details for a player who just entered: rule header, names and the 20 slots.
+    /// Evidence: Observed in engine.dll jump table opcode 0x37 (0x361975e7 -> 0x36196ce0) and RakionWorldServ 0x4073B7.
+    /// </summary>
+    FieldInfo = 0x0037,
+
+    /// <summary>
+    /// Network check relayed between room members: [u8 SenderSlot].
+    /// Evidence: Observed in engine.dll jump table opcode 0x62 (0x36197817 -> 0x36194510) and RakionWorldServ 0x406930.
+    /// </summary>
+    FieldSlotUdp = 0x0062,
+
+    /// <summary>
+    /// Quick enter failed (no room). No payload.
+    /// Evidence: Observed in engine.dll jump table opcode 0x39 (0x36197603 -> 0x36193a60) and RakionWorldServ 0x423436.
+    /// </summary>
+    FieldQuickEnter = 0x0039,
+
+    /// <summary>
     /// Response to field / room creation request: [u8 ResultCode, u16 RoomNumber].
     /// Evidence: Observed in engine.dll jump table opcode 0x3B (0x3619761f -> 0x36193a90) and RakionWorldServ 0x423a82.
     /// </summary>
@@ -232,6 +250,18 @@ public enum ServerOpcode : ushort
     /// Evidence: Observed in engine.dll jump table opcode 0x46 (0x3619769d -> 0x36193cf0) and RakionWorldServ 0x407E00.
     /// </summary>
     FieldGameExit = 0x0046,
+
+    /// <summary>
+    /// Round start: [u8 Round][u16 SecondsLeft][u8][u8][u8 RedLeader][u8 BlueLeader].
+    /// Evidence: Observed in engine.dll jump table opcode 0x48 (0x361976b9 -> 0x36193de0) and RakionWorldServ 0x408440.
+    /// </summary>
+    FieldGameRoundStart = 0x0048,
+
+    /// <summary>
+    /// In-game player data relayed from a room member: [u8 SenderSlot][u16 Length][data].
+    /// Evidence: Observed in RakionWorldServ 0x405C00 / 0x405CC0 (relays of 0x4B and 0x4C) and engine.dll 0x36193d70.
+    /// </summary>
+    FieldGameAddPlayer = 0x004B,
 
     // --- UDP (40708 / 40709) ---
     /// <summary>

@@ -154,6 +154,7 @@ builder.Services.AddSingleton<IWorldOpcodeModule, ShopModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, StatPointModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, PowerUserModule>();
 builder.Services.AddSingleton<IAccountInventoryProvider, AccountInventoryProvider>();
+builder.Services.AddSingleton<UdpEndpointRegistry>();
 builder.Services.AddSingleton<WorldPacketHandler>();
 builder.Services.AddSingleton<WorldUdpPacketHandler>();
 builder.Services.AddSingleton<WorldServer>();

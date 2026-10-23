@@ -35,6 +35,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly IChannelManager _channelManager;
     private readonly ISessionSender _sender;
     private readonly IAccountInventoryProvider? _accountInventory;
+    private readonly UdpEndpointRegistry _udpEndpoints;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -51,9 +52,11 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         IEnumerable<IWorldOpcodeModule> modules,
         ISessionSender sender,
         IAccountInventoryProvider? accountInventory,
-        ILogger<WorldPacketHandler> logger)
+        ILogger<WorldPacketHandler> logger,
+        UdpEndpointRegistry? udpEndpoints = null)
     {
         _options = options;
+        _udpEndpoints = udpEndpoints ?? new UdpEndpointRegistry();
         _userRepository = userRepository;
         _characterRepository = characterRepository;
         _balanceRepository = balanceRepository;
@@ -206,6 +209,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameStart, HandleFieldGameStartAsync);
         _registry.Map(ClientOpcode.FieldGameEnter, HandleFieldGameEnterAsync);
         _registry.Map(ClientOpcode.FieldGameExit, HandleFieldGameExitAsync);
+        _registry.Map(ClientOpcode.FieldSlotUdp, HandleFieldSlotUdpAsync);
+        _registry.Map(ClientOpcode.FieldGameRoundStart, HandleFieldGameRoundStartAsync);
+        _registry.Map(ClientOpcode.FieldGameAddPlayer, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: false, ct));
+        _registry.Map(ClientOpcode.FieldGameAddPlayerReply, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: true, ct));
     }
 
     private async ValueTask HandleCharacterTutorialClearAsync(WorldSession session, CancellationToken cancellationToken)
@@ -231,7 +238,13 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     {
         if (_sessions.TryRemove(connection.ConnectionId, out var session))
         {
+            // A dropped client never sends FieldExit; free its slot so the room does not stay behind.
+            LeaveCurrentFieldInBackground(session);
             _channelManager.LeaveChannel(session);
+            if (session.UdpIndex != 0)
+            {
+                _udpEndpoints.Release(session.UdpIndex);
+            }
 
             if (session.User is not null)
             {
@@ -363,6 +376,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         session.User = user;
         session.GameInfo = gameInfo;
+        if (session.UdpIndex == 0)
+        {
+            (session.UdpIndex, session.UdpKey) = _udpEndpoints.Register();
+        }
 
         // Load account currencies and character roster
         long gold = await _balanceRepository.GetGoldAsync(user.Id, cancellationToken).ConfigureAwait(false);
@@ -407,7 +424,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             TutorialCompleted: gameInfo?.TutorialCompleted ?? false,
             ServerTimeMinutes: LegacyGameClock.ToMinutes(DateTime.Now),
             PowerUserExpiry: (uint)Math.Clamp(gameInfo?.PowerTime ?? 0, 0, uint.MaxValue),
-            PowerUserPoints: (ushort)Math.Clamp(gameInfo?.PowerLevelPoint ?? 0, 0, ushort.MaxValue));
+            PowerUserPoints: (ushort)Math.Clamp(gameInfo?.PowerLevelPoint ?? 0, 0, ushort.MaxValue),
+            UdpIndex: session.UdpIndex,
+            UdpKey: session.UdpKey);
 
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
 
@@ -643,7 +662,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var enterResp = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: activeCh.Index,
-                ServerId: 0,
+                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
                 ChannelName: activeCh.Name,
                 ChannelType: (byte)activeCh.Type,
                 MaxPlayers: activeCh.MaxPlayers,
@@ -740,7 +759,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var resp = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: ch.Index,
-                ServerId: 0,
+                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
                 ChannelName: ch.Name,
                 ChannelType: (byte)ch.Type,
                 MaxPlayers: ch.MaxPlayers,
@@ -917,7 +936,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         var pagedEntries = allFields
             .Skip(pageIndex * pageSize)
             .Take(pageSize)
-            .Select(f => f.ToFieldListEntry())
+            .Select(ToFieldListEntry)
             .ToList();
 
         var response = pagedEntries.Count == 0
@@ -944,6 +963,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        await LeaveStaleFieldAsync(session, cancellationToken).ConfigureAwait(false);
+
         if (session.ActiveChannel.FieldManager.TryCreateField(
             session.ActiveChannel.Index,
             session,
@@ -959,6 +980,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             out var field,
             out var failureReason))
         {
+            field!.Rules = FieldRules.FromCreate(req);
+            field.ApplyDefaultSlots();
             _logger.LogInformation(
                 "[{ConnectionId}] Room #{Number} '{Name}' created by '{Host}' in channel {Channel}.",
                 session.Connection.ConnectionId,
@@ -993,6 +1016,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        await LeaveStaleFieldAsync(session, cancellationToken).ConfigureAwait(false);
         if (session.ActiveChannel.FieldManager.TryQuickJoinField(
             session.ActiveChannel.Index,
             session,
@@ -1008,8 +1032,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 player!.SlotIndex,
                 player.Team);
 
-            var response = new FieldCreateResponsePacket(ResultCode: 0, RoomNumber: field.Number);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            await AnnounceJoinAsync(field, player, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -1019,8 +1042,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 failureReason,
                 session.ActiveCharacter.Name);
 
-            var response = new FieldCreateResponsePacket(ResultCode: failureReason, RoomNumber: 0);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new FieldQuickEnterFailedPacket(), cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -1039,6 +1061,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        await LeaveStaleFieldAsync(session, cancellationToken).ConfigureAwait(false);
         if (session.ActiveChannel.FieldManager.TryJoinField(
             session.ActiveChannel.Index,
             req.RoomNumber,
@@ -1048,14 +1071,179 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             out var player,
             out var failureReason))
         {
-            var response = new FieldCreateResponsePacket(ResultCode: 0, RoomNumber: field!.Number);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "[{ConnectionId}] '{Player}' entered room #{Number} (Slot: {Slot}).",
+                session.Connection.ConnectionId,
+                session.ActiveCharacter.Name,
+                field!.Number,
+                player!.SlotIndex);
+
+            await AnnounceJoinAsync(field, player, cancellationToken).ConfigureAwait(false);
         }
         else
         {
-            var response = new FieldCreateResponsePacket(ResultCode: failureReason, RoomNumber: 0);
+            _logger.LogInformation(
+                "[{ConnectionId}] FieldEnter room #{Number} refused for '{Player}': result {Result}.",
+                session.Connection.ConnectionId,
+                req.RoomNumber,
+                session.ActiveCharacter.Name,
+                failureReason);
+
+            await SendPacketAsync(session, new FieldPlayerEnterPacket(failureReason), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Legacy join order (RakionWorldServ.exe 0x407358..0x4074EF, Observed): the new member goes to the whole room
+    /// on 0x38, then the newcomer gets the room details on 0x37.
+    /// </summary>
+    private async ValueTask AnnounceJoinAsync(GameField field, FieldPlayer newcomer, CancellationToken cancellationToken)
+    {
+        var slots = field.SnapshotSlots();
+        var records = new Dictionary<FieldPlayer, FieldPlayerRecord>();
+        foreach (var (_, member) in slots)
+        {
+            if (member is not null)
+            {
+                records[member] = await BuildPlayerRecordAsync(member.Session, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        foreach (var member in field.Players)
+        {
+            var entered = new FieldPlayerEnterPacket(
+                FieldPlayerEnterPacket.Entered,
+                newcomer.SlotIndex,
+                GameField.SlotStateOf(newcomer),
+                PlayerIdOf(newcomer.Session, member.Session),
+                0,
+                records[newcomer]);
+            await SendPacketAsync(member.Session, entered, cancellationToken).ConfigureAwait(false);
+        }
+
+        var rules = field.Rules;
+        var info = new FieldInfoPacket(
+            field.Number,
+            field.IsInProgress ? (byte)2 : (byte)1,
+            field.MasterSlot,
+            rules.Kind,
+            rules.Mode,
+            rules.MinLevel,
+            rules.MaxLevel,
+            rules.Extra,
+            0,
+            rules.Option,
+            rules.TimeLimit,
+            rules.Goal,
+            field.Name,
+            field.Password,
+            rules.MapName,
+            slots.Select(s => s.Player is null
+                ? new FieldSlotInfo(s.State, 0, 0, null)
+                : new FieldSlotInfo(s.State, PlayerIdOf(s.Player.Session, newcomer.Session), 0, records[s.Player])).ToList());
+        await SendPacketAsync(newcomer.Session, info, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<FieldPlayerRecord> BuildPlayerRecordAsync(WorldSession member, CancellationToken cancellationToken)
+    {
+        var character = member.ActiveCharacter;
+        IReadOnlyList<ItemSlot>? equipment = null;
+        if (_accountInventory is not null && member.User is not null && character is not null)
+        {
+            var inventory = await _accountInventory
+                .GetAccountInventoryAsync(member.User.Id, member.GameInfo?.BagCount ?? 1, cancellationToken)
+                .ConfigureAwait(false);
+            equipment = inventory.EquipmentOf(character.Id);
+        }
+
+        var udp = _udpEndpoints.Get(member.UdpIndex);
+        return new FieldPlayerRecord(
+            character?.Name ?? string.Empty,
+            string.Empty,
+            (byte)(character?.Class ?? 0),
+            (byte)(character?.Level ?? 1),
+            equipment,
+            udp.Ip1,
+            udp.Port1,
+            udp.Ip2,
+            udp.Port2);
+    }
+
+    private FieldListEntry ToFieldListEntry(GameField field) =>
+        field.ToFieldListEntry(field.Master is { } master ? _udpEndpoints.Get(master.Session.UdpIndex) : default);
+
+    /// <summary>
+    /// Room player id: the user's id from WorldLogin bytes [5..6], the same for every recipient. The client finds its
+    /// own room entry by comparing it with its own id (rakion.bin 0x47A170 against listener + 0x14 via 0x472B00,
+    /// Observed).
+    /// </summary>
+    private static ushort PlayerIdOf(WorldSession member, WorldSession recipient) => member.UdpIndex;
+
+    /// <summary>
+    /// Removes the session from its room and tells the remaining members (FieldExit with the freed slot). Returns
+    /// false when the session was in no room.
+    /// </summary>
+    private async ValueTask<bool> LeaveCurrentFieldAsync(WorldSession session, LobbyChannel? channel, bool notifyLeaver, CancellationToken cancellationToken)
+    {
+        if (channel?.FieldManager.TryLeaveField(session, out var field, out var player, out bool roomDestroyed) is not true)
+        {
+            return false;
+        }
+
+        byte exitingSlot = player?.SlotIndex ?? 0;
+        _logger.LogInformation(
+            "[{ConnectionId}] '{Player}' (Slot {Slot}) left room #{Number} (Destroyed: {Destroyed}).",
+            session.Connection.ConnectionId,
+            session.ActiveCharacter?.Name ?? "Unknown",
+            exitingSlot,
+            field?.Number ?? 0,
+            roomDestroyed);
+
+        var response = new FieldExitResponsePacket(SlotIndex: exitingSlot);
+        if (notifyLeaver)
+        {
             await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
         }
+
+        if (!roomDestroyed && field is not null)
+        {
+            await BroadcastToFieldAsync(field, response, cancellationToken).ConfigureAwait(false);
+
+            if (field.IsInProgress && !field.Players.Any(p => p.IsInGame))
+            {
+                await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// A client asking to create or enter a room is in the lobby, so any room the server still has it in is stale
+    /// (the client left without FieldExit). Inferred recovery; the legacy server tracks this with the user state.
+    /// </summary>
+    private async ValueTask LeaveStaleFieldAsync(WorldSession session, CancellationToken cancellationToken)
+    {
+        if (await LeaveCurrentFieldAsync(session, session.ActiveChannel, notifyLeaver: false, cancellationToken).ConfigureAwait(false))
+        {
+            _logger.LogWarning("[{ConnectionId}] Removed '{Player}' from a room it had left without FieldExit.", session.Connection.ConnectionId, session.ActiveCharacter?.Name ?? "Unknown");
+        }
+    }
+
+    private void LeaveCurrentFieldInBackground(WorldSession session)
+    {
+        var channel = session.ActiveChannel;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await LeaveCurrentFieldAsync(session, channel, notifyLeaver: false, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[{ConnectionId}] Failed to free the room slot of a disconnected client.", session.Connection.ConnectionId);
+            }
+        });
     }
 
     private async ValueTask HandleFieldExitAsync(
@@ -1068,32 +1256,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
-        if (session.ActiveChannel.FieldManager.TryLeaveField(session, out var field, out var player, out bool roomDestroyed))
+        if (await LeaveCurrentFieldAsync(session, session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
         {
-            byte exitingSlot = player?.SlotIndex ?? 0;
-            _logger.LogInformation(
-                "[{ConnectionId}] '{Player}' (Slot {Slot}) left room #{Number} (Destroyed: {Destroyed}).",
-                session.Connection.ConnectionId,
-                session.ActiveCharacter?.Name ?? "Unknown",
-                exitingSlot,
-                field?.Number ?? 0,
-                roomDestroyed);
-
-            // Notify exiting player with their slot index so client knows to empty slot
-            var response = new FieldExitResponsePacket(SlotIndex: exitingSlot);
-            await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
-
-            // Broadcast to remaining room members so their client clears the player's slot
-            if (!roomDestroyed && field is not null)
-            {
-                await BroadcastToFieldAsync(field, response, cancellationToken).ConfigureAwait(false);
-
-                if (field.IsInProgress && !field.Players.Any(p => p.IsInGame))
-                {
-                    await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
-                }
-            }
-
             // Observed (rakion.bin): FieldExit handler 0x00474410 only empties the slot, and the
             // WaitRoom menu state is 0x1C (set near 0x00447030). The only code path that rebuilds
             // the SelectGame lobby UI (ctor 0x00469320) from a room is the ChannelEnter handler
@@ -1102,7 +1266,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var reenter = new ChannelEnterResponsePacket(
                 ResultCode: 0,
                 ChannelIndex: channel.Index,
-                ServerId: 0,
+                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
                 ChannelName: channel.Name,
                 ChannelType: (byte)channel.Type,
                 MaxPlayers: channel.MaxPlayers,
@@ -1113,7 +1277,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var fields = session.ActiveChannel.FieldManager.GetFields(session.ActiveChannel.Index);
             var pagedEntries = fields
                 .Take(6)
-                .Select(f => f.ToFieldListEntry())
+                .Select(ToFieldListEntry)
                 .ToList();
             var fieldListResp = pagedEntries.Count == 0
                 ? FieldListResponsePacket.Empty
@@ -1179,8 +1343,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
-        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) &&
-            field is not null)
+        if (session.ActiveChannel.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var chatter) &&
+            field is not null && chatter is not null)
         {
             string charName = session.ActiveCharacter?.Name ?? "Unknown";
             string formattedMessage = req.Message.StartsWith(charName, StringComparison.Ordinal)
@@ -1193,7 +1357,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 field.Number,
                 formattedMessage);
 
-            var broadcast = new FieldChatBroadcastPacket(formattedMessage);
+            var broadcast = new FieldChatBroadcastPacket(formattedMessage, chatter.SlotIndex);
             foreach (var member in field.Players)
             {
                 await SendPacketAsync(member.Session, broadcast, cancellationToken).ConfigureAwait(false);
@@ -1318,6 +1482,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 req.SubMode,
                 (byte)0))
             {
+                field.Rules = field.Rules.With(req);
                 _logger.LogInformation(
                     "[{ConnectionId}] Room #{Number} rules updated by host '{Host}'.",
                     session.Connection.ConnectionId,
@@ -1424,6 +1589,96 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async ValueTask HandleFieldGameRoundStartAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null)
+        {
+            return;
+        }
+
+        var start = field.MarkLoaded(player, DateTimeOffset.UtcNow);
+        _logger.LogInformation(
+            "[{ConnectionId}] Room #{Number} slot {Slot} loaded the map; round start {Action}.",
+            session.Connection.ConnectionId,
+            field.Number,
+            player.SlotIndex,
+            start is null ? "waits for the others" : start.Value.ToAllLoaded ? "sent to every member" : "sent to this member");
+        if (start is not { } round)
+        {
+            return;
+        }
+
+        var recipients = round.ToAllLoaded ? field.LoadedPlayers : [player];
+        foreach (var member in recipients)
+        {
+            await SendPacketAsync(member.Session, round.Packet, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Relays in-game player data: 0x4B goes to every other loaded member, 0x4C to one loaded member, both as 0x4B with
+    /// the sender's slot (RakionWorldServ.exe 0x405C00 / 0x405CC0, Observed).
+    /// </summary>
+    private async ValueTask HandleFieldGameAddPlayerAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        bool hasTarget,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameAddPlayerRequestPacket.TryParse(payload.Span, hasTarget, out var req))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldGameAddPlayer request ({Length} bytes).", session.Connection.ConnectionId, payload.Length);
+            return;
+        }
+
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var sender) is not true ||
+            field is null || sender is null || !sender.IsLoaded)
+        {
+            return;
+        }
+
+        var relay = new FieldGameAddPlayerPacket(sender.SlotIndex, req.Data);
+        foreach (var member in field.LoadedPlayers)
+        {
+            bool isTarget = req.TargetSlot is { } target ? member.SlotIndex == target : member != sender;
+            if (isTarget)
+            {
+                await SendPacketAsync(member.Session, relay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async ValueTask HandleFieldSlotUdpAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldSlotUdpPacket.TryParse(payload.Span, out var req))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldSlotUdp request packet.", session.Connection.ConnectionId);
+            return;
+        }
+
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var sender) is not true ||
+            field is null || sender is null)
+        {
+            return;
+        }
+
+        var target = field.Players.FirstOrDefault(p => p.SlotIndex == req.SlotIndex);
+        if (target is null)
+        {
+            _logger.LogDebug("[{ConnectionId}] FieldSlotUdp to empty slot {Slot} in room #{Number} ignored.", session.Connection.ConnectionId, req.SlotIndex, field.Number);
+            return;
+        }
+
+        await SendPacketAsync(target.Session, new FieldSlotUdpPacket(sender.SlotIndex), cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask EndFieldGameAsync(GameField field, CancellationToken cancellationToken)

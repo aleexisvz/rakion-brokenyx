@@ -25,6 +25,10 @@ public sealed class GameField
     public byte SubMode { get; set; }
     public byte LevelLimit { get; set; }
     public bool IsInProgress { get; set; }
+
+    /// <summary>Rules with the legacy field meanings; the properties above keep the packet-record names.</summary>
+    public FieldRules Rules { get; set; } = FieldRules.Default;
+
     public uint HostUserId { get; private set; }
     public ushort HostLevel { get; private set; }
     public string HostCharacterName { get; private set; } = string.Empty;
@@ -62,18 +66,8 @@ public sealed class GameField
         LevelLimit = levelLimit;
         IsInProgress = false;
 
-        // Initialize default closed slots outside the requested MaxPlayers capacity
-        int halfCapacity = Math.Clamp(MaxPlayers / 2, 1, 10);
-        for (int i = halfCapacity; i < 10; i++)
-        {
-            _isSlotClosed[i] = true;
-        }
-
-        for (int i = 10 + halfCapacity; i < 20; i++)
-        {
-            _isSlotClosed[i] = true;
-        }
-
+        // Every slot starts open, as the host's client draws a new room (Observed in the client); MaxPlayers holds the
+        // mode byte (see FieldRules), so it does not size the room.
         HostUserId = (uint)(hostSession.User?.Id ?? 0);
         HostLevel = (ushort)(hostSession.ActiveCharacter?.Level ?? 1);
         HostCharacterName = hostSession.ActiveCharacter?.Name ?? string.Empty;
@@ -89,6 +83,36 @@ public sealed class GameField
     public IReadOnlyCollection<FieldPlayer> Players => _playersBySession.Values.ToList();
 
     public bool IsSlotClosed(byte slotIndex) => slotIndex < _isSlotClosed.Length && _isSlotClosed[slotIndex];
+
+    /// <summary>
+    /// Wire state of every slot (see <see cref="FieldSlotInfo"/>) with its player. Inferred: the host shows as
+    /// waiting rather than ready, as the legacy start check never asks the host to be ready.
+    /// </summary>
+    public IReadOnlyList<(byte State, FieldPlayer? Player)> SnapshotSlots()
+    {
+        lock (_lock)
+        {
+            var slots = new (byte, FieldPlayer?)[_slots.Length];
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                slots[i] = _slots[i] is { } player
+                    ? (SlotStateOf(player), player)
+                    : (_isSlotClosed[i] ? FieldSlotInfo.Closed : FieldSlotInfo.Empty, null);
+            }
+
+            return slots;
+        }
+    }
+
+    public static byte SlotStateOf(FieldPlayer player) =>
+        player.IsLoaded ? FieldSlotInfo.Loaded
+        : player.IsInGame ? FieldSlotInfo.InGame
+        : player.IsReady && !player.IsMaster ? FieldSlotInfo.Ready
+        : FieldSlotInfo.Waiting;
+
+    public FieldPlayer? Master => _playersBySession.Values.FirstOrDefault(p => p.IsMaster);
+
+    public byte MasterSlot => Master?.SlotIndex ?? 0;
 
     public bool TryGetPlayer(Guid connectionId, out FieldPlayer? player) =>
         _playersBySession.TryGetValue(connectionId, out player);
@@ -214,7 +238,7 @@ public sealed class GameField
 
             // UNKNOWN: the legacy server skips these checks when a per-slot flag of the host is 1, and compares a
             // second pair of per-team counters (result 2); neither is reproduced.
-            bool teamsOk = Mode switch
+            bool teamsOk = Rules.Mode switch
             {
                 1 or 3 or 4 => red == blue,
                 2 => players.Count >= 2,
@@ -231,9 +255,12 @@ public sealed class GameField
             }
 
             IsInProgress = true;
+            Round = 0;
+            _roundRunning = false;
             foreach (var player in players)
             {
                 player.IsInGame = true;
+                player.IsLoaded = false;
             }
 
             return FieldGameStartResponsePacket.Started;
@@ -254,8 +281,99 @@ public sealed class GameField
             }
 
             player.IsInGame = true;
+            player.IsLoaded = false;
             return FieldGameEnterResponsePacket.Entered;
         }
+    }
+
+    /// <summary>
+    /// Closes the slots a new room starts without (RakionWorldServ.exe room init 0x405568, Observed): PvP modes 1..4
+    /// keep six slots per team (6..9 and 16..19 closed); mode 0 closes the whole blue team. UNKNOWN: the red slot count
+    /// of mode 0 comes from a stage table and is left open.
+    /// </summary>
+    public void ApplyDefaultSlots()
+    {
+        lock (_lock)
+        {
+            for (int i = 0; i < _isSlotClosed.Length; i++)
+            {
+                bool closed = Rules.Mode switch
+                {
+                    >= 1 and <= 4 => i is (>= 6 and <= 9) or >= 16,
+                    0 => i >= 10,
+                    _ => false,
+                };
+                _isSlotClosed[i] = closed && _slots[i] is null;
+            }
+        }
+    }
+
+    public byte Round { get; private set; }
+
+    private bool _roundRunning;
+    private DateTimeOffset _roundEndsAt;
+    private byte _redLeader = FieldGameRoundStartPacket.NoLeader;
+    private byte _blueLeader = FieldGameRoundStartPacket.NoLeader;
+
+    /// <summary>
+    /// A member finished loading the map (legacy 0x48 handler RakionWorldServ.exe 0x408440, Observed). Returns the round
+    /// start to send and whether it goes to every loaded member (the last one loaded, first round) or only to this
+    /// member (joining a running round); null when nothing is sent yet.
+    /// The legacy timer is TimeLimit + 3 seconds; the round-end flow (0x4A) is not implemented.
+    /// </summary>
+    public (FieldGameRoundStartPacket Packet, bool ToAllLoaded)? MarkLoaded(FieldPlayer player, DateTimeOffset now)
+    {
+        lock (_lock)
+        {
+            if (!IsInProgress || !player.IsInGame || player.IsLoaded)
+            {
+                return null;
+            }
+
+            player.IsLoaded = true;
+            if (_roundRunning)
+            {
+                return (BuildRoundStart(now), false);
+            }
+
+            if (_playersBySession.Values.Any(p => p.IsInGame && !p.IsLoaded))
+            {
+                return null;
+            }
+
+            _roundRunning = true;
+            Round = 1;
+            _roundEndsAt = now.AddSeconds(Rules.TimeLimit + 3);
+            _redLeader = _blueLeader = FieldGameRoundStartPacket.NoLeader;
+            if (Rules.Mode == 4)
+            {
+                // Leader Wars (Inferred name): the highest-level loaded member of each team (0x4086D9, Observed).
+                var loaded = _playersBySession.Values.Where(p => p.IsLoaded).ToList();
+                _redLeader = loaded.Where(p => p.SlotIndex < 10).OrderByDescending(p => p.Session.ActiveCharacter?.Level ?? 0)
+                    .Select(p => p.SlotIndex).DefaultIfEmpty(FieldGameRoundStartPacket.NoLeader).First();
+                _blueLeader = loaded.Where(p => p.SlotIndex >= 10).OrderByDescending(p => p.Session.ActiveCharacter?.Level ?? 0)
+                    .Select(p => p.SlotIndex).DefaultIfEmpty(FieldGameRoundStartPacket.NoLeader).First();
+            }
+
+            return (BuildRoundStart(now), true);
+        }
+    }
+
+    public IReadOnlyList<FieldPlayer> LoadedPlayers
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _playersBySession.Values.Where(p => p.IsLoaded).ToList();
+            }
+        }
+    }
+
+    private FieldGameRoundStartPacket BuildRoundStart(DateTimeOffset now)
+    {
+        double secondsLeft = Math.Clamp((_roundEndsAt - now).TotalSeconds, 0, ushort.MaxValue);
+        return new FieldGameRoundStartPacket(Round, (ushort)secondsLeft, 0, 0, _redLeader, _blueLeader);
     }
 
     /// <summary>
@@ -267,6 +385,7 @@ public sealed class GameField
         lock (_lock)
         {
             player.IsInGame = false;
+            player.IsLoaded = false;
             player.IsReady = player.IsMaster;
             return IsInProgress && !_playersBySession.Values.Any(p => p.IsInGame);
         }
@@ -278,9 +397,11 @@ public sealed class GameField
         lock (_lock)
         {
             IsInProgress = false;
+            _roundRunning = false;
             foreach (var player in _playersBySession.Values)
             {
                 player.IsInGame = false;
+                player.IsLoaded = false;
                 player.IsReady = player.IsMaster;
             }
         }
@@ -292,27 +413,29 @@ public sealed class GameField
         {
             newPlayer = null;
 
-            if (HasPassword && !string.Equals(Password, password, StringComparison.Ordinal))
+            // Legacy order (RakionWorldServ.exe 0x406F40): running match, level range, free slot, password.
+            // MaxPlayers is not a capacity (it holds the mode byte, see FieldRules); open slots decide.
+            if (_playersBySession.ContainsKey(session.Connection.ConnectionId))
             {
-                failureReason = 1; // Wrong password
+                failureReason = FieldPlayerEnterPacket.RoomUnavailable;
                 return false;
             }
 
             if (IsInProgress)
             {
-                failureReason = 2; // Match already started
+                failureReason = FieldPlayerEnterPacket.InProgress;
                 return false;
             }
 
-            if (PlayerCount >= MaxPlayers)
+            if (Rules.Mode is >= 1 and <= 4 && !Rules.AllowsLevel(session.ActiveCharacter?.Level ?? 0))
             {
-                failureReason = 3; // Room full
+                failureReason = FieldPlayerEnterPacket.LevelOutOfRange;
                 return false;
             }
 
-            if (_playersBySession.ContainsKey(session.Connection.ConnectionId))
+            if (HasPassword && !string.Equals(Password, password, StringComparison.Ordinal))
             {
-                failureReason = 4; // Already inside
+                failureReason = FieldPlayerEnterPacket.WrongPassword;
                 return false;
             }
 
@@ -365,7 +488,7 @@ public sealed class GameField
 
             if (availableSlot < 0)
             {
-                failureReason = 3; // Room full
+                failureReason = FieldPlayerEnterPacket.RoomFull;
                 return false;
             }
 
@@ -415,24 +538,31 @@ public sealed class GameField
         }
     }
 
-    public FieldListEntry ToFieldListEntry()
+    public FieldListEntry ToFieldListEntry(UdpEndpoints hostEndpoints = default)
     {
+        byte openSlots;
+        lock (_lock)
+        {
+            openSlots = (byte)_isSlotClosed.Count(closed => !closed);
+        }
+
         return new FieldListEntry(
             RoomNumber: Number,
             HasPassword: HasPassword,
             IsInProgress: IsInProgress,
-            Mode: Mode,
-            Map: Map,
-            MaxPlayers: MaxPlayers,
-            RoundTime: RoundTime,
-            Rounds: Rounds,
-            SubMode: SubMode,
-            LevelLimit: LevelLimit,
+            Kind: Rules.Kind,
+            Mode: Rules.Mode,
+            MinLevel: Rules.MinLevel,
+            MaxLevel: Rules.MaxLevel,
+            RuleExtra: Rules.Extra,
+            Unknown: 0,
+            Option: Rules.Option,
             CurrentPlayers: PlayerCount,
-            MaxAllowed: MaxPlayers,
-            HostUserId: HostUserId,
-            HostLevel: HostLevel,
+            MaxPlayers: openSlots,
             RoomName: Name,
-            Extra: 0);
+            HostValue1: hostEndpoints.Ip1,
+            HostValue2: hostEndpoints.Port1,
+            HostValue3: hostEndpoints.Ip2,
+            HostValue4: hostEndpoints.Port2);
     }
 }
