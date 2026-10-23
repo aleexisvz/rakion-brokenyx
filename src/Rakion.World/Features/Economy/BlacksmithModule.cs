@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Database.Repositories;
+using Rakion.World.Configuration;
 using Rakion.World.Modules;
 using Rakion.World.Session;
 
@@ -27,8 +29,17 @@ public sealed class BlacksmithModule : IWorldOpcodeModule
     private readonly Func<int, int> _roll;
     private readonly ILogger<BlacksmithModule> _logger;
 
-    public BlacksmithModule(ISessionSender sender, IInventoryRepository inventoryRepository, ILogger<BlacksmithModule> logger)
-        : this(sender, inventoryRepository, EnchantOdds.DefaultFor, Random.Shared.Next, logger)
+    public BlacksmithModule(
+        ISessionSender sender,
+        IInventoryRepository inventoryRepository,
+        IOptions<WorldOptions> options,
+        ILogger<BlacksmithModule> logger)
+        : this(
+            sender,
+            inventoryRepository,
+            level => EnchantOdds.DefaultFor(level).WithDowngradeScale(options.Value.Rewards.EnchantDowngradeScale),
+            Random.Shared.Next,
+            logger)
     {
     }
 
