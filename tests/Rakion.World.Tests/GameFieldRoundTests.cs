@@ -140,6 +140,20 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void GolemWar_WipedOutTeamLosesTheRound_AndDeadPlayersStayOut()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 1, timeLimit: 300, rounds: 2);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        var death = field.RecordDeath(guest, 0, host.SlotIndex, Now)!.Value;
+        Assert.AreEqual(new FieldGameRoundEndPacket(FieldGameRoundEndPacket.EndedByKills, FieldGameRoundEndPacket.RedWins, 1, 0), death.RoundEnd);
+
+        field.Tick(Now.AddSeconds(16));
+        Assert.IsFalse(guest.IsDead, "revived at the next round");
+    }
+
+    [TestMethod]
     public void PointReports_AreAcceptedOnlyAfterARoundEnd_WithModeLimits()
     {
         var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1, rounds: 2);

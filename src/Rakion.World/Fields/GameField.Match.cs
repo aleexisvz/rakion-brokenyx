@@ -197,8 +197,26 @@ public sealed partial class GameField
                     break;
 
                 default:
+                    // Stage and Golem War: the victim stays out until the next round and a wiped-out team loses
+                    // (0x40888D marks slot + 4, 0x4063A0 checks red, then blue outside mode 0; Observed).
+                    if (victim.IsDead)
+                    {
+                        return null;
+                    }
+
+                    victim.IsDead = true;
                     valueA = killerSlot;
                     valueB = killerSlot;
+                    var loaded = _playersBySession.Values.Where(p => p.IsLoaded).ToList();
+                    if (loaded.Where(p => p.SlotIndex < 10).All(p => p.IsDead))
+                    {
+                        roundWinner = FieldGameRoundEndPacket.BlueWins;
+                    }
+                    else if (Rules.Mode != 0 && loaded.Where(p => p.SlotIndex >= 10).All(p => p.IsDead))
+                    {
+                        roundWinner = FieldGameRoundEndPacket.RedWins;
+                    }
+
                     break;
             }
 
@@ -290,6 +308,7 @@ public sealed partial class GameField
         {
             // Inferred: solo kills count per round, like the team scores the legacy tick resets.
             player.Kills = 0;
+            player.IsDead = false;
         }
 
         _redLeader = _blueLeader = FieldGameRoundStartPacket.NoLeader;
