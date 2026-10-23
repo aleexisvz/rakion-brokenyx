@@ -254,6 +254,27 @@ public sealed record CharacterLevelUpPacket(byte Level, ushort LevelPoints) : IP
 }
 
 /// <summary>
+/// A room member's character and creature levels, broadcast to the room when either changed after a round:
+/// [u8 Slot][u8 Level][u8 Creature1][u8 Creature2][u8 Creature3].
+/// Evidence: Observed in RakionWorldServ.exe 0x424E1F (built after 0x40D300 / 0x40B940 report a change, sent with
+/// 0x4061F0) and engine.dll 0x36194130 (reads five bytes). That the first byte is the slot is Derived (it is the
+/// slot found by 0x40B7D0); that the last three are the equipment slots 10..12 creatures is Derived from 0x40B940.
+/// </summary>
+public sealed record FieldPlayerLevelPacket(byte Slot, byte Level, byte Creature1, byte Creature2, byte Creature3) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldPlayerLevel;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Slot);
+        writer.WriteByte(Level);
+        writer.WriteByte(Creature1);
+        writer.WriteByte(Creature2);
+        writer.WriteByte(Creature3);
+    }
+}
+
+/// <summary>
 /// In-game player data a client sends for every other member (0x4B) or, with a leading target slot, for one member
 /// (0x4C): [u8 Target]? [u16 Length][data]. The server never reads the data.
 /// Evidence: Observed in engine.dll SendFieldGameAddPlayer (0x36192350) / SendFieldGameAddPlayerReply (0x361923C0)

@@ -293,6 +293,13 @@ public enum ServerOpcode : ushort
     /// </summary>
     CharacterLevelUp = 0x0051,
 
+    /// <summary>
+    /// A room member's new levels: [u8 Slot][u8 Level][u8 x3 CreatureLevels].
+    /// Evidence: Observed in engine.dll jump table opcode 0x52 (0x3619776F -> 0x36194130, five bytes) and
+    /// RakionWorldServ 0x424E62 (room broadcast after a level change).
+    /// </summary>
+    FieldPlayerLevel = 0x0052,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).
