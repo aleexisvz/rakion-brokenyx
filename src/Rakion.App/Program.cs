@@ -175,6 +175,7 @@ builder.Services.AddSingleton<ISessionTicketService, SessionTicketService>();
 builder.Services.AddSingleton<IUserRepository, UserRepository>();
 builder.Services.AddSingleton<ICharacterRepository, CharacterRepository>();
 builder.Services.AddSingleton<IAccountBalanceRepository, AccountBalanceRepository>();
+builder.Services.AddSingleton<IAccountUpgradeRepository, AccountUpgradeRepository>();
 builder.Services.AddSingleton<IInventoryRepository, InventoryRepository>();
 builder.Services.AddSingleton<IMatchResultRepository, MatchResultRepository>();
 
@@ -193,6 +194,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IWorldOpcodeModule, InventoryModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, ShopModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, StatPointModule>();
+builder.Services.AddSingleton<IWorldOpcodeModule, AccountUpgradeModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, PowerUserModule>();
 builder.Services.AddSingleton<IWorldOpcodeModule, BlacksmithModule>();
 builder.Services.AddSingleton<IAccountInventoryProvider, AccountInventoryProvider>();
