@@ -169,6 +169,24 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void EndStage_OnlyTheMasterEndsAStageRound()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 0, timeLimit: 300, rounds: 2);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        Assert.IsNull(field.EndStage(guest, FieldGameRoundEndRequestPacket.Cleared, Now), "not the master");
+        Assert.IsNull(field.EndStage(host, 7, Now), "unknown reason");
+        var cleared = field.EndStage(host, FieldGameRoundEndRequestPacket.Cleared, Now);
+        Assert.AreEqual(new FieldGameRoundEndPacket(2, FieldGameRoundEndPacket.RedWins, 1, 0), cleared);
+        Assert.AreEqual((1500, 500), field.PointReportLimits);
+        Assert.IsNull(field.EndStage(host, FieldGameRoundEndRequestPacket.Failed, Now), "round already ended");
+
+        var (pvp, pvpHost, _) = CreateRunningMatch(mode: 3, timeLimit: 300);
+        Assert.IsNull(pvp.EndStage(pvpHost, FieldGameRoundEndRequestPacket.Cleared, Now), "not a stage");
+    }
+
+    [TestMethod]
     public void PointReports_AreAcceptedOnlyAfterARoundEnd_WithModeLimits()
     {
         var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1, rounds: 2);
