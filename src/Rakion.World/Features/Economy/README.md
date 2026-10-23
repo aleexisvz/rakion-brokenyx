@@ -128,6 +128,7 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Precio en cash según nivel: 7000 hasta 15, 12000 hasta 40, 19000 por encima (`RakionWorldServ.exe` 0x413FD4, **Observed**). Resultado 1 sin cash, 2 sin puntos repartidos.
   - El personaje se queda con 3 puntos por nivel por encima de 1 y el resto vuelve a los puntos PowerUser de la cuenta (**Derived** de 0x414043).
   - Cupones de descuento (ítems 11000–11999) rechazados con 0x14: su tabla de descuentos no está en el binario (**Unknown**). La lotería de regalos del original no se envía.
-- Bolsa (`0x0032`, 4.8): 8000 de cash (0x415033, **Observed**), máximo 3 bolsas (**Inferred**); resultado 3 sin cash, 2 en el máximo. Respuesta `[u8 resultado][u32 oro][u32 cash][u8 bolsas][u8 0]` (orden oro/cash **Inferred**).
+- Bolsa (`0x0032`, 4.8): 8000 de cash (0x415033, **Observed**), máximo 4 bolsas (**Derived**: 120 slots del box, 30 por bolsa); resultado 3 sin cash, 2 en el máximo. Respuesta `[u8 resultado][u32 oro][u32 cash][u8 bolsas][u8 0]` (orden oro/cash **Inferred**).
 - Slot de poción (`0x006F`, 4.8): de 3 a 6 por personaje, con el precio de los ítems de tienda 10008, 10009 y 10010 según los slots actuales (0x428E02, **Observed**); resultado 4 sin dinero. La ficha de cada personaje envía sus slots reales.
+- Pociones: al comprarlas, la cantidad (ítems 12000–12999) se guarda en `exp`, como el original (0x4174E9, **Observed**); sale de la columna `hit2` del catálogo (cargador 0x40A670, **Observed**). El gasto en partida (`0x006E`) todavía no se descuenta.
 - Pendientes de 4.8: comprar slot de personaje (el login muestra como máximo 3 personajes, hay que revisarlo antes) y apilar pociones (`0x0073`, falta saber cómo se guardan las cantidades).

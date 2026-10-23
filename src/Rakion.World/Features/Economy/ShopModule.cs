@@ -22,6 +22,12 @@ public sealed class ShopModule : IWorldOpcodeModule
     // Observed default of useriteminfo.level in the legacy schema.
     private const byte NewItemLevel = 1;
 
+    // Observed: the legacy shop stores a quantity in the exp column for items 12000..12999 (potions), read from
+    // the item's catalog row (RakionWorldServ.exe 0x4174E9): the u16 at +0xE of the loaded row, which the loader
+    // 0x40A670 fills with hit2 (Observed).
+    private const int FirstPotionId = 12000;
+    private const int LastPotionId = 12999;
+
     // Observed at 0x40CC52: type 10 items are packages that expand into several items.
     private const byte PackageItemType = 10;
 
@@ -122,7 +128,15 @@ public sealed class ShopModule : IWorldOpcodeModule
             else
             {
                 var outcome = await _inventoryRepository
-                    .PurchaseIntoBoxAsync(userId, template.Id, request.PayWithGold, price, slot.Value, NewItemLevel, cancellationToken)
+                    .PurchaseIntoBoxAsync(
+                        userId,
+                        template.Id,
+                        request.PayWithGold,
+                        price,
+                        slot.Value,
+                        NewItemLevel,
+                        cancellationToken,
+                        template.Id is >= FirstPotionId and <= LastPotionId ? template.Hit2 : 0)
                     .ConfigureAwait(false);
                 if (outcome is not null)
                 {

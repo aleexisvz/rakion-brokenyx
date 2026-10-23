@@ -18,7 +18,7 @@ public sealed class AccountUpgradeModule : IWorldOpcodeModule
     public static int StatResetPrice(byte level) => level > 40 ? 19000 : level > 15 ? 12000 : 7000;
 
     public const int BagCashPrice = 8000;   // 0x415033, Observed
-    public const byte MaxBags = 3;          // Inferred: the 120-slot box holds 3 bags of 40
+    public const byte MaxBags = 4;          // Derived: the 120-slot box and 30 slots per bag (ShopModule)
 
     /// <summary>Potion slots 3 -> 4 -> 5 -> 6 are sold as shop items 10008..10010 (0x428E02, Observed).</summary>
     public const int FirstPotionSlotItemId = 10008;

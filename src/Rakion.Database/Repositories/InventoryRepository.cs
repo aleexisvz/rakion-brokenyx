@@ -254,7 +254,8 @@ public sealed class InventoryRepository : IInventoryRepository
         int price,
         byte slot,
         byte level,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        long exp = 0)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(price);
 
@@ -291,9 +292,9 @@ public sealed class InventoryRepository : IInventoryRepository
             await connection.ExecuteAsync(new CommandDefinition(
                 """
                 INSERT INTO user_items (user_id, character_id, item_id, level, limit_time_minutes, slot_index, exp)
-                VALUES (@UserId, 0, @ItemId, @Level, 0, @Slot, 0);
+                VALUES (@UserId, 0, @ItemId, @Level, 0, @Slot, @Exp);
                 """,
-                new { UserId = userId, ItemId = itemId, Level = level, Slot = slot },
+                new { UserId = userId, ItemId = itemId, Level = level, Slot = slot, Exp = exp },
                 tx,
                 cancellationToken: ct));
             int rowId = await GetLastInsertedIdAsync(connection, tx, ct);
