@@ -254,6 +254,131 @@ public sealed record CharacterLevelUpPacket(byte Level, ushort LevelPoints) : IP
 }
 
 /// <summary>
+/// Stage end sent by the room master's client: [u8 Reason]. The legacy server accepts it only in Stage (mode 0) from
+/// the master: 2 clears the stage (red wins), 3 fails it (RakionWorldServ.exe 0x4246E0 / 0x405A90, Observed).
+/// </summary>
+public sealed record FieldGameRoundEndRequestPacket(byte Reason) : IPacket
+{
+    public const byte Cleared = 2;
+    public const byte Failed = 3;
+
+    public ushort Opcode => (ushort)ClientOpcode.FieldGameRoundEnd;
+
+    public void Serialize(PacketWriter writer) => writer.WriteByte(Reason);
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGameRoundEndRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 1)
+        {
+            return false;
+        }
+
+        packet = new FieldGameRoundEndRequestPacket(span[0]);
+        return true;
+    }
+}
+
+/// <summary>
+/// Stage clear report: [u8 Stage][u8 Rank][u8 N][N x u16 Items][u32 Exp][u32 Gold][3 x u32 CreatureExp].
+/// Evidence: Observed in engine.dll 0x36192660 and RakionWorldServ.exe 0x425010, which refuses stage 100 or more,
+/// a rank above 5 and more than 4 items. That the items are the stage's drops is Derived (they are stored with the
+/// clear and echoed back).
+/// </summary>
+public sealed record FieldGameStagePointRequestPacket(
+    byte Stage,
+    byte Rank,
+    IReadOnlyList<ushort> Items,
+    uint Exp,
+    uint Gold,
+    uint CreatureExp1,
+    uint CreatureExp2,
+    uint CreatureExp3) : IPacket
+{
+    public const int MaxStage = 99;
+    public const byte MaxRank = 5;
+    public const int MaxItems = 4;
+
+    public ushort Opcode => (ushort)ClientOpcode.FieldGameStagePoint;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Stage);
+        writer.WriteByte(Rank);
+        writer.WriteByte((byte)Items.Count);
+        foreach (ushort item in Items)
+        {
+            writer.WriteUInt16(item);
+        }
+
+        writer.WriteUInt32(Exp);
+        writer.WriteUInt32(Gold);
+        writer.WriteUInt32(CreatureExp1);
+        writer.WriteUInt32(CreatureExp2);
+        writer.WriteUInt32(CreatureExp3);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGameStagePointRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 3 || span[0] > MaxStage || span[1] > MaxRank || span[2] > MaxItems)
+        {
+            return false;
+        }
+
+        int count = span[2];
+        if (span.Length < 3 + (count * 2) + 20)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        byte stage = reader.ReadByte();
+        byte rank = reader.ReadByte();
+        reader.ReadByte();
+        var items = new ushort[count];
+        for (int i = 0; i < count; i++)
+        {
+            items[i] = reader.ReadUInt16();
+        }
+
+        packet = new FieldGameStagePointRequestPacket(
+            stage, rank, items, reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt32());
+        return true;
+    }
+}
+
+/// <summary>
+/// Answer to a stage clear: [u8 Result], followed for <see cref="Accepted"/> by [u8 Stage][u8 Rank][u8 N][N x u16 Items].
+/// Evidence: Observed in RakionWorldServ.exe 0x42515F (result 1, 3 bytes) and 0x4251F4 (result 0 with the stage,
+/// rank and items). Result 1 is sent when the clear row is not stored yet; its meaning for the client is Unknown.
+/// </summary>
+public sealed record FieldGameStagePointPacket(byte Result, byte Stage = 0, byte Rank = 0, IReadOnlyList<ushort>? Items = null) : IPacket
+{
+    public const byte Accepted = 0;
+    public const byte NotStored = 1;
+
+    public ushort Opcode => (ushort)ServerOpcode.FieldGameStagePoint;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        if (Result != Accepted)
+        {
+            return;
+        }
+
+        writer.WriteByte(Stage);
+        writer.WriteByte(Rank);
+        writer.WriteByte((byte)(Items?.Count ?? 0));
+        foreach (ushort item in Items ?? [])
+        {
+            writer.WriteUInt16(item);
+        }
+    }
+}
+
+/// <summary>
 /// A room member's character and creature levels, broadcast to the room when either changed after a round:
 /// [u8 Slot][u8 Level][u8 Creature1][u8 Creature2][u8 Creature3].
 /// Evidence: Observed in RakionWorldServ.exe 0x424E1F (built after 0x40D300 / 0x40B940 report a change, sent with

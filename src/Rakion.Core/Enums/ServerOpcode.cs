@@ -300,6 +300,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldPlayerLevel = 0x0052,
 
+    /// <summary>
+    /// Answer to a stage clear report: [u8 result] and, for 0, [u8 stage][u8 rank][u8 n][n x u16 item].
+    /// Evidence: Observed in RakionWorldServ.exe 0x42515F / 0x4251F4 (3-byte refusal, 6 + 2n bytes otherwise).
+    /// </summary>
+    FieldGameStagePoint = 0x0053,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).
