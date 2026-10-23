@@ -44,7 +44,8 @@ public interface IInventoryRepository
         int price,
         byte slot,
         byte level,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        long exp = 0);
     Task<IReadOnlyList<UserItemEntity>> GetUserItemsAsync(int userId, int? characterId = null, CancellationToken ct = default);
     Task<UserItemEntity> AddUserItemAsync(UserItemEntity item, CancellationToken ct = default);
     Task<bool> RemoveUserItemAsync(int userItemId, int userId, CancellationToken ct = default);

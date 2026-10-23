@@ -28,7 +28,8 @@ public sealed record CharacterSummary(
     uint Lose = 0,
     uint Draw = 0,
     IReadOnlyList<ItemSlot>? Equipment = null,
-    IReadOnlyList<byte>? StageRanks = null);
+    IReadOnlyList<byte>? StageRanks = null,
+    byte PotionSlots = 3);
 
 /// <summary>
 /// World server login response and character list packet (Opcode 0x0002).
@@ -151,7 +152,7 @@ public sealed record WorldLoginResponsePacket(
             writer.WriteUInt16(c.MaxCp);              // [CharacterRecord + 0xA8] MaxCp (engine.dll 0x36196411)
             CharacterEquipment.Serialize(writer, c.Equipment); // 19 equipment slots (engine.dll 0x36196450..0x361964F0)
             WriteStageRanks(writer, c.StageRanks);    // 100 * byte StageRanks (engine.dll 0x36196530)
-            writer.WriteByte(3);                      // [CharacterRecord + 0x41C] PotionSlotCount (engine.dll 0x36196547, RakionWorldServ 0x00427514)
+            writer.WriteByte(c.PotionSlots);          // [CharacterRecord + 0x41C] PotionSlotCount (engine.dll 0x36196547, RakionWorldServ 0x00427514)
         }
     }
 

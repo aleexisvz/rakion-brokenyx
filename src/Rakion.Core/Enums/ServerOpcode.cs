@@ -76,7 +76,8 @@ public enum ServerOpcode : ushort
 
     /// <summary>
     /// Server confirmation response to GameGuard verification.
-    /// Evidence: Observed in RakionWorldServ opcode 16 stub response (0x001B).
+    /// Evidence: Observed in RakionWorldServ opcode 16 stub response (0x001B). The client dispatches 0x1B to the
+    /// stat reset answer (engine.dll 0x36195400), so CharacterStateClearResponsePacket uses this value too.
     /// </summary>
     GameGuard = 0x001B,
 
@@ -305,6 +306,18 @@ public enum ServerOpcode : ushort
     /// Evidence: Observed in RakionWorldServ.exe 0x42515F / 0x4251F4 (3-byte refusal, 6 + 2n bytes otherwise).
     /// </summary>
     FieldGameStagePoint = 0x0053,
+
+    /// <summary>
+    /// Bag purchase answer (see AccountUpgradeResponsePacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x32 (0x36197577 -> 0x361957C0).
+    /// </summary>
+    InventoryBuyBag = 0x0032,
+
+    /// <summary>
+    /// Potion slot purchase answer (see AccountUpgradeResponsePacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x6F (0x361975AF -> 0x36195AC0).
+    /// </summary>
+    InventoryBuyPotionSlot = 0x006F,
 
     // --- UDP (40708 / 40709) ---
     /// <summary>

@@ -1,3 +1,4 @@
+using Rakion.Core.Enums;
 using Rakion.Core.Packets;
 using Rakion.Core.Protocol;
 
@@ -118,6 +119,23 @@ public sealed class FieldJoinPacketTests
         CollectionAssert.AreEqual(new byte[] { 1 }, PayloadOf(new FieldGameStagePointPacket(FieldGameStagePointPacket.NotStored)));
         Assert.IsTrue(FieldGameRoundEndRequestPacket.TryParse([3], out var end));
         Assert.AreEqual(FieldGameRoundEndRequestPacket.Failed, end.Reason);
+    }
+
+    [TestMethod]
+    public void AccountUpgradePackets_MatchTheClientLayouts()
+    {
+        Assert.IsTrue(CouponRequestPacket.TryParse(ClientOpcode.InventoryBuyBag, [1, 0x10, 0x00], out var coupon));
+        Assert.AreEqual((true, (ushort)16), (coupon.UseCoupon, coupon.CouponSlot));
+        Assert.IsTrue(CouponRequestPacket.TryParse(ClientOpcode.CharacterStateClear, [0, 0, 0], out var plain));
+        Assert.IsFalse(plain.UseCoupon);
+        Assert.IsFalse(CouponRequestPacket.TryParse(ClientOpcode.InventoryBuyBag, [1], out _));
+
+        CollectionAssert.AreEqual(
+            new byte[] { 0, 0x10, 0x27, 0, 0, 12, 0, 5, 0, 0 },
+            PayloadOf(new CharacterStateClearResponsePacket(0, 10000, 12, 5)));
+        CollectionAssert.AreEqual(
+            new byte[] { 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0 },
+            PayloadOf(new AccountUpgradeResponsePacket(ServerOpcode.InventoryBuyBag, 0, 1, 2, 3)));
     }
 
     private static byte[] PayloadOf(IPacket packet)
