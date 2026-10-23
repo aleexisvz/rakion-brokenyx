@@ -137,6 +137,19 @@ CREATE TABLE IF NOT EXISTS `creature_level_info` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
+-- 4d. Stage clears: best rank of each character per stage (legacy UserStageInfo).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `user_stage_info` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `character_id` INT NOT NULL,
+    `stage` TINYINT UNSIGNED NOT NULL,
+    `rank` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_user_stage_info` (`character_id`, `stage`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
 -- 5. Item Templates Catalog
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `item_templates`;

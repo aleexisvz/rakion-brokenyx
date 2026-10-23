@@ -27,4 +27,24 @@ public interface IMatchResultRepository
         byte result = RoundResult.None,
         IReadOnlyList<int>? creatureExp = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Stage clear (legacy 0x425010): when <paramref name="rank"/> beats the stored rank of the stage, stores it, puts
+    /// the drops in the box and applies the reward like a round (counted as a draw), all in one transaction. A rank
+    /// that is not better changes nothing (<see cref="StageClearOutcome.Improved"/> false). Returns null when the
+    /// character does not belong to the user.
+    /// </summary>
+    Task<StageClearOutcome?> ApplyStageClearAsync(
+        int userId,
+        int characterId,
+        byte stage,
+        byte rank,
+        IReadOnlyList<ushort> drops,
+        int exp,
+        int gold,
+        IReadOnlyList<int>? creatureExp = null,
+        CancellationToken ct = default);
+
+    /// <summary>Best rank per stage (100 bytes) for each character; characters without clears get zeros.</summary>
+    Task<IReadOnlyDictionary<int, byte[]>> GetStageRanksAsync(IReadOnlyCollection<int> characterIds, CancellationToken ct = default);
 }
