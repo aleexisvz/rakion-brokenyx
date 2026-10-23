@@ -110,6 +110,11 @@ public sealed record FieldGameRoundEndPacket(byte EndedByGoal, byte Winner, byte
     public const byte RedWins = 1;
     public const byte Draw = 2;
 
+    /// <summary>EndedByGoal values: time ran out, kill goal reached, a golem died (0x405E56, Observed).</summary>
+    public const byte EndedByTime = 0;
+    public const byte EndedByKills = 1;
+    public const byte EndedByGolem = 2;
+
     public ushort Opcode => (ushort)ServerOpcode.FieldGameRoundEnd;
 
     public void Serialize(PacketWriter writer)
@@ -134,6 +139,117 @@ public sealed record FieldGameNextRoundPacket(byte Round, byte RedLeaderSlot, by
         writer.WriteByte(Round);
         writer.WriteByte(RedLeaderSlot);
         writer.WriteByte(BlueLeaderSlot);
+    }
+}
+
+/// <summary>
+/// Golem War golem health reported by a client: [u16 RedGolem][u16 BlueGolem]. A golem at 0 ends the round.
+/// Evidence: Observed in engine.dll SendFieldGameMasterGolem (0x36192440) and RakionWorldServ.exe 0x424980 / 0x405D70.
+/// </summary>
+public sealed record FieldGameGolemHpRequestPacket(ushort RedGolem, ushort BlueGolem) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.FieldGameMasterGolem;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteUInt16(RedGolem);
+        writer.WriteUInt16(BlueGolem);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGameGolemHpRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 4)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new FieldGameGolemHpRequestPacket(reader.ReadUInt16(), reader.ReadUInt16());
+        return true;
+    }
+}
+
+/// <summary>
+/// Leader health reported in leader wars: [u8 LeaderSlot][u16 Health]; compared when the round times out.
+/// Evidence: Observed in engine.dll SendFieldGameMasterBossHP (0x361924A0) and RakionWorldServ.exe 0x405EF0.
+/// </summary>
+public sealed record FieldGameLeaderHpRequestPacket(byte LeaderSlot, ushort Health) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.FieldGameMasterBossHp;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(LeaderSlot);
+        writer.WriteUInt16(Health);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGameLeaderHpRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 3)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new FieldGameLeaderHpRequestPacket(reader.ReadByte(), reader.ReadUInt16());
+        return true;
+    }
+}
+
+/// <summary>
+/// End-of-round report: [u32 Exp][u32 Gold][u8 Result][u32 x3 CreatureExp][u16 Value]. The client computes the
+/// experience and gold; the legacy server only caps and stores them.
+/// Evidence: offsets Observed in RakionWorldServ.exe 0x424C50 (exp, gold, byte), 0x424DC2 (three u32 at +9) and
+/// 0x424E80 (u16 at +21). Meanings Inferred: the byte is the round result, the three values the experience of the
+/// three equipped creatures (UNKNOWN until the creature flow is implemented).
+/// </summary>
+public sealed record FieldGamePointRequestPacket(uint Exp, uint Gold, byte Result, uint CreatureExp1, uint CreatureExp2, uint CreatureExp3, ushort Value) : IPacket
+{
+    public const int Size = 23;
+
+    public ushort Opcode => (ushort)ClientOpcode.FieldGamePoint;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteUInt32(Exp);
+        writer.WriteUInt32(Gold);
+        writer.WriteByte(Result);
+        writer.WriteUInt32(CreatureExp1);
+        writer.WriteUInt32(CreatureExp2);
+        writer.WriteUInt32(CreatureExp3);
+        writer.WriteUInt16(Value);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGamePointRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < Size)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new FieldGamePointRequestPacket(
+            reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt16());
+        return true;
+    }
+}
+
+/// <summary>
+/// Level up sent to the player: [u8 Level][u16 LevelPoints].
+/// Evidence: Observed in RakionWorldServ.exe 0x424D8A (5-byte send after the level-up check 0x40D300) and engine.dll
+/// 0x36194100 (reads u8 + u16).
+/// </summary>
+public sealed record CharacterLevelUpPacket(byte Level, ushort LevelPoints) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.CharacterLevelUp;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Level);
+        writer.WriteUInt16(LevelPoints);
     }
 }
 

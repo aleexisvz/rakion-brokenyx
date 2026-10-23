@@ -43,6 +43,20 @@ public sealed class FieldJoinPacketTests
     }
 
     [TestMethod]
+    public void GamePoint_RoundTrips_AndLevelUpIsLevelThenPoints()
+    {
+        var report = new FieldGamePointRequestPacket(90, 70, 1, 30, 30, 30, 5);
+
+        byte[] payload = PayloadOf(report);
+
+        Assert.HasCount(FieldGamePointRequestPacket.Size, payload);
+        Assert.IsTrue(FieldGamePointRequestPacket.TryParse(payload, out var parsed));
+        Assert.AreEqual(report, parsed);
+        Assert.IsFalse(FieldGamePointRequestPacket.TryParse(payload[..22], out _));
+        CollectionAssert.AreEqual(new byte[] { 12, 33, 0 }, PayloadOf(new CharacterLevelUpPacket(12, 33)));
+    }
+
+    [TestMethod]
     public void SlotUdp_IsOneSlotByte()
     {
         var packet = new FieldSlotUdpPacket(10);

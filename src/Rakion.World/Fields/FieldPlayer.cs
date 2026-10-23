@@ -22,6 +22,9 @@ public sealed class FieldPlayer
     /// <summary>Kills this round in solo deathmatch (legacy slot + 8, RakionWorldServ.exe 0x408929).</summary>
     public byte Kills { get; set; }
 
+    /// <summary>Out of the round in Stage and Golem War after dying (legacy slot + 4, RakionWorldServ.exe 0x408895).</summary>
+    public bool IsDead { get; set; }
+
     public FieldPlayer(WorldSession session, byte slotIndex, byte team, bool isMaster)
     {
         Session = session;

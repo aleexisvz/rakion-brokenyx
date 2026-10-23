@@ -115,6 +115,17 @@ CREATE TABLE `characters` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
+-- 4b. Level table: experience a character of each class must exceed to leave a level
+--     (legacy ClassLevelInfo; imported from the operator's dump with --import-items).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `class_level_info` (
+    `class_id` TINYINT UNSIGNED NOT NULL,
+    `level` TINYINT UNSIGNED NOT NULL,
+    `exp` INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`class_id`, `level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
 -- 5. Item Templates Catalog
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `item_templates`;

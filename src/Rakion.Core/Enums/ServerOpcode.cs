@@ -287,6 +287,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldGameDie = 0x004F,
 
+    /// <summary>
+    /// Level up: [u8 Level][u16 LevelPoints].
+    /// Evidence: Observed in engine.dll jump table opcode 0x51 (0x36197761 -> 0x36194100) and RakionWorldServ 0x424DAC.
+    /// </summary>
+    CharacterLevelUp = 0x0051,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).

@@ -36,6 +36,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly ISessionSender _sender;
     private readonly IAccountInventoryProvider? _accountInventory;
     private readonly UdpEndpointRegistry _udpEndpoints;
+    private readonly IMatchResultRepository? _matchResults;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -53,10 +54,12 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ISessionSender sender,
         IAccountInventoryProvider? accountInventory,
         ILogger<WorldPacketHandler> logger,
-        UdpEndpointRegistry? udpEndpoints = null)
+        UdpEndpointRegistry? udpEndpoints = null,
+        IMatchResultRepository? matchResults = null)
     {
         _options = options;
         _udpEndpoints = udpEndpoints ?? new UdpEndpointRegistry();
+        _matchResults = matchResults;
         _userRepository = userRepository;
         _characterRepository = characterRepository;
         _balanceRepository = balanceRepository;
@@ -213,6 +216,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameRoundStart, HandleFieldGameRoundStartAsync);
         _registry.Map(ClientOpcode.FieldGameDie, HandleFieldGameDieAsync);
         _registry.Map(ClientOpcode.FieldKick, HandleFieldKickAsync);
+        _registry.Map(ClientOpcode.FieldGamePoint, HandleFieldGamePointAsync);
+        _registry.Map(ClientOpcode.FieldGameMasterGolem, HandleFieldGameGolemAsync);
+        _registry.Map(ClientOpcode.FieldGameMasterBossHp, HandleFieldGameLeaderHpAsync);
         _registry.Map(ClientOpcode.FieldGameAddPlayer, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: false, ct));
         _registry.Map(ClientOpcode.FieldGameAddPlayerReply, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: true, ct));
     }
@@ -1774,6 +1780,113 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             _logger.LogInformation("Room #{Number} round {Round} won by {Winner} (goal reached).", field.Number, field.Round, roundEnd.Winner);
             await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// End-of-round report (RakionWorldServ.exe 0x424B60, Observed): the client sends the experience and gold it
+    /// computed; the server accepts it only after a round end, rejects values above the mode's limit
+    /// ("Wrong Game Point!"), adds 50 % experience to PowerUsers, stores both and announces a level up with 0x51.
+    /// Inferred: the legacy +50 % flag (user + 0x236C) is the PowerUser state. The legacy server disconnects a cheater
+    /// (error 0x97); here the report is only dropped and logged. Creature experience is not stored yet.
+    /// </summary>
+    private async ValueTask HandleFieldGamePointAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGamePointRequestPacket.TryParse(payload.Span, out var report))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldGamePoint report ({Length} bytes).", session.Connection.ConnectionId, payload.Length);
+            return;
+        }
+
+        if (session.User is null || session.ActiveCharacter is null || _matchResults is null ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var player) is not true ||
+            field is null || player is null || !field.AcceptsPointReport)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGamePoint ignored: no ended round to report.", session.Connection.ConnectionId);
+            return;
+        }
+
+        var (maxExp, maxGold) = field.PointReportLimits;
+        if (report.Exp > maxExp || report.Gold > maxGold)
+        {
+            _logger.LogWarning(
+                "[{ConnectionId}] Wrong Game Point! Exp : {Exp}, Gold : {Gold} (limits {MaxExp} / {MaxGold}, room #{Number} mode {Mode}); report dropped.",
+                session.Connection.ConnectionId,
+                report.Exp,
+                report.Gold,
+                maxExp,
+                maxGold,
+                field.Number,
+                field.Rules.Mode);
+            return;
+        }
+
+        long nowMinutes = LegacyGameClock.ToMinutes(DateTime.Now);
+        bool powerUser = session.GameInfo is { } info && info.PowerTime > nowMinutes;
+        int exp = (int)(powerUser ? report.Exp * 3 / 2 : report.Exp);
+
+        var outcome = await _matchResults
+            .ApplyRoundRewardAsync(session.User.Id, session.ActiveCharacter.Id, exp, (int)report.Gold, cancellationToken)
+            .ConfigureAwait(false);
+        if (outcome is null)
+        {
+            return;
+        }
+
+        session.ActiveCharacter.Level = outcome.Level;
+        session.ActiveCharacter.Exp = outcome.Exp;
+        session.ActiveCharacter.LevelPoint = (byte)outcome.LevelPoint;
+        _logger.LogInformation(
+            "[{ConnectionId}] '{Character}' earned {Exp} exp{PowerUser} and {Gold} gold: level {Level}, exp {Total}, gold {TotalGold}.",
+            session.Connection.ConnectionId,
+            session.ActiveCharacter.Name,
+            exp,
+            powerUser ? " (PowerUser +50 %)" : string.Empty,
+            report.Gold,
+            outcome.Level,
+            outcome.Exp,
+            outcome.Gold);
+
+        if (outcome.LeveledUp)
+        {
+            await SendPacketAsync(session, new CharacterLevelUpPacket(outcome.Level, (ushort)outcome.LevelPoint), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask HandleFieldGameGolemAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameGolemHpRequestPacket.TryParse(payload.Span, out var report) ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is not true ||
+            field is null)
+        {
+            return;
+        }
+
+        if (field.RecordGolemHealth(report.RedGolem, report.BlueGolem, DateTimeOffset.UtcNow) is { } roundEnd)
+        {
+            _logger.LogInformation("Room #{Number} round {Round}: a golem died, winner {Winner}.", field.Number, field.Round, roundEnd.Winner);
+            await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private ValueTask HandleFieldGameLeaderHpAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (FieldGameLeaderHpRequestPacket.TryParse(payload.Span, out var report) &&
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is true &&
+            field is not null)
+        {
+            field.RecordLeaderHealth(report.LeaderSlot, report.Health);
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>Runs the match timers of every room once (round time-outs, next rounds, match ends).</summary>

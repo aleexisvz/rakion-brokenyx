@@ -30,8 +30,47 @@ public sealed partial class GameField
     private byte _redRoundWins;
     private byte _blueRoundWins;
     private byte _lastWinner;
+    private ushort _redGolemHp;
+    private ushort _blueGolemHp;
+    private ushort _redLeaderHp;
+    private ushort _blueLeaderHp;
 
     public byte Round { get; private set; }
+
+    /// <summary>The legacy server takes end-of-round reports only while the round has ended (0x424C39, Observed).</summary>
+    public bool AcceptsPointReport
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return IsInProgress && _roundState == RoundState.Ended;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Highest experience and gold one end-of-round report may carry; more is treated as cheating ("Wrong Game Point!").
+    /// Values Observed as hard-coded defaults in RakionWorldServ.exe 0x41E6D6, chosen per mode at 0x41CF80.
+    /// </summary>
+    public (int MaxExp, int MaxGold) PointReportLimits
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Rules.Mode switch
+                {
+                    0 => (1500, 500),
+                    2 or 4 => (115, 160),
+                    3 => (90, 70),
+                    1 when Round == Rules.Option => (80, 200),
+                    1 => (100, 100),
+                    _ => (int.MaxValue, int.MaxValue),
+                };
+            }
+        }
+    }
 
     public IReadOnlyList<FieldPlayer> LoadedPlayers
     {
@@ -158,13 +197,31 @@ public sealed partial class GameField
                     break;
 
                 default:
+                    // Stage and Golem War: the victim stays out until the next round and a wiped-out team loses
+                    // (0x40888D marks slot + 4, 0x4063A0 checks red, then blue outside mode 0; Observed).
+                    if (victim.IsDead)
+                    {
+                        return null;
+                    }
+
+                    victim.IsDead = true;
                     valueA = killerSlot;
                     valueB = killerSlot;
+                    var loaded = _playersBySession.Values.Where(p => p.IsLoaded).ToList();
+                    if (loaded.Where(p => p.SlotIndex < 10).All(p => p.IsDead))
+                    {
+                        roundWinner = FieldGameRoundEndPacket.BlueWins;
+                    }
+                    else if (Rules.Mode != 0 && loaded.Where(p => p.SlotIndex >= 10).All(p => p.IsDead))
+                    {
+                        roundWinner = FieldGameRoundEndPacket.RedWins;
+                    }
+
                     break;
             }
 
             var death = new FieldGameDiePacket(victim.SlotIndex, cause, killerSlot, valueA, valueB);
-            var roundEnd = roundWinner is { } winner ? EndRound(winner, endedByGoal: true, now) : null;
+            var roundEnd = roundWinner is { } winner ? EndRound(winner, FieldGameRoundEndPacket.EndedByKills, now) : null;
             return (death, roundEnd);
         }
     }
@@ -190,15 +247,17 @@ public sealed partial class GameField
 
             if (_roundState == RoundState.Running)
             {
-                // Inferred: only team deathmatch compares scores; the other modes keep counters that are not tracked.
+                // Time-out winner (0x409D7C, Observed): team score in mode 3, golem health in mode 1 (Golem War),
+                // leader health in mode 4; solo deathmatch keeps the last winner.
                 byte winner = Rules.Mode switch
                 {
-                    3 when _redScore > _blueScore => FieldGameRoundEndPacket.RedWins,
-                    3 when _blueScore > _redScore => FieldGameRoundEndPacket.BlueWins,
+                    3 => Compare(_redScore, _blueScore),
+                    1 => Compare(_redGolemHp, _blueGolemHp),
+                    4 => Compare(_redLeaderHp, _blueLeaderHp),
                     2 => _lastWinner,
                     _ => FieldGameRoundEndPacket.Draw,
                 };
-                return new TickResult(RoundEnd: EndRound(winner, endedByGoal: false, now));
+                return new TickResult(RoundEnd: EndRound(winner, FieldGameRoundEndPacket.EndedByTime, now));
             }
 
             if (_roundState != RoundState.Ended)
@@ -244,10 +303,12 @@ public sealed partial class GameField
         _roundState = RoundState.Running;
         _deadline = now.AddSeconds(Rules.TimeLimit + 3);
         _redScore = _blueScore = 0;
+        _redGolemHp = _blueGolemHp = _redLeaderHp = _blueLeaderHp = 1; // reset to 1 at round start (0x409BD5, Observed)
         foreach (var player in _playersBySession.Values)
         {
             // Inferred: solo kills count per round, like the team scores the legacy tick resets.
             player.Kills = 0;
+            player.IsDead = false;
         }
 
         _redLeader = _blueLeader = FieldGameRoundStartPacket.NoLeader;
@@ -260,13 +321,63 @@ public sealed partial class GameField
         }
     }
 
+    /// <summary>
+    /// Golem War golem health (0x405D70, Observed): stored for the time-out, and a golem at 0 ends the round for the
+    /// other team. Returns the round end, or null.
+    /// </summary>
+    public FieldGameRoundEndPacket? RecordGolemHealth(ushort red, ushort blue, DateTimeOffset now)
+    {
+        lock (_lock)
+        {
+            if (!IsInProgress || _roundState != RoundState.Running)
+            {
+                return null;
+            }
+
+            _redGolemHp = red;
+            _blueGolemHp = blue;
+            if (red == 0)
+            {
+                return EndRound(FieldGameRoundEndPacket.BlueWins, FieldGameRoundEndPacket.EndedByGolem, now);
+            }
+
+            return blue == 0 ? EndRound(FieldGameRoundEndPacket.RedWins, FieldGameRoundEndPacket.EndedByGolem, now) : null;
+        }
+    }
+
+    /// <summary>Leader health in leader wars, kept for the time-out (0x405EF0, Observed: mode 4, slot below 10 is red).</summary>
+    public void RecordLeaderHealth(byte leaderSlot, ushort health)
+    {
+        lock (_lock)
+        {
+            if (!IsInProgress || _roundState != RoundState.Running || Rules.Mode != 4)
+            {
+                return;
+            }
+
+            if (leaderSlot < 10)
+            {
+                _redLeaderHp = health;
+            }
+            else
+            {
+                _blueLeaderHp = health;
+            }
+        }
+    }
+
+    private static byte Compare(int red, int blue) =>
+        red > blue ? FieldGameRoundEndPacket.RedWins
+        : blue > red ? FieldGameRoundEndPacket.BlueWins
+        : FieldGameRoundEndPacket.Draw;
+
     private static byte LeaderOf(IEnumerable<FieldPlayer> team) =>
         team.OrderByDescending(p => p.Session.ActiveCharacter?.Level ?? 0)
             .Select(p => p.SlotIndex)
             .DefaultIfEmpty(FieldGameRoundStartPacket.NoLeader)
             .First();
 
-    private FieldGameRoundEndPacket EndRound(byte winner, bool endedByGoal, DateTimeOffset now)
+    private FieldGameRoundEndPacket EndRound(byte winner, byte reason, DateTimeOffset now)
     {
         if (winner == FieldGameRoundEndPacket.RedWins)
         {
@@ -280,7 +391,7 @@ public sealed partial class GameField
         _lastWinner = winner;
         _roundState = RoundState.Ended;
         _deadline = now + RoundEndPause;
-        return new FieldGameRoundEndPacket(endedByGoal ? (byte)1 : (byte)0, winner, _redRoundWins, _blueRoundWins);
+        return new FieldGameRoundEndPacket(reason, winner, _redRoundWins, _blueRoundWins);
     }
 
     private FieldGameRoundStartPacket BuildRoundStart(DateTimeOffset now)
