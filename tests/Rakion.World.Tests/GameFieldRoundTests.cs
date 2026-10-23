@@ -154,6 +154,21 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void RoundOutcome_FollowsTheWinningSide_AndIsADrawInSoloModes()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+        field.RecordDeath(guest, 0, host.SlotIndex, Now);
+
+        Assert.AreEqual(GameField.RoundOutcomeWin, field.RoundOutcomeFor(host));
+        Assert.AreEqual(GameField.RoundOutcomeLoss, field.RoundOutcomeFor(guest));
+
+        var (solo, soloHost, _) = CreateRunningMatch(mode: 2, timeLimit: 300);
+        Assert.AreEqual(GameField.RoundOutcomeDraw, solo.RoundOutcomeFor(soloHost));
+    }
+
+    [TestMethod]
     public void PointReports_AreAcceptedOnlyAfterARoundEnd_WithModeLimits()
     {
         var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1, rounds: 2);

@@ -116,13 +116,24 @@ CREATE TABLE `characters` (
 
 -- -----------------------------------------------------------------------------
 -- 4b. Level table: experience a character of each class must exceed to leave a level
---     (legacy ClassLevelInfo; imported from the operator's dump with --import-items).
+--     (imported from the client's DataSetup.xfs with --import-levels).
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `class_level_info` (
     `class_id` TINYINT UNSIGNED NOT NULL,
     `level` TINYINT UNSIGNED NOT NULL,
     `exp` INT NOT NULL DEFAULT 0,
     PRIMARY KEY (`class_id`, `level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- 4c. Creature level table: experience a creature item (id 8000 + npc) must exceed to leave a level
+--     (legacy NPCInfo; imported from the operator's dump with --import-items).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `creature_level_info` (
+    `npc` TINYINT UNSIGNED NOT NULL,
+    `level` TINYINT UNSIGNED NOT NULL,
+    `exp` INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`npc`, `level`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------

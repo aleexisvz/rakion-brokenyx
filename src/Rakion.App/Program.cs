@@ -57,7 +57,11 @@ if (args.Contains("--import-items"))
     int imported = await new InventoryRepository(importFactory).UpsertItemTemplatesAsync(templates);
     Console.WriteLine($"[+] Imported {imported} item templates from '{dumpPath}'.");
 
-    // The level table comes from the client (--import-levels): the dump's ClassLevelInfo is another game version.
+    // The creature level table (legacy NPCInfo) matches the client; the character level table comes from the client
+    // (--import-levels) because the dump's ClassLevelInfo is another game version.
+    using var creatureReader = new StreamReader(dumpPath);
+    int creatureLevels = await new MatchResultRepository(importFactory).UpsertCreatureLevelsAsync(LegacyCreatureLevelParser.Parse(creatureReader));
+    Console.WriteLine($"[+] Imported {creatureLevels} creature level rows from '{dumpPath}'.");
     return;
 }
 

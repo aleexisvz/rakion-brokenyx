@@ -54,6 +54,7 @@ public sealed class FieldJoinPacketTests
         Assert.AreEqual(report, parsed);
         Assert.IsFalse(FieldGamePointRequestPacket.TryParse(payload[..22], out _));
         CollectionAssert.AreEqual(new byte[] { 12, 33, 0 }, PayloadOf(new CharacterLevelUpPacket(12, 33)));
+        CollectionAssert.AreEqual(new byte[] { 10, 12, 2, 0, 5 }, PayloadOf(new FieldPlayerLevelPacket(10, 12, 2, 0, 5)));
     }
 
     [TestMethod]

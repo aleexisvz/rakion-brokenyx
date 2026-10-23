@@ -13,6 +13,10 @@ public sealed partial class GameField
     /// <summary>Pause between a round end and the next round (0x3A98 ms, Observed).</summary>
     public static readonly TimeSpan RoundEndPause = TimeSpan.FromSeconds(15);
 
+    public const byte RoundOutcomeWin = 1;
+    public const byte RoundOutcomeLoss = 2;
+    public const byte RoundOutcomeDraw = 3;
+
     private enum RoundState
     {
         None,
@@ -363,6 +367,26 @@ public sealed partial class GameField
             {
                 _blueLeaderHp = health;
             }
+        }
+    }
+
+    /// <summary>
+    /// The player's outcome of the last ended round (RakionWorldServ.exe 0x405980, Observed): in the team modes
+    /// (1, 3, 4) a win or loss by the player's side, otherwise and on a draw <see cref="RoundOutcomeDraw"/>.
+    /// Returns 1 win, 2 loss, 3 draw, as the legacy counters use them (0x40BB60).
+    /// </summary>
+    public byte RoundOutcomeFor(FieldPlayer player)
+    {
+        lock (_lock)
+        {
+            if (Rules.Mode is not (1 or 3 or 4) || _lastWinner == FieldGameRoundEndPacket.Draw)
+            {
+                return RoundOutcomeDraw;
+            }
+
+            bool red = player.SlotIndex < 10;
+            bool redWon = _lastWinner == FieldGameRoundEndPacket.RedWins;
+            return red == redWon ? RoundOutcomeWin : RoundOutcomeLoss;
         }
     }
 
