@@ -48,6 +48,96 @@ public sealed record FieldGameRoundStartPacket(
 }
 
 /// <summary>
+/// The sender died: [u8 Cause][u8 KillerSlot]. Cause is at most 8 and the killer slot below 20.
+/// Evidence: Observed in RakionWorldServ.exe 0x424A20 (bounds checks) and engine.dll SendFieldGameDiePlayer.
+/// Cause meanings Inferred from the scoring: 1 takes a point away in solo deathmatch (self-inflicted), 8 is worth two.
+/// </summary>
+public sealed record FieldGameDieRequestPacket(byte Cause, byte KillerSlot) : IPacket
+{
+    public const byte MaxCause = 8;
+    public const byte SelfInflicted = 1;
+    public const byte DoublePoints = 8;
+
+    public ushort Opcode => (ushort)ClientOpcode.FieldGameDie;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Cause);
+        writer.WriteByte(KillerSlot);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGameDieRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 2 || span[0] > MaxCause || span[1] >= 20)
+        {
+            return false;
+        }
+
+        packet = new FieldGameDieRequestPacket(span[0], span[1]);
+        return true;
+    }
+}
+
+/// <summary>
+/// Death broadcast: [u8 Victim][u8 Cause][u8 Killer][u8 ValueA][u8 ValueB]. The values depend on the mode: solo
+/// deathmatch sends the victim's and the killer's kills, team modes the red and blue team scores.
+/// Evidence: Observed in RakionWorldServ.exe 0x4087D0 (writer, per-mode values).
+/// </summary>
+public sealed record FieldGameDiePacket(byte VictimSlot, byte Cause, byte KillerSlot, byte ValueA, byte ValueB) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldGameDie;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(VictimSlot);
+        writer.WriteByte(Cause);
+        writer.WriteByte(KillerSlot);
+        writer.WriteByte(ValueA);
+        writer.WriteByte(ValueB);
+    }
+}
+
+/// <summary>
+/// Round end: [u8 EndedByGoal][u8 Winner][u8 RedRoundWins][u8 BlueRoundWins]. Winner is 1 for red, 0 for blue and
+/// 2 for a draw; EndedByGoal is 1 when the kill goal was reached and 0 when the time ran out.
+/// Evidence: Observed in RakionWorldServ.exe 0x408E3E and 0x409FA7 (room + 0x2BD, + 0x2BF, + 0x2C0, + 0x2C1) and
+/// engine.dll 0x36193E80 (reads four bytes). Winner values Observed in the code paths; meanings Inferred.
+/// </summary>
+public sealed record FieldGameRoundEndPacket(byte EndedByGoal, byte Winner, byte RedRoundWins, byte BlueRoundWins) : IPacket
+{
+    public const byte BlueWins = 0;
+    public const byte RedWins = 1;
+    public const byte Draw = 2;
+
+    public ushort Opcode => (ushort)ServerOpcode.FieldGameRoundEnd;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(EndedByGoal);
+        writer.WriteByte(Winner);
+        writer.WriteByte(RedRoundWins);
+        writer.WriteByte(BlueRoundWins);
+    }
+}
+
+/// <summary>
+/// Next round: [u8 Round][u8 RedLeaderSlot][u8 BlueLeaderSlot].
+/// Evidence: Observed in RakionWorldServ.exe 0x409CA7 (5-byte send) and engine.dll 0x36193E40 (reads three bytes).
+/// </summary>
+public sealed record FieldGameNextRoundPacket(byte Round, byte RedLeaderSlot, byte BlueLeaderSlot) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.FieldGameNextRound;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Round);
+        writer.WriteByte(RedLeaderSlot);
+        writer.WriteByte(BlueLeaderSlot);
+    }
+}
+
+/// <summary>
 /// In-game player data a client sends for every other member (0x4B) or, with a leading target slot, for one member
 /// (0x4C): [u8 Target]? [u16 Length][data]. The server never reads the data.
 /// Evidence: Observed in engine.dll SendFieldGameAddPlayer (0x36192350) / SendFieldGameAddPlayerReply (0x361923C0)

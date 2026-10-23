@@ -21,6 +21,8 @@ public sealed class WorldServer : IAsyncDisposable
     private TcpServer? _tcpServer;
     private UdpServer? _udpServer1;
     private UdpServer? _udpServer2;
+    private CancellationTokenSource? _matchTimerCts;
+    private Task? _matchTimer;
 
     public EndPoint? LocalEndPoint => _tcpServer?.LocalEndPoint;
     public EndPoint? LocalUdpEndPoint1 => _udpServer1?.LocalEndPoint;
@@ -64,6 +66,10 @@ public sealed class WorldServer : IAsyncDisposable
         _udpServer2 = new UdpServer(udpEndPoint2, _udpHandler, _logger);
         _udpServer2.Start();
 
+        // 3. Room match timers (round time-outs, next rounds); the legacy server ticks every room from its main loop.
+        _matchTimerCts = new CancellationTokenSource();
+        _matchTimer = RunMatchTimerAsync(_matchTimerCts.Token);
+
         _logger.LogInformation(
             "Rakion World Server started on TCP {TcpEp}, UDP1 {UdpEp1}, UDP2 {UdpEp2} (ServerId: {Id}, Name: '{Name}').",
             _tcpServer.LocalEndPoint,
@@ -76,6 +82,19 @@ public sealed class WorldServer : IAsyncDisposable
     public async Task StopAsync()
     {
         _logger.LogInformation("Stopping Rakion World Server...");
+
+        if (_matchTimerCts is not null)
+        {
+            await _matchTimerCts.CancelAsync().ConfigureAwait(false);
+            if (_matchTimer is not null)
+            {
+                await _matchTimer.ConfigureAwait(false);
+            }
+
+            _matchTimerCts.Dispose();
+            _matchTimerCts = null;
+            _matchTimer = null;
+        }
 
         if (_tcpServer is not null)
         {
@@ -94,6 +113,28 @@ public sealed class WorldServer : IAsyncDisposable
         {
             await _udpServer2.DisposeAsync().ConfigureAwait(false);
             _udpServer2 = null;
+        }
+    }
+
+    private async Task RunMatchTimerAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                try
+                {
+                    await _handler.TickFieldsAsync(DateTimeOffset.UtcNow, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.LogError(ex, "Room match timer failed.");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
         }
     }
 

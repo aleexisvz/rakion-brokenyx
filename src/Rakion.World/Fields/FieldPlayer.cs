@@ -19,6 +19,9 @@ public sealed class FieldPlayer
     /// <summary>True once the client reported the map loaded (legacy slot state 4, RakionWorldServ.exe 0x408517).</summary>
     public bool IsLoaded { get; set; }
 
+    /// <summary>Kills this round in solo deathmatch (legacy slot + 8, RakionWorldServ.exe 0x408929).</summary>
+    public byte Kills { get; set; }
+
     public FieldPlayer(WorldSession session, byte slotIndex, byte team, bool isMaster)
     {
         Session = session;
