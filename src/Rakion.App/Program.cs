@@ -57,10 +57,40 @@ if (args.Contains("--import-items"))
     int imported = await new InventoryRepository(importFactory).UpsertItemTemplatesAsync(templates);
     Console.WriteLine($"[+] Imported {imported} item templates from '{dumpPath}'.");
 
-    // The same dump carries the level table used for match rewards (legacy ClassLevelInfo).
-    using var levelReader = new StreamReader(dumpPath);
-    int levels = await new MatchResultRepository(importFactory).UpsertClassLevelsAsync(LegacyClassLevelParser.Parse(levelReader));
-    Console.WriteLine($"[+] Imported {levels} level table rows from '{dumpPath}'.");
+    // The level table comes from the client (--import-levels): the dump's ClassLevelInfo is another game version.
+    return;
+}
+
+if (args.Contains("--import-levels"))
+{
+    // Loads the experience table from the operator's client DataSetup.xfs, the totals the client itself shows.
+    int index = Array.IndexOf(args, "--import-levels");
+    string? xfsPath = args.Length > index + 1 && !args[index + 1].StartsWith("--") ? args[index + 1] : null;
+    if (xfsPath is null || !File.Exists(xfsPath))
+    {
+        Console.WriteLine("[!] Usage: --import-levels <path to the client's DataSetup.xfs>");
+        return;
+    }
+
+    var levelRows = ClientLevelTableParser.Parse(await File.ReadAllBytesAsync(xfsPath));
+    if (levelRows is null)
+    {
+        Console.WriteLine($"[!] No level table found in '{xfsPath}'.");
+        return;
+    }
+
+    IConfiguration levelConfig = new ConfigurationBuilder()
+        .AddJsonFile("config/appsettings.json", optional: true)
+        .AddJsonFile("appsettings.json", optional: true)
+        .AddEnvironmentVariables("RAKION_")
+        .Build();
+
+    string levelConnection = levelConfig.GetConnectionString("RakionDb")
+        ?? levelConfig["ConnectionStrings:RakionDb"]
+        ?? "Server=localhost;Port=3306;Database=rakion;User=root;Password=root;CharSet=utf8mb4;";
+
+    int levels = await new MatchResultRepository(new MySqlConnectionFactory(levelConnection)).UpsertClassLevelsAsync(levelRows);
+    Console.WriteLine($"[+] Imported {levels} level table rows from '{xfsPath}'.");
     return;
 }
 

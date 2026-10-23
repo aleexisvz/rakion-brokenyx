@@ -75,7 +75,7 @@
   - Puntuación por modo: 2 individual (kills del asesino, +2 con la causa 8, −1 con la causa 1), 3 por equipos, 4 líderes (la ronda acaba si muere un líder). Los modos 0 y 1 solo avisan de la muerte.
   - Fin de ronda (`0x004A`) por objetivo o por tiempo, pausa de 15 s, siguiente ronda (`0x0049`) y fin de partida (`0x0044`: 2 última ronda, 5 equipo vacío, 6 pocos jugadores).
 - `WorldServer` ejecuta cada segundo `WorldPacketHandler.TickFieldsAsync` para los plazos de las rondas.
-- Recompensas (`0x0050`, `RakionWorldServ.exe` 0x424B60): el cliente calcula la EXP y el oro de cada ronda; el servidor solo los acepta tras un fin de ronda, con topes por modo (por encima se descarta el informe: «Wrong Game Point!»), suma 50 % de EXP a los PowerUser y guarda todo con `IMatchResultRepository` (contrato C-4). La subida de nivel usa la tabla `class_level_info` (importada del dump con `--import-items`), da 3 puntos por nivel y se avisa con `0x0051`.
+- Recompensas (`0x0050`, `RakionWorldServ.exe` 0x424B60): el cliente calcula la EXP y el oro de cada ronda; el servidor solo los acepta tras un fin de ronda, con topes por modo (por encima se descarta el informe: «Wrong Game Point!»), suma 50 % de EXP a los PowerUser y guarda todo con `IMatchResultRepository` (contrato C-4). La subida de nivel usa la tabla `class_level_info` (importada del `DataSetup.xfs` del cliente con `--import-levels <ruta>`; la del dump es de otra versión: 70/188 frente a 47/133), da 3 puntos por nivel y se avisa con `0x0051`.
 - Pendiente: relevo por servidor (`0x0056` / `0x0057`, `0x0401`), golems y jefes, EXP de criaturas y victorias/derrotas del informe `0x0050`, votaciones y cerrar sala.
 
 
