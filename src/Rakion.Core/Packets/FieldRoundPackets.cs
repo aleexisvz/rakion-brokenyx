@@ -138,6 +138,61 @@ public sealed record FieldGameNextRoundPacket(byte Round, byte RedLeaderSlot, by
 }
 
 /// <summary>
+/// End-of-round report: [u32 Exp][u32 Gold][u8 Result][u32 x3 CreatureExp][u16 Value]. The client computes the
+/// experience and gold; the legacy server only caps and stores them.
+/// Evidence: offsets Observed in RakionWorldServ.exe 0x424C50 (exp, gold, byte), 0x424DC2 (three u32 at +9) and
+/// 0x424E80 (u16 at +21). Meanings Inferred: the byte is the round result, the three values the experience of the
+/// three equipped creatures (UNKNOWN until the creature flow is implemented).
+/// </summary>
+public sealed record FieldGamePointRequestPacket(uint Exp, uint Gold, byte Result, uint CreatureExp1, uint CreatureExp2, uint CreatureExp3, ushort Value) : IPacket
+{
+    public const int Size = 23;
+
+    public ushort Opcode => (ushort)ClientOpcode.FieldGamePoint;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteUInt32(Exp);
+        writer.WriteUInt32(Gold);
+        writer.WriteByte(Result);
+        writer.WriteUInt32(CreatureExp1);
+        writer.WriteUInt32(CreatureExp2);
+        writer.WriteUInt32(CreatureExp3);
+        writer.WriteUInt16(Value);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGamePointRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < Size)
+        {
+            return false;
+        }
+
+        var reader = new PacketReader(span);
+        packet = new FieldGamePointRequestPacket(
+            reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadByte(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt32(), reader.ReadUInt16());
+        return true;
+    }
+}
+
+/// <summary>
+/// Level up sent to the player: [u8 Level][u16 LevelPoints].
+/// Evidence: Observed in RakionWorldServ.exe 0x424D8A (5-byte send after the level-up check 0x40D300) and engine.dll
+/// 0x36194100 (reads u8 + u16).
+/// </summary>
+public sealed record CharacterLevelUpPacket(byte Level, ushort LevelPoints) : IPacket
+{
+    public ushort Opcode => (ushort)ServerOpcode.CharacterLevelUp;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Level);
+        writer.WriteUInt16(LevelPoints);
+    }
+}
+
+/// <summary>
 /// In-game player data a client sends for every other member (0x4B) or, with a leading target slot, for one member
 /// (0x4C): [u8 Target]? [u16 Length][data]. The server never reads the data.
 /// Evidence: Observed in engine.dll SendFieldGameAddPlayer (0x36192350) / SendFieldGameAddPlayerReply (0x361923C0)

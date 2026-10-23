@@ -405,6 +405,13 @@ public enum ClientOpcode : ushort
     FieldGameDie = 0x004F,
 
     /// <summary>
+    /// End-of-round report with the experience and gold the client computed: (u32 exp, u32 gold, u8, 3 x u32, u16).
+    /// Evidence: Observed in engine.dll ?SendFieldGamePoint@IScavengerWorldNet@@UAEXKKKKKGE@Z (opcode 0x0050) and the
+    /// legacy reader RakionWorldServ.exe 0x424B60.
+    /// </summary>
+    FieldGamePoint = 0x0050,
+
+    /// <summary>
     /// Network check towards another room member: (u8 target slot).
     /// Evidence: Observed in engine.dll ?SendFieldSlotUDP@IScavengerWorldNet@@UAEXE@Z (opcode 0x0062).
     /// </summary>
