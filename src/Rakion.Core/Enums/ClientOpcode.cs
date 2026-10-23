@@ -405,6 +405,18 @@ public enum ClientOpcode : ushort
     FieldGameDie = 0x004F,
 
     /// <summary>
+    /// Golem War golem health: (u16 red golem, u16 blue golem).
+    /// Evidence: Observed in engine.dll ?SendFieldGameMasterGolem@IScavengerWorldNet@@UAEXGG@Z (opcode 0x004D).
+    /// </summary>
+    FieldGameMasterGolem = 0x004D,
+
+    /// <summary>
+    /// Leader health in leader wars: (u8 leader slot, u16 health).
+    /// Evidence: Observed in engine.dll ?SendFieldGameMasterBossHP@IScavengerWorldNet@@UAEXEG@Z (opcode 0x0060).
+    /// </summary>
+    FieldGameMasterBossHp = 0x0060,
+
+    /// <summary>
     /// End-of-round report with the experience and gold the client computed: (u32 exp, u32 gold, u8, 3 x u32, u16).
     /// Evidence: Observed in engine.dll ?SendFieldGamePoint@IScavengerWorldNet@@UAEXKKKKKGE@Z (opcode 0x0050) and the
     /// legacy reader RakionWorldServ.exe 0x424B60.

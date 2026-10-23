@@ -217,6 +217,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameDie, HandleFieldGameDieAsync);
         _registry.Map(ClientOpcode.FieldKick, HandleFieldKickAsync);
         _registry.Map(ClientOpcode.FieldGamePoint, HandleFieldGamePointAsync);
+        _registry.Map(ClientOpcode.FieldGameMasterGolem, HandleFieldGameGolemAsync);
+        _registry.Map(ClientOpcode.FieldGameMasterBossHp, HandleFieldGameLeaderHpAsync);
         _registry.Map(ClientOpcode.FieldGameAddPlayer, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: false, ct));
         _registry.Map(ClientOpcode.FieldGameAddPlayerReply, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: true, ct));
     }
@@ -1851,6 +1853,40 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             await SendPacketAsync(session, new CharacterLevelUpPacket(outcome.Level, (ushort)outcome.LevelPoint), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async ValueTask HandleFieldGameGolemAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameGolemHpRequestPacket.TryParse(payload.Span, out var report) ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is not true ||
+            field is null)
+        {
+            return;
+        }
+
+        if (field.RecordGolemHealth(report.RedGolem, report.BlueGolem, DateTimeOffset.UtcNow) is { } roundEnd)
+        {
+            _logger.LogInformation("Room #{Number} round {Round}: a golem died, winner {Winner}.", field.Number, field.Round, roundEnd.Winner);
+            await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private ValueTask HandleFieldGameLeaderHpAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (FieldGameLeaderHpRequestPacket.TryParse(payload.Span, out var report) &&
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is true &&
+            field is not null)
+        {
+            field.RecordLeaderHealth(report.LeaderSlot, report.Health);
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>Runs the match timers of every room once (round time-outs, next rounds, match ends).</summary>

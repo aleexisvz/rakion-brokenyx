@@ -123,6 +123,23 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void GolemWar_DeadGolemEndsTheRound_AndTimeOutComparesHealth()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 1, timeLimit: 60, goal: 20, rounds: 2);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        Assert.IsNull(field.RecordGolemHealth(500, 300, Now));
+        var end = field.RecordGolemHealth(400, 0, Now);
+        Assert.AreEqual(new FieldGameRoundEndPacket(FieldGameRoundEndPacket.EndedByGolem, FieldGameRoundEndPacket.RedWins, 1, 0), end);
+
+        field.Tick(Now.AddSeconds(16));
+        field.RecordGolemHealth(100, 900, Now.AddSeconds(16));
+        var timeout = field.Tick(Now.AddSeconds(16 + 63))!;
+        Assert.AreEqual(new FieldGameRoundEndPacket(FieldGameRoundEndPacket.EndedByTime, FieldGameRoundEndPacket.BlueWins, 1, 1), timeout.RoundEnd);
+    }
+
+    [TestMethod]
     public void PointReports_AreAcceptedOnlyAfterARoundEnd_WithModeLimits()
     {
         var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1, rounds: 2);
