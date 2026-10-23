@@ -33,6 +33,41 @@ public sealed partial class GameField
 
     public byte Round { get; private set; }
 
+    /// <summary>The legacy server takes end-of-round reports only while the round has ended (0x424C39, Observed).</summary>
+    public bool AcceptsPointReport
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return IsInProgress && _roundState == RoundState.Ended;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Highest experience and gold one end-of-round report may carry; more is treated as cheating ("Wrong Game Point!").
+    /// Values Observed as hard-coded defaults in RakionWorldServ.exe 0x41E6D6, chosen per mode at 0x41CF80.
+    /// </summary>
+    public (int MaxExp, int MaxGold) PointReportLimits
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Rules.Mode switch
+                {
+                    0 => (1500, 500),
+                    2 or 4 => (115, 160),
+                    3 => (90, 70),
+                    1 when Round == Rules.Option => (80, 200),
+                    1 => (100, 100),
+                    _ => (int.MaxValue, int.MaxValue),
+                };
+            }
+        }
+    }
+
     public IReadOnlyList<FieldPlayer> LoadedPlayers
     {
         get

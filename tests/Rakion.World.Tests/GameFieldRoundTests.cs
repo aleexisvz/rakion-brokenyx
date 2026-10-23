@@ -123,6 +123,20 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void PointReports_AreAcceptedOnlyAfterARoundEnd_WithModeLimits()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1, rounds: 2);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        Assert.IsFalse(field.AcceptsPointReport, "round still running");
+        field.RecordDeath(guest, 0, host.SlotIndex, Now);
+
+        Assert.IsTrue(field.AcceptsPointReport);
+        Assert.AreEqual((90, 70), field.PointReportLimits);
+    }
+
+    [TestMethod]
     public void ApplyDefaultSlots_PvpKeepsSixPerTeam()
     {
         var field = new GameField(1, 0, "room", string.Empty, 0, 0, 1, 0, 0, 0, 0, CreateSession(1))

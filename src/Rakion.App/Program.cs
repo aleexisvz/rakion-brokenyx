@@ -53,8 +53,14 @@ if (args.Contains("--import-items"))
 
     using var dumpReader = new StreamReader(dumpPath);
     var templates = LegacyItemCatalogParser.Parse(dumpReader);
-    int imported = await new InventoryRepository(new MySqlConnectionFactory(importConnection)).UpsertItemTemplatesAsync(templates);
+    var importFactory = new MySqlConnectionFactory(importConnection);
+    int imported = await new InventoryRepository(importFactory).UpsertItemTemplatesAsync(templates);
     Console.WriteLine($"[+] Imported {imported} item templates from '{dumpPath}'.");
+
+    // The same dump carries the level table used for match rewards (legacy ClassLevelInfo).
+    using var levelReader = new StreamReader(dumpPath);
+    int levels = await new MatchResultRepository(importFactory).UpsertClassLevelsAsync(LegacyClassLevelParser.Parse(levelReader));
+    Console.WriteLine($"[+] Imported {levels} level table rows from '{dumpPath}'.");
     return;
 }
 
@@ -136,6 +142,7 @@ builder.Services.AddSingleton<IUserRepository, UserRepository>();
 builder.Services.AddSingleton<ICharacterRepository, CharacterRepository>();
 builder.Services.AddSingleton<IAccountBalanceRepository, AccountBalanceRepository>();
 builder.Services.AddSingleton<IInventoryRepository, InventoryRepository>();
+builder.Services.AddSingleton<IMatchResultRepository, MatchResultRepository>();
 
 // Configuration options
 builder.Services.Configure<BrokerOptions>(builder.Configuration.GetSection(BrokerOptions.SectionName));
