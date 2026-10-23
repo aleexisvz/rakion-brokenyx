@@ -171,7 +171,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir a los jugadores gestionar sus objetos, comprar en la tienda y mejorar equipamiento en la herrería.
 > **Carril:** A. **Código:** `src/Rakion.World/Features/Economy/`, `src/Rakion.Database/`, paquetes C-3 en `Rakion.Core`.
 
-> **Estado:** 4.0–4.4 mergeados (PRs #9–#21; contratos #9–#11). 4.5 implementado en la rama local `feat/economy-blacksmith`, pendiente de PR. Detalle en `src/Rakion.World/Features/Economy/README.md`.
+> **Estado:** 4.0–4.5 mergeados (PRs #9–#21, #27, #30; contratos #9–#11). Pendientes 4.6–4.8. Detalle en `src/Rakion.World/Features/Economy/README.md`.
 
 - [x] **4.0 Prerrequisitos:** contratos C-0 (#9), C-1 (#10) y C-2 (#11) mergeados en `main`; C-3 (paquetes de economía en `InventoryPackets.cs`) entregado con cada ítem.
 - [x] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):** (#12, #13, #14, #15, #17)
@@ -186,9 +186,10 @@ rakion-brokenyx/
 - [x] **4.4 Asignación de Puntos (`SendInventoryAllocationPoint(uint8 statIndex)`, `0x0033`):** (#20)
   - Reparto de puntos a las 10 estadísticas con tope 50 (**Inferred**); primero gasta los puntos de nivel y luego los de PowerUser.
   - Evidencia: layout **Observed** (`engine.dll` 0x361938A0, `rakion.bin` 0x47DBB0). Verificado con cliente real: sí.
-- [ ] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`, `0x0074`):**
-  - Implementado en la rama local `feat/economy-blacksmith` (sin PR): comprobaciones del servidor original (equipo por debajo de +15, piedras 13001–13005), resultados 0–8 **Observed** (`RakionWorldServ.exe` 0x40C310). Probabilidades **Unknown** (tabla provisional). Materiales 14001–14003 todavía rechazados.
-  - Verificado con cliente real: sí (rama local).
+- [x] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`, `0x0074`):** (#27, #30)
+  - Comprobaciones del servidor original (equipo por debajo de +15, piedras 13001–13005) y resultados 0–8 **Observed** (`RakionWorldServ.exe` 0x40C310); nunca destruye el objeto (0x40C7A9).
+  - Probabilidades **Unknown** (tabla provisional); la probabilidad de bajar de nivel se ajusta con `World:Rewards:EnchantDowngradeScale`. Materiales 14001–14003 todavía rechazados.
+  - Verificado con cliente real: sí.
 - [ ] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*:
   - Evidencia: `Peek()` `0x006B`, `Accept(u32, u16)` `0x006C`, `Dispose(u32)` `0x006D` **Observed**; respuestas **Unknown**.
   - Verificado con cliente real: no.
@@ -228,7 +229,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir que los jugadores jueguen la partida de forma fluida, intercambien golpes y el servidor registre muertes, rondas y recompensas.
 > **Carril:** B. **Código:** `src/Rakion.Relay/` (librería sin sockets), `src/Rakion.World/` (listeners UDP ya existentes desde 3.1). 6.4 consume el contrato C-4 del carril A.
 
-> **Estado:** 6.1, 6.3 y 6.4 mergeados (PRs #24, #25). El combate va de cliente a cliente por UDP y ya funciona con dos clientes; quedan el relevo por servidor, golems/jefes y las recompensas.
+> **Estado:** 6.1, 6.3, 6.4 y 6.6 mergeados (PRs #24, #25, #28–#30); 6.5 en parte (Golem War). El combate va de cliente a cliente por UDP y funciona con dos clientes; quedan el relevo por servidor (6.2) y los modos de escenario (6.5).
 
 - [x] **6.1 Registro de Endpoints UDP por Jugador (`SendFieldSlotUDP`, `0x0062`):** (#24)
   - Los sondeos UDP llevan el índice y la clave del login; `UdpEndpointRegistry` guarda las direcciones de cada jugador y viajan en los registros de la sala para que los clientes se conecten entre sí. `0x0062` se reenvía entre miembros.
@@ -243,10 +244,13 @@ rakion-brokenyx/
   - Fin de ronda por objetivo o por tiempo, pausa de 15 s, siguiente ronda y fin de partida (última ronda o equipo vacío), con un temporizador de salas en `WorldServer`.
   - Evidencia: **Observed** (`RakionWorldServ.exe` 0x408E3E, 0x409A00). Verificado con cliente real: sí.
 - [ ] **6.5 Entidades maestras:** Golems (`SendFieldGameMasterGolem`, `0x004D`) y jefes (`SendFieldGameMasterBossHP`, `0x0060`); lógica de los modos de escenario 0 y 1.
-  - Verificado con cliente real: no.
-- [ ] **6.6 Recompensas (`SendFieldGamePoint`, `0x0050`):**
-  - Informe de puntos que envía el cliente al acabar la ronda, EXP y oro, persistencia mediante `IMatchResultService` (C-4, carril A) y pantalla de recompensas. Fórmula **Unknown** en el original → configurable.
-  - Verificado con cliente real: no.
+  - Hecho (#28, #29): Golem War (modo 1) termina la ronda cuando muere un golem o todo un equipo; al acabar el tiempo gana el golem con más vida (`RakionWorldServ.exe` 0x405D70, 0x4063A0, **Observed**). `0x0060` se guarda como vida del líder para el desempate de Leader Wars (**Inferred**).
+  - Pendiente: lógica del modo escenario (Stage, modo 0) y jefes.
+  - Verificado con cliente real: sí (Golem War).
+- [x] **6.6 Recompensas (`SendFieldGamePoint`, `0x0050`):** (#28, #29, #30)
+  - El cliente calcula la EXP y el oro; el servidor aplica los topes por modo del original, +50 % de EXP a PowerUser y los multiplicadores `World:Rewards` (`RakionWorldServ.exe` 0x424B60, **Observed**). Persistencia con `IMatchResultRepository` (C-4).
+  - Subida de nivel con la tabla del cliente (`--import-levels`, `DataSetup.xfs`), +3 puntos por nivel y aviso `0x0051`; victorias/derrotas/empates, EXP de criaturas (tabla `NPCInfo`) y aviso a la sala `0x0052`.
+  - Verificado con cliente real: sí.
 
 ---
 
