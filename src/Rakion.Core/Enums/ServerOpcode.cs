@@ -263,6 +263,24 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldGameAddPlayer = 0x004B,
 
+    /// <summary>
+    /// Next round: [u8 Round][u8 RedLeaderSlot][u8 BlueLeaderSlot].
+    /// Evidence: Observed in engine.dll jump table opcode 0x49 (0x361976c7 -> 0x36193e40) and RakionWorldServ 0x409CA7.
+    /// </summary>
+    FieldGameNextRound = 0x0049,
+
+    /// <summary>
+    /// Round end: [u8 EndedByGoal][u8 Winner][u8 RedRoundWins][u8 BlueRoundWins].
+    /// Evidence: Observed in engine.dll jump table opcode 0x4A (0x361976d5 -> 0x36193e80) and RakionWorldServ 0x408E3E / 0x409FA7.
+    /// </summary>
+    FieldGameRoundEnd = 0x004A,
+
+    /// <summary>
+    /// Death broadcast: [u8 Victim][u8 Cause][u8 Killer][u8 ValueA][u8 ValueB].
+    /// Evidence: Observed in RakionWorldServ 0x4087D0 (7-byte send to every loaded member).
+    /// </summary>
+    FieldGameDie = 0x004F,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).

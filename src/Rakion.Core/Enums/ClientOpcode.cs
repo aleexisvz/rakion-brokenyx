@@ -381,6 +381,12 @@ public enum ClientOpcode : ushort
     FieldGameRoundStart = 0x0048,
 
     /// <summary>
+    /// Host kicks a member: (u8 slot).
+    /// Evidence: Observed in engine.dll ?SendFieldKick@IScavengerWorldNet@@UAEXE@Z (opcode 0x0040).
+    /// </summary>
+    FieldKick = 0x0040,
+
+    /// <summary>
     /// In-game player data for every other member: (u16 length, data).
     /// Evidence: Observed in engine.dll ?SendFieldGameAddPlayer@IScavengerWorldNet@@UAEXGPAD@Z (opcode 0x004B).
     /// </summary>
@@ -391,6 +397,12 @@ public enum ClientOpcode : ushort
     /// Evidence: Observed in engine.dll ?SendFieldGameAddPlayerReply@IScavengerWorldNet@@UAEXEGPAD@Z (opcode 0x004C).
     /// </summary>
     FieldGameAddPlayerReply = 0x004C,
+
+    /// <summary>
+    /// The sender died: (u8 cause, u8 killer slot).
+    /// Evidence: Observed in engine.dll ?SendFieldGameDiePlayer@IScavengerWorldNet@@UAEXEE@Z (opcode 0x004F).
+    /// </summary>
+    FieldGameDie = 0x004F,
 
     /// <summary>
     /// Network check towards another room member: (u8 target slot).

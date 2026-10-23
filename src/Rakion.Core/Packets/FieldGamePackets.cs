@@ -162,6 +162,15 @@ public sealed record FieldGameExitBroadcastPacket(byte Value) : IPacket
 /// </summary>
 public sealed record FieldGameEndBroadcastPacket(byte Value) : IPacket
 {
+    /// <summary>The last round was played (RakionWorldServ.exe 0x409AB5, Observed).</summary>
+    public const byte Finished = 2;
+
+    /// <summary>A team has nobody left in the match, modes 1/3/4 (0x409B39, Observed).</summary>
+    public const byte TeamEmpty = 5;
+
+    /// <summary>Fewer than two players left in solo deathmatch (0x409B6A, Observed).</summary>
+    public const byte NotEnoughPlayers = 6;
+
     public ushort Opcode => (ushort)ServerOpcode.FieldGameEnd;
 
     public void Serialize(PacketWriter writer)
