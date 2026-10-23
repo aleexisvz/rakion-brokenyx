@@ -34,11 +34,14 @@
   - **`CharacterWhisper` (`0x0016`):** Enrutamiento bidireccional de susurros (mensajes privados) entre personajes conectados en el servidor.
   - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket` con paginación real o `.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
   - **`FieldCreate` (`0x003B`):** Creación de sala por el host (`?SendFieldCreate`). Valida parámetros, instancia `GameField`, asigna la ranura 0 al host y confirma con `0x003B` (`ResultCode = 0`, `RoomNumber`), permitiendo el ingreso inmediato a la sala de espera.
-  - **`FieldQuickEnter` (`0x0039`):** Ingreso rápido a la primera sala disponible del canal sin contraseña que no esté llena ni en partida.
-  - **`FieldEnter` (`0x0038`):** Ingreso a sala específica por número y contraseña.
-  - **`FieldExit` (`0x003A`):** Salida limpia de la sala de espera hacia el lobby del canal, transfiriendo el liderazgo si sale el host o destruyendo la sala si queda vacía.
+  - **`FieldQuickEnter` (`0x0039`):** Ingreso rápido a la primera sala disponible del canal sin contraseña ni partida en curso; si no hay ninguna responde `0x0039` sin datos.
+  - **`FieldEnter` (`0x0038`):** Ingreso a sala por número y contraseña. Al entrar, todos los miembros reciben `0x0038` con el registro del nuevo jugador (nombre, nivel, equipo y sus direcciones UDP) y el que entra recibe `0x0037` con las reglas y los 20 slots. Errores con los códigos del original: 1 no disponible, 2 llena, 3 contraseña, 6 en partida, 7 nivel.
+  - **`FieldExit` (`0x003A`):** Salida limpia de la sala de espera hacia el lobby del canal, transfiriendo el liderazgo si sale el host o destruyendo la sala si queda vacía. Si el cliente se desconecta, o crea o entra en otra sala sin salir, el servidor lo saca solo para no dejar salas fantasma.
+  - **`FieldKick` (`0x0040`):** El host expulsa a un miembro; el expulsado vuelve al lobby como en una salida normal.
   - **`FieldReady` (`0x003D`):** Conmutación del estado Listo (Ready) difundido a todos los miembros de la sala.
-  - **`FieldChat` (`0x0047`):** Chat dentro de la sala de espera transmitido a todos los ocupantes.
+  - **`FieldChat` (`0x0047`):** Chat dentro de la sala, difundido como `[u8 slot][texto]`.
+  - **`FieldSlotUdp` (`0x0062`):** Comprobación de red entre jugadores al entrar: el servidor la reenvía al slot indicado con el slot del remitente.
+  - **Partida:** `FieldGameStart` (`0x0043`), `FieldGameEnter` (`0x0045`), `FieldGameExit` (`0x0046`, difunde el slot del que sale), `FieldGameRoundStart` (`0x0048`, cliente cargado), `FieldGameAddPlayer` / `Reply` (`0x004B` / `0x004C`, reenviados como `0x004B`) y `FieldGameDie` (`0x004F`). Ver la sección 7.
   - **`FieldChangeSlotStatus` (`0x0042`):** Apertura o bloqueo/cierre de ranuras por el host (`?SendFieldChangeSlotStatus`). Difunde `0x0042` (`SlotIndex`, `Status`), cerrando el popup modal *"Changing Status"*.
   - **`FieldChangeTeam` (`0x003E`):** Cambio de equipo entre Rojo (ranuras 0..9) y Azul (ranuras 10..19) (`?SendFieldChangeTeam`). Busca una ranura libre no cerrada en el equipo opuesto y difunde `0x003E` (`Result`, `OldSlot`, `NewSlot`).
   - **`FieldChangeRule` (`0x0041`):** Modificación de mapa, modo y reglas de sala por el anfitrión (`?SendFieldChangeRule`), difundido a los miembros con `0x0041`.
@@ -51,7 +54,8 @@
 ### 4. Vista de sesión y envío (`Rakion.World.Session`, contrato C-2)
 - `IWorldSessionView`: lectura de la sesión para funcionalidades de otros carriles (usuario, personaje activo, canal, `IsInField`). `WorldSession` la implementa de forma explícita; los consumidores no modifican la sesión.
 - `ISessionSender` / `WorldSessionSender`: serializa un `IPacket` y lo cifra con AES-128 si la sesión negoció el framing cifrado. `WorldPacketHandler` envía todas sus respuestas a través de él.
-- `IsInField` vale siempre `false` hasta que el sistema de salas de la fase 5 lo active.
+- `IsInField` indica si la sesión está en una sala.
+- `UdpEndpointRegistry`: da a cada sesión un índice (bytes 5–6 del login, el id propio del cliente, que también viaja en `ChannelEnter` y en los registros de la sala) y una clave (bytes 7–10). El cliente repite ambos en sus sondeos UDP, y el registro guarda las direcciones que reportan para que los jugadores de una sala se conecten entre sí.
 
 ### 5. `ChannelManager` (`Rakion.World.Channels`)
 - Gestor concurrente en memoria de canales de juego (`LobbyChannel`).
@@ -62,5 +66,15 @@
   - Recibe `0x0201` en el puerto 40708 (UDP 1) y `0x0202` en el puerto 40709 (UDP 2).
   - Responde con el datagrama de 12 bytes reflejando la Cookie enviada por el cliente y las banderas de puerto correspondientes (`0` para UDP 1, `1` para UDP 2).
   - Esta respuesta le indica al cliente v258 que la conectividad hacia el mundo está abierta, preparando el envío de `0x000E` (`UdpSuccess`) y evitando el timeout de desconexión (error 777 / 415: *"Network connection is blocked"*).
+  - Guarda en `UdpEndpointRegistry` la dirección que reporta cada sondeo, identificada por la clave del login.
+
+### 7. Salas y partidas (`Rakion.World.Fields`)
+- `FieldManager` / `GameField`: salas en memoria por canal, 20 slots (0–9 equipo rojo, 10–19 azul). `FieldRules` guarda las reglas con el significado del servidor original: el modo es el segundo byte de la petición de crear; también el tiempo límite, el objetivo de kills, el número de rondas y el rango de niveles.
+- `GameField.Match.cs`: flujo de la partida según `RakionWorldServ.exe` (0x408440, 0x4087D0, 0x409A00):
+  - La ronda empieza cuando todos los jugadores han cargado el mapa (`0x0048`), con tiempo límite + 3 s.
+  - Puntuación por modo: 2 individual (kills del asesino, +2 con la causa 8, −1 con la causa 1), 3 por equipos, 4 líderes (la ronda acaba si muere un líder). Los modos 0 y 1 solo avisan de la muerte.
+  - Fin de ronda (`0x004A`) por objetivo o por tiempo, pausa de 15 s, siguiente ronda (`0x0049`) y fin de partida (`0x0044`: 2 última ronda, 5 equipo vacío, 6 pocos jugadores).
+- `WorldServer` ejecuta cada segundo `WorldPacketHandler.TickFieldsAsync` para los plazos de las rondas.
+- Pendiente: relevo por servidor (`0x0056` / `0x0057`, `0x0401`), golems y jefes, recompensas (`0x0050`), votaciones y cerrar sala.
 
 

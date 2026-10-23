@@ -142,7 +142,7 @@ rakion-brokenyx/
 
 ### Fase 3: World Server (Gestión de Personajes, Canales y Lobby)
 > **Objetivo:** Lograr que el cliente entre al juego en el puerto 40708, cargue sus personajes, permita crear/borrar y acceda al canal de Lobby.
-> **Estado:** Completada (100%). Ítems 3.1 a 3.6 terminados con pruebas automatizadas. Verificado con cliente real: 3.1–3.5 sí; 3.6 pendiente de confirmar por el mantenedor.
+> **Estado:** Completada (100%). Ítems 3.1 a 3.6 terminados con pruebas automatizadas. Verificado con cliente real: sí (3.1–3.6).
 
 - [x] **3.1 Servidor TCP y Dual UDP en Puertos 40708/40709:** Listener principal TCP de sesiones de juego y listeners duales UDP para responder a sondeos de NAT traversal / keep-alive del cliente.
 - [x] **3.2 Handshake de Sesión:** El cliente presenta su Token de Sesión obtenido del Broker y el WorldServer asocia el socket con la cuenta `CUser`.
@@ -171,32 +171,31 @@ rakion-brokenyx/
 > **Objetivo:** Permitir a los jugadores gestionar sus objetos, comprar en la tienda y mejorar equipamiento en la herrería.
 > **Carril:** A. **Código:** `src/Rakion.World/Features/Economy/`, `src/Rakion.Database/`, paquetes C-3 en `Rakion.Core`.
 
-- [ ] **4.0 Prerrequisitos:** contratos C-0, C-1 y C-2 mergeados en `main`.
-- [ ] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):**
-  - Enviar al cliente el mapa de ranuras ocupadas (armas, cascos, pecheras, accesorios, criaturas invocables, pociones) con sus niveles de forja y duraciones.
-  - Evidencia: petición `SendInventoryEnter()` = opcode `0x002C` sin payload, y `SendInventoryLeave()` = `0x002D`, **Observed** (inmediato del opcode en `engine.dll`). Layout de la respuesta del servidor **Unknown** (requiere observar el parser del cliente). Lectura de inventario en BD: ya existe (`IInventoryRepository.GetUserItemsAsync`, 1.3).
-  - Verificado con cliente real: no.
-- [ ] **4.2 Tienda de Objetos (`SendInventoryBuy(uint16 itemId, uint8 type, uint8 period, uint16 price)`):**
-  - Validar precio en oro o cash contra el catálogo `ItemInfo` en servidor (el `price` enviado por el cliente nunca se usa como verdad).
-  - Descontar saldo de forma atómica y asignar el item en `UserItemInfo` en la misma transacción, con log.
-  - Evidencia: opcode `0x002E` y tipos `(u16, u8, u8, u16)` **Observed** (`engine.dll`); semántica de `type`/`period` **Inferred**; respuesta **Unknown**. Compras relacionadas: `BuyBag` `0x0032`, `BuyPowerUser` `0x0034`, `BuyCharacterSlot` `0x0035`, `BuyPotionSlot` `0x006F` (**Observed**).
-  - Verificado con cliente real: no.
-- [ ] **4.3 Venta y Movimiento de Items (`SendInventorySell(uint8)` y `SendInventoryMove(uint8, uint8, uint8, uint8)`):**
-  - Permitir reorganizar objetos entre bolsas y vender items por oro.
-  - Evidencia: `Sell` = `0x002F`, `Move` = `0x0031` con 4 × `u8` **Observed**; significado de cada byte de `Move` **Inferred**; `StackPotion(u8, u8)` = `0x0073` **Observed**; `CUser::ulSellGold` **Observed** (símbolo), fórmula del precio de venta **Unknown** (configurable).
-  - Verificado con cliente real: no.
-- [ ] **4.4 Asignación y Reseteo de Puntos (`SendInventoryAllocationPoint(uint8 statIndex)`, `SendCharacterStateClear(uint8, uint16 cost)`):**
-  - Permitir repartir puntos a las estadísticas primarias (`hit1`–`hit4`, `chit`, `hp`, `ap`, velocidad, CP) y recalcular atributos totales.
-  - Evidencia: opcode de `StateClear` `0x001B` **Observed**; mapeo `statIndex → estadística` **Inferred**; `AllocationPoint(u8)` = `0x0033` **Observed**.
-  - Verificado con cliente real: no.
-- [ ] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`):**
-  - Petición `SendEncahntReinforce(u8, u8, u8, u8*)` = `0x0074` **Observed**; significado de los parámetros **Inferred**.
-  - Cadena `"Not Destroy below lv3 Item!!"` en `CUser::CheckEnchantReinforce`: **Observed**. Prueba solo que los items por debajo de lv3 no se destruyen.
-  - "0 a +3 con 100 % de éxito": **Inferred** (no probado). Nivel máximo (+15) y probabilidades de éxito/degradación/rotura: **Unknown** → configurables en `appsettings.json`.
-  - Sincronización instantánea de las nuevas estadísticas del item.
-  - Verificado con cliente real: no.
+> **Estado:** 4.0–4.4 mergeados (PRs #9–#21; contratos #9–#11). 4.5 implementado en la rama local `feat/economy-blacksmith`, pendiente de PR. Detalle en `src/Rakion.World/Features/Economy/README.md`.
+
+- [x] **4.0 Prerrequisitos:** contratos C-0 (#9), C-1 (#10) y C-2 (#11) mergeados en `main`; C-3 (paquetes de economía en `InventoryPackets.cs`) entregado con cada ítem.
+- [x] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):** (#12, #13, #14, #15, #17)
+  - Entrar/salir del inventario (`0x002C` / `0x002D`), el Box de la cuenta (120 ranuras, 30 por bolsa) en el login, el equipo de cada personaje (19 ranuras) y mover objetos entre Box y equipo (`0x0031`).
+  - Evidencia: opcodes y layouts **Observed** (`engine.dll` 0x36193650 / 0x36193680 / 0x36193810 y `RakionWorldServ.exe`). Verificado con cliente real: sí.
+- [x] **4.2 Tienda de Objetos (`SendInventoryBuy`, `0x002E`):** (#18, #21)
+  - Precio validado contra el catálogo del servidor (importado con `--import-items`), compra atómica con log, tiendas solo oro / solo cash / ambas, ítems PowerUser y compra de la PU Card (`0x0034`).
+  - Evidencia: layout de petición y respuesta **Observed** (`engine.dll` 0x36195640, `rakion.bin` 0x4774E0). Verificado con cliente real: sí.
+- [x] **4.3 Venta y Movimiento de Items (`SendInventorySell`, `0x002F`; `SendInventoryMove`, `0x0031`):** (#16, #19)
+  - Venta por oro (precio de oro × 0,4 o de cash × 1,5, **Observed** en el servidor original) y movimiento dentro del Box y hacia el equipo.
+  - Verificado con cliente real: sí.
+- [x] **4.4 Asignación de Puntos (`SendInventoryAllocationPoint(uint8 statIndex)`, `0x0033`):** (#20)
+  - Reparto de puntos a las 10 estadísticas con tope 50 (**Inferred**); primero gasta los puntos de nivel y luego los de PowerUser.
+  - Evidencia: layout **Observed** (`engine.dll` 0x361938A0, `rakion.bin` 0x47DBB0). Verificado con cliente real: sí.
+- [ ] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`, `0x0074`):**
+  - Implementado en la rama local `feat/economy-blacksmith` (sin PR): comprobaciones del servidor original (equipo por debajo de +15, piedras 13001–13005), resultados 0–8 **Observed** (`RakionWorldServ.exe` 0x40C310). Probabilidades **Unknown** (tabla provisional). Materiales 14001–14003 todavía rechazados.
+  - Verificado con cliente real: sí (rama local).
 - [ ] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*:
   - Evidencia: `Peek()` `0x006B`, `Accept(u32, u16)` `0x006C`, `Dispose(u32)` `0x006D` **Observed**; respuestas **Unknown**.
+  - Verificado con cliente real: no.
+- [ ] **4.7 Reseteo de Puntos (`SendCharacterStateClear(uint8, uint16 cost)`, `0x001B`):**
+  - Pendiente. En la respuesta, `0x001B` coincide con la confirmación de GameGuard (carril B): hay que coordinarlo.
+  - Verificado con cliente real: no.
+- [ ] **4.8 Otras compras y pociones:** bolsa (`0x0032`), slot de personaje (`0x0035`), slot de poción (`0x006F`) y apilar pociones (`0x0073`). Opcodes **Observed**; respuestas **Unknown**.
   - Verificado con cliente real: no.
 
 ---
@@ -205,22 +204,23 @@ rakion-brokenyx/
 > **Objetivo:** Permitir la creación de salas de espera, cambio de equipos, selección de mapas y cuenta regresiva de inicio.
 > **Carril:** B. **Código:** `src/Rakion.World/` (excepto `Features/Economy/`).
 
-- [ ] **5.1 Lista de Salas (`SendFieldList`, `0x0036`):** Retornar salas con paginación, mostrando nombre, anfitrión, modo, mapa y cantidad de jugadores actuales.
-  - Evidencia: opcode **Observed** (respuesta vacía ya enviada en 3.6); layout de cada entrada **Unknown**. Verificado con cliente real: no.
-- [ ] **5.2 Creación de Sala (`SendFieldCreate`, `0x0053`):**
-  - Configurar parámetros: Título de la sala, contraseña opcional, modo de juego (Deathmatch individual, por equipos, Golem Wars, Leader Wars, Boss Raid, Escenarios PVE), mapa y límite de niveles.
-  - Asignar al creador como Host / Master de la sala.
-  - Evidencia: opcode **Observed**; valores numéricos de `GameMode` **Inferred**. Verificado con cliente real: no.
-- [ ] **5.3 Sala de Espera (Lobby de Sala):**
-  - Asignación de slots (capacidad máxima **Unknown**; "16 jugadores en 8v8" es **Inferred**).
-  - Cambio de equipo (Equipo Rojo / Equipo Azul) con `SendFieldChangeTeam` (opcode **Unknown**).
-  - Estado Preparado (`SendFieldReady`, `0x0061` **Observed**): validar que todos estén listos antes de que el Host pueda iniciar.
-  - Chat exclusivo de la sala de espera (`SendFieldChat`, `0x007F` **Observed**), entrada rápida (`0x004F` **Observed**) y salida (`0x0051` **Observed**).
-  - Sistema de expulsión de la sala (`SendFieldKick` y votaciones `SendFieldGameVote`; opcodes **Unknown**).
+> **Estado:** 5.1–5.4 mergeados (PRs #22–#25). Pendiente 5.5. Detalle en `src/Rakion.World/README.md`.
+
+- [x] **5.1 Lista de Salas (`SendFieldList`, `0x0036`):** (#22, #24)
+  - Entrada de la lista con el layout del cliente: 11 bytes de reglas, bloque del host (sus direcciones UDP) y nombre.
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x405790, `engine.dll` 0x36193900). Verificado con cliente real: sí.
+- [x] **5.2 Creación de Sala (`SendFieldCreate`, `0x003B`):** (#22, #24)
+  - El opcode real en v258 es `0x003B` (no `0x0053`). Reglas guardadas con el significado del servidor original en `FieldRules` (el modo es el segundo byte); slots iniciales cerrados como el original (6 por equipo en los modos 1–4).
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x405440 / 0x405568); nombres de los modos **Inferred**. Verificado con cliente real: sí.
+- [x] **5.3 Sala de Espera (Lobby de Sala):** (#22, #24, #25)
+  - Entrar (`0x0038`) y entrada rápida (`0x0039`) con el detalle de la sala (`0x0037`) y el aviso a los demás (`0x0038`); slots abiertos/cerrados (`0x0042`), cambio de equipo (`0x003E`), reglas (`0x0041`), listo (`0x003D`), chat (`0x0047`), salida (`0x003A`), comprobación de red entre jugadores (`0x0062`) y expulsar (`0x0040`).
+  - Identidad de cada jugador: índice y clave en el login, el mismo índice en `ChannelEnter` y en la sala; direcciones UDP de cada jugador en sus registros.
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x406F40, 0x4073B7, 0x406930, 0x423CC0; `rakion.bin` 0x473DE5 / 0x47A170). Verificado con cliente real: sí (dos clientes).
+- [x] **5.4 Inicio de Partida (`SendFieldGameStart`, `0x0043`):** (#23, #25)
+  - Comprobaciones del original (equipos, todos listos), carga del mapa, entrar (`0x0045`) y salir (`0x0046`) de la partida.
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x4079D0, 0x407C70, 0x407E00). Verificado con cliente real: sí.
+- [ ] **5.5 Votaciones y cerrar sala:** `SendFieldGameVote` / `SendFieldGameVoteOpen` (opcodes en `engine.dll`, **Observed**) y `SendFieldClose` (`0x003F`, solo GM en el original).
   - Verificado con cliente real: no.
-- [ ] **5.4 Inicio de Partida (`SendFieldGameStart`):**
-  - Notificar a todos los clientes para que comiencen la carga del mapa y los modelos 3D (`LevelsSV.xfs` y `ModelsSV.xfs`).
-  - Evidencia: nombre **Observed**; opcode **Unknown**. Verificado con cliente real: no.
 
 ---
 
@@ -228,21 +228,24 @@ rakion-brokenyx/
 > **Objetivo:** Permitir que los jugadores jueguen la partida de forma fluida, intercambien golpes y el servidor registre muertes, rondas y recompensas.
 > **Carril:** B. **Código:** `src/Rakion.Relay/` (librería sin sockets), `src/Rakion.World/` (listeners UDP ya existentes desde 3.1). 6.4 consume el contrato C-4 del carril A.
 
-- [ ] **6.1 Registro de Endpoints UDP por Slot de Sala (`SendFieldSlotUDP`):**
-  - El bind de los puertos UDP 40708/40709 y el sondeo `0x0201`/`0x0202`/`0x000E` ya están hechos en 3.1 (`Rakion.World`).
-  - Asociar a cada slot de sala el endpoint público observado de su cliente para resolver NAT estricto.
-  - Evidencia: nombre **Observed**; layout **Unknown**. Verificado con cliente real: no.
-- [ ] **6.2 Mecanismo de Relevo (Relay / Tunneling, `0x0401`):**
-  - Crear `Rakion.Relay` como librería pura (`RelayRouter`): enrutamiento `SendFieldGameTunnelingOne` / `SendFieldGameTunnelingAll` entre los miembros de la misma sala, con limitación de tasa. `WorldUdpPacketHandler` le despacha `0x0401`.
-  - Evidencia: opcode **Observed**; layout **Unknown**. Verificado con cliente real: no.
-- [ ] **6.3 Arbitraje de Eventos Críticos:**
-  - Muerte de jugadores (`SendFieldGameDiePlayer(uint8 victimSlot, uint8 cause)`): registrar quién mató a quién, el modo y la causa.
-  - Sincronización de entidades maestras: Golems (`SendFieldGameMasterGolem`) y jefes (`SendFieldGameMasterBossHP`).
-  - Evidencia: nombres **Observed**; parámetros **Derived** de las firmas; opcodes **Unknown**. Verificado con cliente real: no.
-- [ ] **6.4 Fin de Ronda y Partida (`SendFieldGameRoundEnd`, `SendFieldGameEnd`, `SendFieldGamePoint`):**
-  - Determinar equipo ganador según las condiciones de victoria de cada modo.
-  - Fórmula de EXP y oro: **Unknown** en el original → diseño propio configurable.
-  - Persistencia mediante `IMatchResultService` (C-4, carril A) y envío de la pantalla de recompensas.
+> **Estado:** 6.1, 6.3 y 6.4 mergeados (PRs #24, #25). El combate va de cliente a cliente por UDP y ya funciona con dos clientes; quedan el relevo por servidor, golems/jefes y las recompensas.
+
+- [x] **6.1 Registro de Endpoints UDP por Jugador (`SendFieldSlotUDP`, `0x0062`):** (#24)
+  - Los sondeos UDP llevan el índice y la clave del login; `UdpEndpointRegistry` guarda las direcciones de cada jugador y viajan en los registros de la sala para que los clientes se conecten entre sí. `0x0062` se reenvía entre miembros.
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x425D80, 0x40ABE0, 0x406930); que esos campos sean direcciones es **Inferred**. Verificado con cliente real: sí.
+- [ ] **6.2 Mecanismo de Relevo (Relay / Tunneling):**
+  - `SendFieldGameTunnelingAll` / `One` (`0x0056` / `0x0057`) por TCP y `0x0401` por UDP. El original solo lo activa cuando algún jugador no puede conectar directo (aviso `0x0054`).
+  - Verificado con cliente real: no.
+- [x] **6.3 Arbitraje de Eventos Críticos (muertes):** (#24, #25)
+  - Inicio de ronda cuando todos cargan (`0x0048`), aparición de jugadores (`0x004B` / `0x004C` reenviados) y muertes (`0x004F`) con la puntuación de cada modo (individual, por equipos, líderes).
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x408440, 0x405C00, 0x4087D0). Verificado con cliente real: sí.
+- [x] **6.4 Fin de Ronda y Partida (`0x004A`, `0x0049`, `0x0044`):** (#25)
+  - Fin de ronda por objetivo o por tiempo, pausa de 15 s, siguiente ronda y fin de partida (última ronda o equipo vacío), con un temporizador de salas en `WorldServer`.
+  - Evidencia: **Observed** (`RakionWorldServ.exe` 0x408E3E, 0x409A00). Verificado con cliente real: sí.
+- [ ] **6.5 Entidades maestras:** Golems (`SendFieldGameMasterGolem`, `0x004D`) y jefes (`SendFieldGameMasterBossHP`, `0x0060`); lógica de los modos de escenario 0 y 1.
+  - Verificado con cliente real: no.
+- [ ] **6.6 Recompensas (`SendFieldGamePoint`, `0x0050`):**
+  - Informe de puntos que envía el cliente al acabar la ronda, EXP y oro, persistencia mediante `IMatchResultService` (C-4, carril A) y pantalla de recompensas. Fórmula **Unknown** en el original → configurable.
   - Verificado con cliente real: no.
 
 ---
