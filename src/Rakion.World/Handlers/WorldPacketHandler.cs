@@ -211,6 +211,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameExit, HandleFieldGameExitAsync);
         _registry.Map(ClientOpcode.FieldSlotUdp, HandleFieldSlotUdpAsync);
         _registry.Map(ClientOpcode.FieldGameRoundStart, HandleFieldGameRoundStartAsync);
+        _registry.Map(ClientOpcode.FieldGameDie, HandleFieldGameDieAsync);
+        _registry.Map(ClientOpcode.FieldKick, HandleFieldKickAsync);
         _registry.Map(ClientOpcode.FieldGameAddPlayer, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: false, ct));
         _registry.Map(ClientOpcode.FieldGameAddPlayerReply, (session, payload, ct) => HandleFieldGameAddPlayerAsync(session, payload, hasTarget: true, ct));
     }
@@ -1258,35 +1260,76 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         if (await LeaveCurrentFieldAsync(session, session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
         {
-            // Observed (rakion.bin): FieldExit handler 0x00474410 only empties the slot, and the
-            // WaitRoom menu state is 0x1C (set near 0x00447030). The only code path that rebuilds
-            // the SelectGame lobby UI (ctor 0x00469320) from a room is the ChannelEnter handler
-            // 0x00473DA0 (case result 0, matching channel index). So re-send ChannelEnter.
-            var channel = session.ActiveChannel;
-            var reenter = new ChannelEnterResponsePacket(
-                ResultCode: 0,
-                ChannelIndex: channel.Index,
-                ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
-                ChannelName: channel.Name,
-                ChannelType: (byte)channel.Type,
-                MaxPlayers: channel.MaxPlayers,
-                Flags: 0);
-            await SendPacketAsync(session, reenter, cancellationToken).ConfigureAwait(false);
-
-            // Refresh the room list once the client is back in SelectGame (state 0x17).
-            var fields = session.ActiveChannel.FieldManager.GetFields(session.ActiveChannel.Index);
-            var pagedEntries = fields
-                .Take(6)
-                .Select(ToFieldListEntry)
-                .ToList();
-            var fieldListResp = pagedEntries.Count == 0
-                ? FieldListResponsePacket.Empty
-                : new FieldListResponsePacket(pagedEntries);
-            await SendPacketAsync(session, fieldListResp, cancellationToken).ConfigureAwait(false);
-
-            // Send updated channel character roster
-            await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
+            await ReturnToLobbyAsync(session, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Host kicks the member in a slot: (u8 slot). The legacy server accepts it from the host only, for an occupied
+    /// slot (RakionWorldServ.exe 0x423CC0 / 0x4097C0, Observed). UNKNOWN: the exact notice the kicked client gets; it is
+    /// sent back to the lobby like a normal room exit (Inferred).
+    /// </summary>
+    private async ValueTask HandleFieldKickAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (payload.Length < 1 ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var host) is not true ||
+            field is null || host is null || !host.IsMaster)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldKick rejected: not the host of a room.", session.Connection.ConnectionId);
+            return;
+        }
+
+        byte slot = payload.Span[0];
+        var target = field.Players.FirstOrDefault(p => p.SlotIndex == slot);
+        if (target is null || target == host)
+        {
+            return;
+        }
+
+        _logger.LogInformation("Room #{Number}: host '{Host}' kicked slot {Slot}.", field.Number, session.ActiveCharacter?.Name ?? "Unknown", slot);
+        if (await LeaveCurrentFieldAsync(target.Session, target.Session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
+        {
+            await ReturnToLobbyAsync(target.Session, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask ReturnToLobbyAsync(WorldSession session, CancellationToken cancellationToken)
+    {
+        var channel = session.ActiveChannel;
+        if (channel is null)
+        {
+            return;
+        }
+
+        // Observed (rakion.bin): FieldExit handler 0x00474410 only empties the slot, and the
+        // WaitRoom menu state is 0x1C (set near 0x00447030). The only code path that rebuilds
+        // the SelectGame lobby UI (ctor 0x00469320) from a room is the ChannelEnter handler
+        // 0x00473DA0 (case result 0, matching channel index). So re-send ChannelEnter.
+        var reenter = new ChannelEnterResponsePacket(
+            ResultCode: 0,
+            ChannelIndex: channel.Index,
+            ServerId: session.UdpIndex, // id of the entering user; the client matches it with its own (rakion.bin 0x473DE5)
+            ChannelName: channel.Name,
+            ChannelType: (byte)channel.Type,
+            MaxPlayers: channel.MaxPlayers,
+            Flags: 0);
+        await SendPacketAsync(session, reenter, cancellationToken).ConfigureAwait(false);
+
+        // Refresh the room list once the client is back in SelectGame (state 0x17).
+        var pagedEntries = channel.FieldManager.GetFields(channel.Index)
+            .Take(6)
+            .Select(ToFieldListEntry)
+            .ToList();
+        var fieldListResp = pagedEntries.Count == 0
+            ? FieldListResponsePacket.Empty
+            : new FieldListResponsePacket(pagedEntries);
+        await SendPacketAsync(session, fieldListResp, cancellationToken).ConfigureAwait(false);
+
+        // Send updated channel character roster
+        await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleFieldReadyAsync(
@@ -1681,13 +1724,94 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         await SendPacketAsync(target.Session, new FieldSlotUdpPacket(sender.SlotIndex), cancellationToken).ConfigureAwait(false);
     }
 
-    private async ValueTask EndFieldGameAsync(GameField field, CancellationToken cancellationToken)
+    /// <param name="reason">End byte: 2 last round played, 5 / 6 not enough players (Observed); 0 when everyone left
+    /// the match (Inferred).</param>
+    private async ValueTask EndFieldGameAsync(GameField field, CancellationToken cancellationToken, byte reason = 0)
     {
+        // The legacy end (0x407BE0) broadcasts to every room member before resetting the slots.
+        await BroadcastToFieldAsync(field, new FieldGameEndBroadcastPacket(reason), cancellationToken).ConfigureAwait(false);
         field.EndGame();
-        _logger.LogInformation("Room #{Number} match ended.", field.Number);
+        _logger.LogInformation("Room #{Number} match ended (reason {Reason}).", field.Number, reason);
+    }
 
-        // UNKNOWN: meaning of the end byte; 0 is sent until the match result flow is implemented.
-        await BroadcastToFieldAsync(field, new FieldGameEndBroadcastPacket(0), cancellationToken).ConfigureAwait(false);
+    private async ValueTask HandleFieldGameDieAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameDieRequestPacket.TryParse(payload.Span, out var req))
+        {
+            _logger.LogWarning("[{ConnectionId}] Malformed FieldGameDie request ({Length} bytes).", session.Connection.ConnectionId, payload.Length);
+            return;
+        }
+
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var victim) is not true ||
+            field is null || victim is null)
+        {
+            return;
+        }
+
+        var result = field.RecordDeath(victim, req.Cause, req.KillerSlot, DateTimeOffset.UtcNow);
+        if (result is not { } death)
+        {
+            _logger.LogDebug("[{ConnectionId}] Room #{Number} death of slot {Slot} ignored.", session.Connection.ConnectionId, field.Number, victim.SlotIndex);
+            return;
+        }
+
+        _logger.LogInformation(
+            "Room #{Number}: slot {Victim} killed by slot {Killer} (cause {Cause}), score {A}-{B}.",
+            field.Number,
+            victim.SlotIndex,
+            req.KillerSlot,
+            req.Cause,
+            death.Death.ValueA,
+            death.Death.ValueB);
+        await SendToLoadedAsync(field, death.Death, cancellationToken).ConfigureAwait(false);
+        if (death.RoundEnd is { } roundEnd)
+        {
+            _logger.LogInformation("Room #{Number} round {Round} won by {Winner} (goal reached).", field.Number, field.Round, roundEnd.Winner);
+            await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Runs the match timers of every room once (round time-outs, next rounds, match ends).</summary>
+    public async Task TickFieldsAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        foreach (var channel in _channelManager.GetChannels())
+        {
+            foreach (var field in channel.FieldManager.GetFields(channel.Index))
+            {
+                if (field.Tick(now) is not { } tick)
+                {
+                    continue;
+                }
+
+                if (tick.RoundEnd is { } roundEnd)
+                {
+                    _logger.LogInformation("Room #{Number} round {Round} timed out, winner {Winner}.", field.Number, field.Round, roundEnd.Winner);
+                    await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (tick.NextRound is { } nextRound)
+                {
+                    _logger.LogInformation("Room #{Number} round {Round} starts.", field.Number, nextRound.Round);
+                    await SendToLoadedAsync(field, nextRound, cancellationToken).ConfigureAwait(false);
+                }
+
+                if (tick.GameEnd is { } reason)
+                {
+                    await EndFieldGameAsync(field, cancellationToken, reason).ConfigureAwait(false);
+                }
+            }
+        }
+    }
+
+    private async ValueTask SendToLoadedAsync(GameField field, IPacket packet, CancellationToken cancellationToken)
+    {
+        foreach (var member in field.LoadedPlayers)
+        {
+            await SendPacketAsync(member.Session, packet, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async ValueTask BroadcastToFieldAsync(GameField field, IPacket packet, CancellationToken cancellationToken)

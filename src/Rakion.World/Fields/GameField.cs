@@ -9,7 +9,7 @@ namespace Rakion.World.Fields;
 /// Evidence: Observed in engine.dll room layout and RakionWorldServ.exe 0x4075A0, 0x407910.
 /// Slots 0..9 represent Team 0 (Red), slots 10..19 represent Team 1 (Blue).
 /// </summary>
-public sealed class GameField
+public sealed partial class GameField
 {
     private readonly object _lock = new();
 
@@ -255,8 +255,7 @@ public sealed class GameField
             }
 
             IsInProgress = true;
-            Round = 0;
-            _roundRunning = false;
+            ResetMatch();
             foreach (var player in players)
             {
                 player.IsInGame = true;
@@ -308,74 +307,6 @@ public sealed class GameField
         }
     }
 
-    public byte Round { get; private set; }
-
-    private bool _roundRunning;
-    private DateTimeOffset _roundEndsAt;
-    private byte _redLeader = FieldGameRoundStartPacket.NoLeader;
-    private byte _blueLeader = FieldGameRoundStartPacket.NoLeader;
-
-    /// <summary>
-    /// A member finished loading the map (legacy 0x48 handler RakionWorldServ.exe 0x408440, Observed). Returns the round
-    /// start to send and whether it goes to every loaded member (the last one loaded, first round) or only to this
-    /// member (joining a running round); null when nothing is sent yet.
-    /// The legacy timer is TimeLimit + 3 seconds; the round-end flow (0x4A) is not implemented.
-    /// </summary>
-    public (FieldGameRoundStartPacket Packet, bool ToAllLoaded)? MarkLoaded(FieldPlayer player, DateTimeOffset now)
-    {
-        lock (_lock)
-        {
-            if (!IsInProgress || !player.IsInGame || player.IsLoaded)
-            {
-                return null;
-            }
-
-            player.IsLoaded = true;
-            if (_roundRunning)
-            {
-                return (BuildRoundStart(now), false);
-            }
-
-            if (_playersBySession.Values.Any(p => p.IsInGame && !p.IsLoaded))
-            {
-                return null;
-            }
-
-            _roundRunning = true;
-            Round = 1;
-            _roundEndsAt = now.AddSeconds(Rules.TimeLimit + 3);
-            _redLeader = _blueLeader = FieldGameRoundStartPacket.NoLeader;
-            if (Rules.Mode == 4)
-            {
-                // Leader Wars (Inferred name): the highest-level loaded member of each team (0x4086D9, Observed).
-                var loaded = _playersBySession.Values.Where(p => p.IsLoaded).ToList();
-                _redLeader = loaded.Where(p => p.SlotIndex < 10).OrderByDescending(p => p.Session.ActiveCharacter?.Level ?? 0)
-                    .Select(p => p.SlotIndex).DefaultIfEmpty(FieldGameRoundStartPacket.NoLeader).First();
-                _blueLeader = loaded.Where(p => p.SlotIndex >= 10).OrderByDescending(p => p.Session.ActiveCharacter?.Level ?? 0)
-                    .Select(p => p.SlotIndex).DefaultIfEmpty(FieldGameRoundStartPacket.NoLeader).First();
-            }
-
-            return (BuildRoundStart(now), true);
-        }
-    }
-
-    public IReadOnlyList<FieldPlayer> LoadedPlayers
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _playersBySession.Values.Where(p => p.IsLoaded).ToList();
-            }
-        }
-    }
-
-    private FieldGameRoundStartPacket BuildRoundStart(DateTimeOffset now)
-    {
-        double secondsLeft = Math.Clamp((_roundEndsAt - now).TotalSeconds, 0, ushort.MaxValue);
-        return new FieldGameRoundStartPacket(Round, (ushort)secondsLeft, 0, 0, _redLeader, _blueLeader);
-    }
-
     /// <summary>
     /// A player leaves the running match back to the waiting room (RakionWorldServ.exe 0x407E00, Observed: the slot
     /// goes back to "not ready"). Returns true when nobody is left in the match, which ends it.
@@ -397,7 +328,7 @@ public sealed class GameField
         lock (_lock)
         {
             IsInProgress = false;
-            _roundRunning = false;
+            _roundState = RoundState.None;
             foreach (var player in _playersBySession.Values)
             {
                 player.IsInGame = false;

@@ -56,6 +56,73 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void RecordDeath_TeamDeathmatch_ScoresAndEndsRoundAtGoal()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 2, rounds: 3);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        var first = field.RecordDeath(guest, cause: 0, killerSlot: host.SlotIndex, Now)!.Value;
+        var second = field.RecordDeath(guest, cause: 0, killerSlot: host.SlotIndex, Now)!.Value;
+
+        Assert.AreEqual(new FieldGameDiePacket(guest.SlotIndex, 0, host.SlotIndex, 1, 0), first.Death);
+        Assert.IsNull(first.RoundEnd);
+        Assert.AreEqual(new FieldGameRoundEndPacket(1, FieldGameRoundEndPacket.RedWins, 1, 0), second.RoundEnd);
+        Assert.IsNull(field.RecordDeath(guest, 0, host.SlotIndex, Now), "no kills between rounds");
+    }
+
+    [TestMethod]
+    public void RecordDeath_SoloDeathmatch_CountsKillerKills()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 2, timeLimit: 300, goal: 5, rounds: 1);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        field.RecordDeath(guest, 0, host.SlotIndex, Now);
+        var doubled = field.RecordDeath(guest, FieldGameDieRequestPacket.DoublePoints, host.SlotIndex, Now)!.Value;
+        var selfInflicted = field.RecordDeath(guest, FieldGameDieRequestPacket.SelfInflicted, host.SlotIndex, Now)!.Value;
+
+        Assert.AreEqual((byte)3, doubled.Death.ValueB);
+        Assert.AreEqual((byte)2, selfInflicted.Death.ValueB);
+    }
+
+    [TestMethod]
+    public void Tick_TimesOutThenStartsNextRoundThenEndsTheMatch()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 60, goal: 50, rounds: 2);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+        field.RecordDeath(guest, 0, host.SlotIndex, Now);
+
+        Assert.IsNull(field.Tick(Now.AddSeconds(30)));
+        var timeout = field.Tick(Now.AddSeconds(63))!;
+        Assert.AreEqual(new FieldGameRoundEndPacket(0, FieldGameRoundEndPacket.RedWins, 1, 0), timeout.RoundEnd);
+
+        Assert.IsNull(field.Tick(Now.AddSeconds(70)), "round end pause");
+        var next = field.Tick(Now.AddSeconds(78))!;
+        Assert.AreEqual((byte)2, next.NextRound!.Round);
+
+        var secondTimeout = field.Tick(Now.AddSeconds(78 + 63))!;
+        Assert.AreEqual(FieldGameRoundEndPacket.Draw, secondTimeout.RoundEnd!.Winner);
+        var end = field.Tick(Now.AddSeconds(78 + 63 + 15))!;
+        Assert.AreEqual(FieldGameEndBroadcastPacket.Finished, end.GameEnd);
+    }
+
+    [TestMethod]
+    public void Tick_EndsTheMatchWhenATeamIsEmpty()
+    {
+        var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 60, goal: 1, rounds: 5);
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+        field.RecordDeath(guest, 0, host.SlotIndex, Now);
+        field.ExitGame(guest);
+
+        var end = field.Tick(Now.AddSeconds(16))!;
+
+        Assert.AreEqual(FieldGameEndBroadcastPacket.TeamEmpty, end.GameEnd);
+    }
+
+    [TestMethod]
     public void ApplyDefaultSlots_PvpKeepsSixPerTeam()
     {
         var field = new GameField(1, 0, "room", string.Empty, 0, 0, 1, 0, 0, 0, 0, CreateSession(1))
@@ -86,12 +153,12 @@ public sealed class GameFieldRoundTests
         Assert.IsFalse(FieldGameAddPlayerRequestPacket.TryParse([20, 0, 0], hasTarget: true, out _));
     }
 
-    private static (GameField Field, FieldPlayer Host, FieldPlayer Guest) CreateRunningMatch(byte mode, ushort timeLimit)
+    private static (GameField Field, FieldPlayer Host, FieldPlayer Guest) CreateRunningMatch(byte mode, ushort timeLimit, byte goal = 20, byte rounds = 1)
     {
         var hostSession = CreateSession(1, level: 20);
         var field = new GameField(1, 0, "room", string.Empty, 0, 0, mode, 0, 0, 0, 0, hostSession)
         {
-            Rules = FieldRules.Default with { Mode = mode, TimeLimit = timeLimit },
+            Rules = FieldRules.Default with { Mode = mode, TimeLimit = timeLimit, Goal = goal, Option = rounds },
         };
         Assert.IsTrue(field.TryGetPlayer(hostSession.Connection.ConnectionId, out var host));
         Assert.IsTrue(field.TryAddPlayer(CreateSession(2, level: 10), string.Empty, out var guest, out _));
