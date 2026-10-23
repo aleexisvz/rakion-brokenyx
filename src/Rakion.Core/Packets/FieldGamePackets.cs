@@ -130,12 +130,15 @@ public sealed record FieldGameExitRequestPacket(byte Value) : IPacket
 }
 
 /// <summary>
-/// Match exit broadcast: [u8 Value], the request byte echoed to the room.
-/// Evidence: Observed in engine.dll 0x36193cf0 (reads one byte) and RakionWorldServ.exe 0x407E00 (3-byte send).
+/// Match exit broadcast: [u8 SlotIndex] of the member who left the match.
+/// Evidence: Observed in engine.dll 0x36193cf0 (reads one byte) and RakionWorldServ.exe 0x407E00 (3-byte send of its
+/// slot argument, called from the 0x46 handler 0x424350 with the sender's slot).
 /// </summary>
 public sealed record FieldGameExitBroadcastPacket(byte Value) : IPacket
 {
     public ushort Opcode => (ushort)ServerOpcode.FieldGameExit;
+
+    public byte SlotIndex => Value;
 
     public void Serialize(PacketWriter writer)
     {

@@ -1627,7 +1627,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         bool matchOver = field.ExitGame(player);
         _logger.LogInformation("[{ConnectionId}] Room #{Number} slot {Slot} left the match (value {Value}, match over: {Over}).", session.Connection.ConnectionId, field.Number, player.SlotIndex, req.Value, matchOver);
 
-        await BroadcastToFieldAsync(field, new FieldGameExitBroadcastPacket(req.Value), cancellationToken).ConfigureAwait(false);
+        // The broadcast carries the leaver's slot, not the request byte (RakionWorldServ.exe 0x424350 -> 0x407E00,
+        // Observed); echoing the byte made clients add a nameless member in that slot.
+        await BroadcastToFieldAsync(field, new FieldGameExitBroadcastPacket(player.SlotIndex), cancellationToken).ConfigureAwait(false);
         if (matchOver)
         {
             await EndFieldGameAsync(field, cancellationToken).ConfigureAwait(false);
