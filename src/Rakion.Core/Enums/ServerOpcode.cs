@@ -123,6 +123,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryBuyPowerUser = 0x0034,
 
+    /// <summary>
+    /// Blacksmith reinforce result: [u8 Result] and, when Result is below 6, [u8 TargetSlot][u8 StoneSlot][u8 N][N x u8].
+    /// Evidence: Observed in engine.dll 0x36194600 (reader) and rakion.bin 0x478D80 (callback).
+    /// </summary>
+    EnchantReinforce = 0x0074,
+
     // --- Channel / Lobby ---
     /// <summary>
     /// Channel list response.
