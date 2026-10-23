@@ -25,6 +25,9 @@ public sealed class FieldPlayer
     /// <summary>Out of the round in Stage and Golem War after dying (legacy slot + 4, RakionWorldServ.exe 0x408895).</summary>
     public bool IsDead { get; set; }
 
+    /// <summary>Choice in the running kick vote, 0 when none (legacy slot + 0x10, RakionWorldServ.exe 0x409932).</summary>
+    public byte VoteChoice { get; set; }
+
     public FieldPlayer(WorldSession session, byte slotIndex, byte team, bool isMaster)
     {
         Session = session;

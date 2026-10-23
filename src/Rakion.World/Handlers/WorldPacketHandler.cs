@@ -28,6 +28,9 @@ namespace Rakion.World.Handlers;
 public sealed class WorldPacketHandler : ITcpPacketHandler
 {
     private readonly IOptions<WorldOptions> _options;
+
+    /// <summary>Account authority of a GM: <c>--create-user --admin</c> creates 100 (Inferred equivalent of legacy 0x34).</summary>
+    public const int GmAuthority = 100;
     private readonly IUserRepository _userRepository;
     private readonly ICharacterRepository _characterRepository;
     private readonly IAccountBalanceRepository _balanceRepository;
@@ -216,6 +219,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameRoundStart, HandleFieldGameRoundStartAsync);
         _registry.Map(ClientOpcode.FieldGameDie, HandleFieldGameDieAsync);
         _registry.Map(ClientOpcode.FieldKick, HandleFieldKickAsync);
+        _registry.Map(ClientOpcode.FieldGameVoteOpen, HandleFieldGameVoteOpenAsync);
+        _registry.Map(ClientOpcode.FieldGameVote, HandleFieldGameVoteAsync);
+        _registry.Map(ClientOpcode.FieldClose, HandleFieldCloseAsync);
         _registry.Map(ClientOpcode.FieldGamePoint, HandleFieldGamePointAsync);
         _registry.Map(ClientOpcode.FieldGameMasterGolem, HandleFieldGameGolemAsync);
         _registry.Map(ClientOpcode.FieldGameRoundEnd, HandleFieldGameStageEndAsync);
@@ -1224,6 +1230,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (!roomDestroyed && field is not null)
         {
             await BroadcastToFieldAsync(field, response, cancellationToken).ConfigureAwait(false);
+            if (player is not null)
+            {
+                await FinishVoteAsync(field, field.CancelVoteFor(player, DateTimeOffset.UtcNow), cancellationToken).ConfigureAwait(false);
+            }
 
             if (field.IsInProgress && !field.Players.Any(p => p.IsInGame))
             {
@@ -1307,6 +1317,117 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (await LeaveCurrentFieldAsync(target.Session, target.Session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
         {
             await ReturnToLobbyAsync(target.Session, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Kick vote opened by a player in the match (RakionWorldServ.exe 0x425A70 / 0x40A420).</summary>
+    private async ValueTask HandleFieldGameVoteOpenAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameVoteOpenRequestPacket.TryParse(payload.Span, out var request) ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var opener) is not true ||
+            field is null || opener is null || !opener.IsInGame)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGameVoteOpen rejected: malformed or not in a match.", session.Connection.ConnectionId);
+            return;
+        }
+
+        var (refusal, notify) = field.OpenVote(opener, request.TargetSlot, DateTimeOffset.UtcNow);
+        if (refusal is { } code)
+        {
+            await SendPacketAsync(session, new FieldGameVoteResultPacket(code), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        _logger.LogInformation("Room #{Number}: slot {Opener} opened a kick vote against slot {Target} ('{Reason}').", field.Number, opener.SlotIndex, request.TargetSlot, request.Reason);
+        var opened = new FieldGameVoteOpenPacket(request.TargetSlot, request.Reason);
+        foreach (var member in notify)
+        {
+            await SendPacketAsync(member.Session, opened, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Vote on the running kick vote (RakionWorldServ.exe 0x425BB0 / 0x4098E0).</summary>
+    private async ValueTask HandleFieldGameVoteAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!FieldGameVoteRequestPacket.TryParse(payload.Span, out var request) ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out var voter) is not true ||
+            field is null || voter is null)
+        {
+            return;
+        }
+
+        var (refusal, outcome) = field.CastVote(voter, request.Choice, DateTimeOffset.UtcNow);
+        if (refusal is { } code)
+        {
+            await SendPacketAsync(session, new FieldGameVoteResultPacket(code), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await FinishVoteAsync(field, outcome, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Announces a finished vote and kicks the target when it passed (legacy 0x4090B0 -> 0x4068C0).</summary>
+    private async ValueTask FinishVoteAsync(GameField field, GameField.VoteOutcome? outcome, CancellationToken cancellationToken)
+    {
+        if (outcome is null)
+        {
+            return;
+        }
+
+        var result = outcome.Result;
+        _logger.LogInformation(
+            "Room #{Number}: kick vote on slot {Target} ended (cancelled {Cancelled}, {Voters} players, {Yes} yes, {No} no, {Abstain} abstain), kick: {Kick}.",
+            field.Number,
+            result.TargetSlot,
+            result.Cancelled,
+            result.Voters,
+            result.Yes,
+            result.No,
+            result.Abstain,
+            outcome.KickSlot is not null);
+        foreach (var member in outcome.Recipients)
+        {
+            await SendPacketAsync(member.Session, result, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (outcome.KickSlot is { } slot && field.Players.FirstOrDefault(p => p.SlotIndex == slot) is { } target &&
+            await LeaveCurrentFieldAsync(target.Session, target.Session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
+        {
+            await ReturnToLobbyAsync(target.Session, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// GM room close (RakionWorldServ.exe 0x423C00 -> 0x405740): every occupant leaves the room. The legacy server
+    /// accepts it only from authority 0x34 and disconnects anyone else; here GM means <see cref="GmAuthority"/> or
+    /// more (Inferred mapping of our account authority) and other senders are only logged.
+    /// </summary>
+    private async ValueTask HandleFieldCloseAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (session.User is not { } user || user.Authority < GmAuthority ||
+            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is not true ||
+            field is null)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldClose rejected: not a GM in a room.", session.Connection.ConnectionId);
+            return;
+        }
+
+        _logger.LogInformation("Room #{Number} closed by GM '{User}'.", field.Number, user.Username);
+        foreach (var member in field.Players.ToList())
+        {
+            if (await LeaveCurrentFieldAsync(member.Session, member.Session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
+            {
+                await ReturnToLobbyAsync(member.Session, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 
@@ -1638,7 +1759,9 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        var cancelledVote = field.CancelVoteFor(player, DateTimeOffset.UtcNow);
         bool matchOver = field.ExitGame(player);
+        await FinishVoteAsync(field, cancelledVote, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("[{ConnectionId}] Room #{Number} slot {Slot} left the match (value {Value}, match over: {Over}).", session.Connection.ConnectionId, field.Number, player.SlotIndex, req.Value, matchOver);
 
         // The broadcast carries the leaver's slot, not the request byte (RakionWorldServ.exe 0x424350 -> 0x407E00,
@@ -2061,6 +2184,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             foreach (var field in channel.FieldManager.GetFields(channel.Index))
             {
+                await FinishVoteAsync(field, field.TickVote(now), cancellationToken).ConfigureAwait(false);
                 if (field.Tick(now) is not { } tick)
                 {
                     continue;

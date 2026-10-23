@@ -187,6 +187,50 @@ public sealed class GameFieldRoundTests
     }
 
     [TestMethod]
+    public void KickVote_PassesWithAMajority_AndFollowsTheLegacyRefusals()
+    {
+        var (field, host, guest, third) = CreateThreePlayerMatch();
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+
+        Assert.AreEqual(FieldGameVoteResultPacket.NotEnoughPlayers, field.OpenVote(guest, third.SlotIndex, Now).Refusal, "third not loaded");
+        field.MarkLoaded(third, Now);
+        Assert.AreEqual(FieldGameVoteResultPacket.TargetIsMaster, field.OpenVote(guest, host.SlotIndex, Now).Refusal);
+        Assert.AreEqual(FieldGameVoteResultPacket.OwnVote, field.OpenVote(guest, guest.SlotIndex, Now).Refusal);
+
+        var (refusal, notify) = field.OpenVote(guest, third.SlotIndex, Now);
+        Assert.IsNull(refusal);
+        CollectionAssert.AreEqual(new[] { host }, notify.ToArray());
+        Assert.AreEqual(FieldGameVoteResultPacket.VoteRunning, field.OpenVote(host, third.SlotIndex, Now).Refusal);
+        Assert.AreEqual(FieldGameVoteResultPacket.OwnVote, field.CastVote(third, FieldGameVoteRequestPacket.No, Now).Refusal);
+
+        var (castRefusal, outcome) = field.CastVote(host, FieldGameVoteRequestPacket.Yes, Now);
+        Assert.IsNull(castRefusal);
+        Assert.AreEqual(new FieldGameVoteResultPacket(0, false, 3, 2, 0, 0, third.SlotIndex), outcome!.Result);
+        Assert.AreEqual(third.SlotIndex, outcome.KickSlot);
+        Assert.AreEqual(FieldGameVoteResultPacket.NoVote, field.CastVote(host, FieldGameVoteRequestPacket.Yes, Now).Refusal);
+    }
+
+    [TestMethod]
+    public void KickVote_TimesOut_AndIsCancelledWhenTheTargetLeaves()
+    {
+        var (field, host, guest, third) = CreateThreePlayerMatch();
+        field.MarkLoaded(host, Now);
+        field.MarkLoaded(guest, Now);
+        field.MarkLoaded(third, Now);
+
+        field.OpenVote(guest, third.SlotIndex, Now);
+        Assert.IsNull(field.TickVote(Now.AddSeconds(30)));
+        var timedOut = field.TickVote(Now.AddSeconds(61))!;
+        Assert.IsNull(timedOut.KickSlot, "1 yes of 3 players is not half");
+
+        field.OpenVote(host, third.SlotIndex, Now);
+        var cancelled = field.CancelVoteFor(third, Now)!;
+        Assert.IsTrue(cancelled.Result.Cancelled);
+        Assert.IsFalse(cancelled.Recipients.Contains(third));
+    }
+
+    [TestMethod]
     public void PointReports_AreAcceptedOnlyAfterARoundEnd_WithModeLimits()
     {
         var (field, host, guest) = CreateRunningMatch(mode: 3, timeLimit: 300, goal: 1, rounds: 2);
@@ -243,6 +287,22 @@ public sealed class GameFieldRoundTests
         guest!.IsReady = true;
         Assert.AreEqual(FieldGameStartResponsePacket.Started, field.TryStartGame(host!));
         return (field, host!, guest);
+    }
+
+    private static (GameField Field, FieldPlayer Host, FieldPlayer Guest, FieldPlayer Third) CreateThreePlayerMatch()
+    {
+        var hostSession = CreateSession(1, level: 20);
+        var field = new GameField(1, 0, "room", string.Empty, 0, 0, 2, 0, 0, 0, 0, hostSession)
+        {
+            Rules = FieldRules.Default with { Mode = 2, TimeLimit = 300, Goal = 20, Option = 1 },
+        };
+        Assert.IsTrue(field.TryGetPlayer(hostSession.Connection.ConnectionId, out var host));
+        Assert.IsTrue(field.TryAddPlayer(CreateSession(2, level: 10), string.Empty, out var guest, out _));
+        Assert.IsTrue(field.TryAddPlayer(CreateSession(3, level: 5), string.Empty, out var third, out _));
+        guest!.IsReady = true;
+        third!.IsReady = true;
+        Assert.AreEqual(FieldGameStartResponsePacket.Started, field.TryStartGame(host!));
+        return (field, host!, guest, third);
     }
 
     private static WorldSession CreateSession(int id, byte level = 1) =>

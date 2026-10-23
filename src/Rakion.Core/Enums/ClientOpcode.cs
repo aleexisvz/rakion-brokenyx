@@ -411,6 +411,24 @@ public enum ClientOpcode : ushort
     FieldGameMasterGolem = 0x004D,
 
     /// <summary>
+    /// Closes the room (GM only in the legacy server, RakionWorldServ.exe 0x423C00). No payload.
+    /// Evidence: Observed in engine.dll ?SendFieldClose@IScavengerWorldNet@@UAEXXZ (opcode 0x003F).
+    /// </summary>
+    FieldClose = 0x003F,
+
+    /// <summary>
+    /// Opens a kick vote: (u8 target slot, string reason).
+    /// Evidence: Observed in engine.dll ?SendFieldGameVoteOpen@IScavengerWorldNet@@UAEXEPAD@Z (opcode 0x005D).
+    /// </summary>
+    FieldGameVoteOpen = 0x005D,
+
+    /// <summary>
+    /// Votes on the running kick vote: (u8 choice).
+    /// Evidence: Observed in engine.dll ?SendFieldGameVote@IScavengerWorldNet@@UAEXE@Z (opcode 0x005E).
+    /// </summary>
+    FieldGameVote = 0x005E,
+
+    /// <summary>
     /// Stage end decided by the room master's client: (u8 reason; 2 cleared, 3 failed).
     /// Evidence: Observed in engine.dll ?SendFieldGameRoundEnd@IScavengerWorldNet@@UAEXE@Z (opcode 0x004A).
     /// </summary>
