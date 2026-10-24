@@ -77,6 +77,9 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
             case BuddyOpcode.RemoveBuddyRequest when session.IsAuthenticated:
                 await RemoveFriendAsync(session, payload, cancellationToken).ConfigureAwait(false);
                 break;
+            case BuddyOpcode.UserStateRequest when session.IsAuthenticated:
+                await SendUserStateAsync(session, payload, cancellationToken).ConfigureAwait(false);
+                break;
             case BuddyOpcode.TunnelRequest when session.IsAuthenticated:
                 await RelayTunnelAsync(session, payload, cancellationToken).ConfigureAwait(false);
                 break;
@@ -245,6 +248,26 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
         }
 
         await SendAsync(session, new BuddyResultPacket(BuddyOpcode.SetNickResponse, 0), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// State of one account (0x3010 [char account[20]], sent by Buddy2.dll 0x10002590 when it cannot reach a player,
+    /// for example before a friend request; Observed). The client reads the answer as a normal 0x3FFF notice (no
+    /// 0x3011 reader exists in the DLL), and then contacts the player directly or through the tunnel.
+    /// </summary>
+    private async Task SendUserStateAsync(BuddySession session, ReadOnlyMemory<byte> payload, CancellationToken ct)
+    {
+        if (payload.Length < BuddyText.AccountBytes)
+        {
+            return;
+        }
+
+        string account = BuddyText.ReadAccount(payload.Span[..BuddyText.AccountBytes]);
+        var state = _online.TryGetValue(account, out var target) && target.IsOnline
+            ? StateOf(target)
+            : new BuddyUserState(account, Online: false);
+        _logger.LogInformation("[Buddy] '{Account}' asked the state of '{Target}': online {Online}.", session.Account, account, state.Online);
+        await SendAsync(session, new BuddyUserStatePacket([state]), ct).ConfigureAwait(false);
     }
 
     /// <summary>
