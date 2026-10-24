@@ -138,6 +138,13 @@ public enum ClientOpcode : ushort
     CharacterWhisper = 0x0016,
 
     /// <summary>
+    /// Asks the account (and Messenger name) of a character, before adding it as a Messenger friend: (string name).
+    /// Evidence: Observed in engine.dll ?SendCharacterGetUserName@IScavengerWorldNet and RakionWorldServ.exe 0x420760
+    /// (name below 13 characters).
+    /// </summary>
+    CharacterGetUserName = 0x0019,
+
+    /// <summary>
     /// Tutorial completion notification.
     /// Evidence: Observed in engine.dll ?SendCharacterTutorialClear@IScavengerWorldNet@@UAEXXZ (0x001A).
     /// </summary>

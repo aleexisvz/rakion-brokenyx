@@ -205,6 +205,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.ChannelCharacters, (session, _, ct) => HandleChannelCharactersAsync(session, ct));
         _registry.Map(ClientOpcode.ChannelChat, HandleChannelChatAsync);
         _registry.Map(ClientOpcode.CharacterWhisper, HandleCharacterWhisperAsync);
+        _registry.Map(ClientOpcode.CharacterGetUserName, HandleCharacterGetUserNameAsync);
         _registry.Map(ClientOpcode.FieldList, (session, payload, ct) => new ValueTask(HandleFieldListAsync(session, payload, ct)));
         _registry.Map(ClientOpcode.FieldCreate, HandleFieldCreateAsync);
         _registry.Map(ClientOpcode.FieldQuickEnter, HandleFieldQuickEnterAsync);
@@ -894,6 +895,33 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             await SendPacketAsync(member, broadcast, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Account of a character, asked by the Messenger before adding a friend by character name (RakionWorldServ.exe
+    /// 0x420760, Observed). The answer carries the login, which is the Messenger id, and the name friends see.
+    /// </summary>
+    private async ValueTask HandleCharacterGetUserNameAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!CharacterGetUserNameRequestPacket.TryParse(payload.Span, out var request))
+        {
+            return;
+        }
+
+        var character = await _characterRepository.GetCharacterByNameAsync(request.CharacterName, cancellationToken).ConfigureAwait(false);
+        var owner = character is null ? null : await _userRepository.GetByIdAsync(character.UserId, cancellationToken).ConfigureAwait(false);
+        var response = character is null || owner is null
+            ? new CharacterGetUserNameResponsePacket(CharacterGetUserNameResponsePacket.NotFound)
+            : new CharacterGetUserNameResponsePacket(CharacterGetUserNameResponsePacket.Found, owner.Username, character.Name);
+        _logger.LogInformation(
+            "[{ConnectionId}] GetUserName '{Name}': {Account}.",
+            session.Connection.ConnectionId,
+            request.CharacterName,
+            owner?.Username ?? "not found");
+        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleCharacterWhisperAsync(
