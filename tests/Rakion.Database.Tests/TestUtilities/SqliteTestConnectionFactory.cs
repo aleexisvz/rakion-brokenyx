@@ -133,6 +133,13 @@ public sealed class SqliteTestConnectionFactory : IDbConnectionFactory, IDisposa
                 PRIMARY KEY (class_id, level)
             );
 
+            CREATE TABLE IF NOT EXISTS buddies (
+                user_id TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT '',
+                buddy_user_id TEXT NOT NULL,
+                PRIMARY KEY (user_id, buddy_user_id)
+            );
+
             CREATE TABLE IF NOT EXISTS user_stage_info (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 character_id INTEGER NOT NULL,
