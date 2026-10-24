@@ -153,6 +153,20 @@ public sealed class FieldJoinPacketTests
         CollectionAssert.AreEqual(new byte[] { 0, 1, 3, 1, 1, 0, 4 }, PayloadOf(new FieldGameVoteResultPacket(0, true, 3, 1, 1, 0, 4)));
     }
 
+    [TestMethod]
+    public void AdminNoticePackets_RoundTripAndRefuseLongFields()
+    {
+        var request = new AdminNoticeRequestPacket(AdminNoticeRequestPacket.InMatch, "Hanako", "hola");
+        Assert.IsTrue(AdminNoticeRequestPacket.TryParse(PayloadOf(request), out var parsed));
+        Assert.AreEqual(request, parsed);
+        Assert.IsFalse(AdminNoticeRequestPacket.TryParse(PayloadOf(new AdminNoticeRequestPacket(0, new string('a', 13), "x")), out _));
+        Assert.IsFalse(AdminNoticeRequestPacket.TryParse(PayloadOf(new AdminNoticeRequestPacket(0, string.Empty, new string('a', 0x81))), out _));
+
+        CollectionAssert.AreEqual(new byte[] { (byte)'o', (byte)'k', 0 }, PayloadOf(new SystemNoticePacket("ok")));
+        Assert.HasCount(AdminNoticeRequestPacket.MaxTextLength + 1, PayloadOf(new SystemNoticePacket(new string('a', 200))), "cut to 128 + terminator");
+        CollectionAssert.AreEqual(new byte[] { 1 }, PayloadOf(new AdminNoticeResponsePacket(AdminNoticeResponsePacket.NotOnline)));
+    }
+
     private static byte[] PayloadOf(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

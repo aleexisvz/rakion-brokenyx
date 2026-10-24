@@ -14,7 +14,9 @@ using Rakion.Database.Security;
 using Rakion.Database.Entities;
 using Rakion.Database.Import;
 using Rakion.World.Channels;
+using Rakion.World.Chat;
 using Rakion.World.Configuration;
+using Rakion.World.Features.Admin;
 using Rakion.World.Features.Economy;
 using Rakion.World.Handlers;
 using Rakion.World.Hosting;
@@ -176,6 +178,8 @@ builder.Services.AddSingleton<IUserRepository, UserRepository>();
 builder.Services.AddSingleton<ICharacterRepository, CharacterRepository>();
 builder.Services.AddSingleton<IAccountBalanceRepository, AccountBalanceRepository>();
 builder.Services.AddSingleton<IAccountUpgradeRepository, AccountUpgradeRepository>();
+builder.Services.AddSingleton<IAdminRepository, AdminRepository>();
+builder.Services.AddSingleton<IChatCommandInterceptor, GmChatCommands>();
 builder.Services.AddSingleton<IInventoryRepository, InventoryRepository>();
 builder.Services.AddSingleton<IMatchResultRepository, MatchResultRepository>();
 
