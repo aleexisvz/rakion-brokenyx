@@ -473,6 +473,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             unlockedSlots,
             gold,
             cash);
+
+        // The ranking only counts accounts connected recently (legacy UserGameInfo.lastconnect). The launcher login
+        // path of the Broker does not record it, so the World login does.
+        await _userRepository.UpdateLastConnectAsync(user.Id, DateTime.UtcNow, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleGameGuardAsync(
