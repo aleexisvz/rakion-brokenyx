@@ -13,7 +13,9 @@ using Rakion.Core.Utilities;
 using Rakion.Database.Repositories;
 using Rakion.Network.Tcp;
 using Rakion.World.Channels;
+using Rakion.World.Chat;
 using Rakion.World.Configuration;
+using Rakion.World.Features.Admin;
 using Rakion.World.Features.Economy;
 using Rakion.World.Fields;
 using Rakion.World.Modules;
@@ -29,8 +31,6 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 {
     private readonly IOptions<WorldOptions> _options;
 
-    /// <summary>Account authority of a GM: <c>--create-user --admin</c> creates 100 (Inferred equivalent of legacy 0x34).</summary>
-    public const int GmAuthority = 100;
     private readonly IUserRepository _userRepository;
     private readonly ICharacterRepository _characterRepository;
     private readonly IAccountBalanceRepository _balanceRepository;
@@ -40,6 +40,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly IAccountInventoryProvider? _accountInventory;
     private readonly UdpEndpointRegistry _udpEndpoints;
     private readonly IMatchResultRepository? _matchResults;
+    private readonly IChatCommandInterceptor? _chatCommands;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -58,11 +59,13 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         IAccountInventoryProvider? accountInventory,
         ILogger<WorldPacketHandler> logger,
         UdpEndpointRegistry? udpEndpoints = null,
-        IMatchResultRepository? matchResults = null)
+        IMatchResultRepository? matchResults = null,
+        IChatCommandInterceptor? chatCommands = null)
     {
         _options = options;
         _udpEndpoints = udpEndpoints ?? new UdpEndpointRegistry();
         _matchResults = matchResults;
+        _chatCommands = chatCommands;
         _userRepository = userRepository;
         _characterRepository = characterRepository;
         _balanceRepository = balanceRepository;
@@ -222,6 +225,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         _registry.Map(ClientOpcode.FieldGameVoteOpen, HandleFieldGameVoteOpenAsync);
         _registry.Map(ClientOpcode.FieldGameVote, HandleFieldGameVoteAsync);
         _registry.Map(ClientOpcode.FieldClose, HandleFieldCloseAsync);
+        _registry.Map(ClientOpcode.AdminNotice, HandleAdminNoticeAsync);
         _registry.Map(ClientOpcode.FieldGamePoint, HandleFieldGamePointAsync);
         _registry.Map(ClientOpcode.FieldGameMasterGolem, HandleFieldGameGolemAsync);
         _registry.Map(ClientOpcode.FieldGameRoundEnd, HandleFieldGameStageEndAsync);
@@ -861,6 +865,11 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        if (await TryRunChatCommandAsync(session, req.Message, cancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
         // Retail v258 client prepends "{CharacterName} : " before sending Opcode 0x0022.
         // We ensure the prefix is present without duplicating it.
         string messageToBroadcast = req.Message.StartsWith($"{session.ActiveCharacter.Name} : ", StringComparison.OrdinalIgnoreCase)
@@ -1405,29 +1414,132 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
     /// <summary>
     /// GM room close (RakionWorldServ.exe 0x423C00 -> 0x405740): every occupant leaves the room. The legacy server
-    /// accepts it only from authority 0x34 and disconnects anyone else; here GM means <see cref="GmAuthority"/> or
-    /// more (Inferred mapping of our account authority) and other senders are only logged.
+    /// accepts it only from authority 0x34 and disconnects anyone else; here only a GM (<see cref="GmPolicy"/>) can,
+    /// and other senders are only logged. The v258 client never sends it; GMs use the /close chat command.
     /// </summary>
     private async ValueTask HandleFieldCloseAsync(
         WorldSession session,
         ReadOnlyMemory<byte> payload,
         CancellationToken cancellationToken)
     {
-        if (session.User is not { } user || user.Authority < GmAuthority ||
-            session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is not true ||
-            field is null)
+        if (!GmPolicy.IsGm(session.User) || !await CloseRoomAsync(session, cancellationToken).ConfigureAwait(false))
         {
             _logger.LogWarning("[{ConnectionId}] FieldClose rejected: not a GM in a room.", session.Connection.ConnectionId);
-            return;
+        }
+    }
+
+    private async ValueTask<bool> CloseRoomAsync(WorldSession session, CancellationToken cancellationToken)
+    {
+        if (session.ActiveChannel?.FieldManager.TryGetFieldBySession(session.Connection.ConnectionId, out var field, out _) is not true ||
+            field is null)
+        {
+            return false;
         }
 
-        _logger.LogInformation("Room #{Number} closed by GM '{User}'.", field.Number, user.Username);
+        _logger.LogInformation("Room #{Number} closed by GM '{User}'.", field.Number, session.User?.Username);
         foreach (var member in field.Players.ToList())
         {
             if (await LeaveCurrentFieldAsync(member.Session, member.Session.ActiveChannel, notifyLeaver: true, cancellationToken).ConfigureAwait(false))
             {
                 await ReturnToLobbyAsync(member.Session, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Lets the chat command interceptor (contract C-5) take a chat line. The client prefixes "Name : ", which is
+    /// removed first. Returns true when the line was a command and must not be broadcast.
+    /// </summary>
+    private async ValueTask<bool> TryRunChatCommandAsync(WorldSession session, string message, CancellationToken cancellationToken)
+    {
+        if (_chatCommands is null)
+        {
+            return false;
+        }
+
+        string prefix = $"{session.ActiveCharacter?.Name} : ";
+        string text = message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? message[prefix.Length..] : message;
+        if (!text.StartsWith('/'))
+        {
+            return false;
+        }
+
+        var context = new ChatCommandContext(
+            session,
+            name => _sessions.Values.FirstOrDefault(s => string.Equals(s.ActiveCharacter?.Name, name, StringComparison.OrdinalIgnoreCase)),
+            async (target, ct) =>
+            {
+                _logger.LogInformation("[{ConnectionId}] Disconnected by GM '{Gm}'.", target.Connection.ConnectionId, session.User?.Username);
+                await target.Connection.CloseAsync().ConfigureAwait(false);
+            },
+            (gm, ct) => CloseRoomAsync(gm, ct));
+        return await _chatCommands.TryHandleAsync(context, text.Trim(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// GM notice from the client's /notice command (RakionWorldServ.exe 0x41F290, Observed): delivered as 0x63 to
+    /// every player with a character (scope 0), to those in a room's waiting lobby (2) or in a match (3), or only to
+    /// the named character; a named notice is answered with 0x05. Non-GM senders are disconnected by the legacy
+    /// server; here they are only logged.
+    /// </summary>
+    private async ValueTask HandleAdminNoticeAsync(
+        WorldSession session,
+        ReadOnlyMemory<byte> payload,
+        CancellationToken cancellationToken)
+    {
+        if (!GmPolicy.IsGm(session.User) || !AdminNoticeRequestPacket.TryParse(payload.Span, out var request))
+        {
+            _logger.LogWarning("[{ConnectionId}] AdminNotice rejected: not a GM or malformed.", session.Connection.ConnectionId);
+            return;
+        }
+
+        var notice = new SystemNoticePacket(request.Text);
+        bool delivered = false;
+        foreach (var target in _sessions.Values)
+        {
+            if (target.ActiveCharacter is not { } character ||
+                (request.TargetCharacter.Length > 0 && !string.Equals(character.Name, request.TargetCharacter, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            FieldPlayer? member = null;
+            bool inRoom = target.ActiveChannel is { } channel &&
+                channel.FieldManager.TryGetFieldBySession(target.Connection.ConnectionId, out _, out member);
+            bool inMatch = inRoom && member is { IsInGame: true };
+            bool included = request.Scope switch
+            {
+                AdminNoticeRequestPacket.Everyone => true,
+                AdminNoticeRequestPacket.InRoomLobby => inRoom && !inMatch,
+                AdminNoticeRequestPacket.InMatch => inMatch,
+                _ => false,
+            };
+            if (!included)
+            {
+                continue;
+            }
+
+            await SendPacketAsync(target, notice, cancellationToken).ConfigureAwait(false);
+            delivered = true;
+            if (request.TargetCharacter.Length > 0)
+            {
+                break;
+            }
+        }
+
+        _logger.LogInformation(
+            "[{ConnectionId}] GM notice (scope {Scope}, target '{Target}'): '{Text}', delivered {Delivered}.",
+            session.Connection.ConnectionId,
+            request.Scope,
+            request.TargetCharacter,
+            request.Text,
+            delivered);
+        if (request.TargetCharacter.Length > 0)
+        {
+            var answer = new AdminNoticeResponsePacket(delivered ? AdminNoticeResponsePacket.Delivered : AdminNoticeResponsePacket.NotOnline);
+            await SendPacketAsync(session, answer, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -1516,7 +1628,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(req.Message))
+        if (string.IsNullOrWhiteSpace(req.Message) ||
+            await TryRunChatCommandAsync(session, req.Message, cancellationToken).ConfigureAwait(false))
         {
             return;
         }
