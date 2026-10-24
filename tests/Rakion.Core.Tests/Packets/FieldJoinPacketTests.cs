@@ -163,6 +163,7 @@ public sealed class FieldJoinPacketTests
         Assert.IsFalse(AdminNoticeRequestPacket.TryParse(PayloadOf(new AdminNoticeRequestPacket(0, string.Empty, new string('a', 0x81))), out _));
 
         CollectionAssert.AreEqual(new byte[] { (byte)'o', (byte)'k', 0 }, PayloadOf(new SystemNoticePacket("ok")));
+        Assert.HasCount(AdminNoticeRequestPacket.MaxTextLength + 1, PayloadOf(new SystemNoticePacket(new string('a', 200))), "cut to 128 + terminator");
         CollectionAssert.AreEqual(new byte[] { 1 }, PayloadOf(new AdminNoticeResponsePacket(AdminNoticeResponsePacket.NotOnline)));
     }
 

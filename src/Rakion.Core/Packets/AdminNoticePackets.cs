@@ -59,10 +59,15 @@ public sealed record AdminNoticeResponsePacket(byte Result) : IPacket
     public void Serialize(PacketWriter writer) => writer.WriteByte(Result);
 }
 
-/// <summary>System notice shown to the player: [string Text] (opcode 0x63).</summary>
+/// <summary>
+/// System notice shown to the player: [string Text] (opcode 0x63). The text is cut at
+/// <see cref="AdminNoticeRequestPacket.MaxTextLength"/> characters: the legacy server never sends longer ones and a
+/// 150-character notice crashed the v258 client with a buffer overrun (observed with the real client).
+/// </summary>
 public sealed record SystemNoticePacket(string Text) : IPacket
 {
     public ushort Opcode => (ushort)ServerOpcode.SystemNotice;
 
-    public void Serialize(PacketWriter writer) => writer.WriteNullTerminatedString(Text);
+    public void Serialize(PacketWriter writer) =>
+        writer.WriteNullTerminatedString(Text.Length > AdminNoticeRequestPacket.MaxTextLength ? Text[..AdminNoticeRequestPacket.MaxTextLength] : Text);
 }

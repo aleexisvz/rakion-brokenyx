@@ -23,7 +23,8 @@ public sealed class GmChatCommandsTests
         Assert.IsFalse(await commands.TryHandleAsync(ContextFor(authority: GmPolicy.GmAuthority), "hola", CancellationToken.None));
         Assert.IsFalse(await commands.TryHandleAsync(ContextFor(authority: GmPolicy.GmAuthority), "/unknown", CancellationToken.None));
         Assert.IsTrue(await commands.TryHandleAsync(ContextFor(authority: GmPolicy.GmAuthority), "/gm", CancellationToken.None));
-        Assert.AreEqual(new SystemNoticePacket(GmChatCommands.Help), sender.Sent.Single());
+        CollectionAssert.AreEqual(GmChatCommands.Help.Select(line => new SystemNoticePacket(line)).ToArray(), sender.Sent.ToArray());
+        Assert.IsTrue(GmChatCommands.Help.All(line => line.Length <= AdminNoticeRequestPacket.MaxTextLength));
     }
 
     [TestMethod]

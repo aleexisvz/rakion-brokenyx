@@ -13,7 +13,13 @@ namespace Rakion.World.Features.Admin;
 /// </summary>
 public sealed class GmChatCommands : IChatCommandInterceptor
 {
-    public const string Help = "GM: /givegold <pj> <n>, /givecash <pj> <n>, /giveitem <pj> <id>, /ban <pj> <dias, 0 = siempre> [motivo], /unban <pj>, /kickout <pj>, /close";
+    /// <summary>Help lines, each short enough for one notice (the client crashes on notices over 128 characters).</summary>
+    public static readonly IReadOnlyList<string> Help =
+    [
+        "GM: /givegold <pj> <n>, /givecash <pj> <n>, /giveitem <pj> <id>",
+        "GM: /ban <pj> <dias, 0 = siempre> [motivo], /unban <pj>",
+        "GM: /kickout <pj>, /close, /notice <texto>",
+    ];
 
     private const int SlotsPerBag = 30;
     private const int BoxSlots = 120;
@@ -51,7 +57,7 @@ public sealed class GmChatCommands : IChatCommandInterceptor
         string[] parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         string reply = parts[0].ToLowerInvariant() switch
         {
-            "/gm" or "/gmhelp" => Help,
+            "/gm" or "/gmhelp" => string.Join('\n', Help),
             "/givegold" => await GiveCurrencyAsync(context, parts, gold: true, cancellationToken).ConfigureAwait(false),
             "/givecash" => await GiveCurrencyAsync(context, parts, gold: false, cancellationToken).ConfigureAwait(false),
             "/giveitem" => await GiveItemAsync(context, parts, cancellationToken).ConfigureAwait(false),
@@ -67,7 +73,11 @@ public sealed class GmChatCommands : IChatCommandInterceptor
         }
 
         _logger.LogInformation("GM '{Gm}' ran '{Command}': {Reply}", context.Sender.User!.Username, text, reply);
-        await _sender.SendAsync(context.Sender, new SystemNoticePacket(reply), cancellationToken).ConfigureAwait(false);
+        foreach (string line in reply.Split('\n'))
+        {
+            await _sender.SendAsync(context.Sender, new SystemNoticePacket(line), cancellationToken).ConfigureAwait(false);
+        }
+
         return true;
     }
 
