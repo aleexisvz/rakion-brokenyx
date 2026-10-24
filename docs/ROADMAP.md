@@ -27,9 +27,11 @@ Cada contrato se entrega en un PR pequeño que se mergea antes de que el otro ca
 | **C-1** | `IWorldOpcodeModule`: registro tipado `opcode → handler` en World; `WorldPacketHandler` delega en él los opcodes que no maneja. | B | A (`EconomyModule`) | 4.1 |
 | **C-2** | `IWorldSessionView` (usuario, personaje, canal, sala, en partida) + `ISessionSender` (enviar a una sesión). | B | A | 4.1, 7.3, 7.4 |
 | **C-3** | Paquetes de inventario, tienda, herrería y estadísticas en `Rakion.Core/Packets/`. | A | B | 4.x |
-| **C-4** | `IMatchResultService` en Database: persistir EXP, oro, victorias/derrotas y `logdieplayer` en una transacción. | A | B | 6.4 |
+| **C-4** | `IMatchResultRepository` en Database: persistir EXP, oro, victorias/derrotas y EXP de criaturas en una transacción. | A | B | 6.4 |
 | **C-5** | `IChatCommandInterceptor`: el chat de canal y de sala lo consulta antes de difundir. | B | A | 7.3 |
 | **C-6** | `IWorldTelemetry`: sesiones, salas y partidas activas. | B | A | 7.4 |
+
+> **Estado de los contratos:** C-0 a C-5 entregados (C-5 en #35). C-6 pendiente (7.4).
 
 ### Reglas de Integración
 
@@ -68,7 +70,8 @@ rakion-brokenyx/
 │   ├── Rakion.Network.Tests/    # Pruebas de integración de sockets y concurrencia TCP
 │   ├── Rakion.Database.Tests/   # Pruebas de persistencia, concurrencia de balance y repositorios SQLite
 │   ├── Rakion.Broker.Tests/     # Pruebas de autenticación Broker, tickets de sesión y AutoFetch HTTP
-│   └── Rakion.World.Tests/      # Pruebas de ciclo de vida de WorldServer, login y UDP hole punching
+│   ├── Rakion.World.Tests/      # Pruebas de ciclo de vida de WorldServer, login y UDP hole punching
+│   └── Rakion.Maintenance.Tests/ # Pruebas del cálculo de rankings
 ├── config/
 │   └── appsettings.json         # Configuración centralizada de IPs, puertos, base de datos y tasas de juego
 └── docs/
@@ -171,7 +174,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir a los jugadores gestionar sus objetos, comprar en la tienda y mejorar equipamiento en la herrería.
 > **Carril:** A. **Código:** `src/Rakion.World/Features/Economy/`, `src/Rakion.Database/`, paquetes C-3 en `Rakion.Core`.
 
-> **Estado:** 4.0–4.5 mergeados (PRs #9–#21, #27, #30; contratos #9–#11). Pendientes 4.6–4.8. Detalle en `src/Rakion.World/Features/Economy/README.md`.
+> **Estado:** 4.0–4.5 y 4.7 mergeados (PRs #9–#21, #27, #30, #33; contratos #9–#11); 4.8 en parte (#33). Pendientes 4.6, el resto de 4.8 y 4.9. Detalle en `src/Rakion.World/Features/Economy/README.md`.
 
 - [x] **4.0 Prerrequisitos:** contratos C-0 (#9), C-1 (#10) y C-2 (#11) mergeados en `main`; C-3 (paquetes de economía en `InventoryPackets.cs`) entregado con cada ítem.
 - [x] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):** (#12, #13, #14, #15, #17)
@@ -193,10 +196,14 @@ rakion-brokenyx/
 - [ ] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*:
   - Evidencia: `Peek()` `0x006B`, `Accept(u32, u16)` `0x006C`, `Dispose(u32)` `0x006D` **Observed**; respuestas **Unknown**.
   - Verificado con cliente real: no.
-- [ ] **4.7 Reseteo de Puntos (`SendCharacterStateClear(uint8, uint16 cost)`, `0x001B`):**
-  - Pendiente. En la respuesta, `0x001B` coincide con la confirmación de GameGuard (carril B): hay que coordinarlo.
-  - Verificado con cliente real: no.
-- [ ] **4.8 Otras compras y pociones:** bolsa (`0x0032`), slot de personaje (`0x0035`), slot de poción (`0x006F`) y apilar pociones (`0x0073`). Opcodes **Observed**; respuestas **Unknown**.
+- [x] **4.7 Reseteo de Puntos (`SendCharacterStateClear`, `0x001B`):** (#33)
+  - Precio en cash por nivel (7000 / 12000 / 19000), resultados 1 (sin cash) y 2 (nada que resetear); el personaje conserva 3 puntos por nivel y el resto vuelve a los puntos PowerUser. **Observed** (`RakionWorldServ.exe` 0x413FD4, 0x41441D; cliente `engine.dll` 0x36195400); reparto **Derived**.
+  - La respuesta va por `0x001B`, el mismo número que nuestra confirmación de GameGuard (ver 4.9).
+  - Verificado con cliente real: sí.
+- [ ] **4.8 Otras compras y pociones:** (#33, en parte)
+  - Hecho: bolsa (`0x0032`, 8000 de cash, hasta 4 bolsas), slot de poción (`0x006F`, ítems 10008–10010 del catálogo) y cantidad de las pociones compradas (`hit2` del catálogo en `exp`). **Observed**; verificado con cliente real: sí.
+  - Pendiente: slot de personaje (`0x0035`; el login muestra como máximo 3 personajes), apilar pociones (`0x0073`), gastar pociones en partida (`0x006E`) y cupones de descuento (11000–11999, tabla **Unknown**).
+- [ ] **4.9 Revisar la confirmación de GameGuard:** respondemos a `0x0010` con `0x001B [0]`, pero el cliente lee `0x001B` como la respuesta del reseteo de puntos (9 bytes). Comprobar qué enviaba el original (`RakionWorldServ.exe` 0x41FC00).
   - Verificado con cliente real: no.
 
 ---
@@ -205,7 +212,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir la creación de salas de espera, cambio de equipos, selección de mapas y cuenta regresiva de inicio.
 > **Carril:** B. **Código:** `src/Rakion.World/` (excepto `Features/Economy/`).
 
-> **Estado:** 5.1–5.4 mergeados (PRs #22–#25). Pendiente 5.5. Detalle en `src/Rakion.World/README.md`.
+> **Estado:** Completada: 5.1–5.5 mergeados (PRs #22–#25, #34). Detalle en `src/Rakion.World/README.md`.
 
 - [x] **5.1 Lista de Salas (`SendFieldList`, `0x0036`):** (#22, #24)
   - Entrada de la lista con el layout del cliente: 11 bytes de reglas, bloque del host (sus direcciones UDP) y nombre.
@@ -220,8 +227,10 @@ rakion-brokenyx/
 - [x] **5.4 Inicio de Partida (`SendFieldGameStart`, `0x0043`):** (#23, #25)
   - Comprobaciones del original (equipos, todos listos), carga del mapa, entrar (`0x0045`) y salir (`0x0046`) de la partida.
   - Evidencia: **Observed** (`RakionWorldServ.exe` 0x4079D0, 0x407C70, 0x407E00). Verificado con cliente real: sí.
-- [ ] **5.5 Votaciones y cerrar sala:** `SendFieldGameVote` / `SendFieldGameVoteOpen` (opcodes en `engine.dll`, **Observed**) y `SendFieldClose` (`0x003F`, solo GM en el original).
-  - Verificado con cliente real: no.
+- [x] **5.5 Votaciones y cerrar sala:** (#34, #35)
+  - Votación de expulsión en partida (`0x005D` / `0x005E`, resultado `0x005F`): 3 jugadores como mínimo, 60 s, gana el sí por mayoría con participación de la mitad. **Observed** (`RakionWorldServ.exe` 0x40A420, 0x4090B0). En el cliente: `/kick <slot> <motivo>` y `/1` `/2` `/3`.
+  - Cerrar sala: solo GM. El cliente v258 no envía `0x003F`, así que el GM usa `/close` (7.3).
+  - Verificado con cliente real: sí (votación con 3 jugadores).
 
 ---
 
@@ -229,7 +238,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir que los jugadores jueguen la partida de forma fluida, intercambien golpes y el servidor registre muertes, rondas y recompensas.
 > **Carril:** B. **Código:** `src/Rakion.Relay/` (librería sin sockets), `src/Rakion.World/` (listeners UDP ya existentes desde 3.1). 6.4 consume el contrato C-4 del carril A.
 
-> **Estado:** 6.1, 6.3, 6.4 y 6.6 mergeados (PRs #24, #25, #28–#30); 6.5 en parte (Golem War). El combate va de cliente a cliente por UDP y funciona con dos clientes; quedan el relevo por servidor (6.2) y los modos de escenario (6.5).
+> **Estado:** 6.1 y 6.3–6.6 mergeados (PRs #24, #25, #28–#30, #32). El combate va de cliente a cliente por UDP y funciona con dos y tres clientes en la misma red. Pendientes: el relevo por servidor (6.2, para cuando se abra al público) y los extras de Stage (6.7).
 
 - [x] **6.1 Registro de Endpoints UDP por Jugador (`SendFieldSlotUDP`, `0x0062`):** (#24)
   - Los sondeos UDP llevan el índice y la clave del login; `UdpEndpointRegistry` guarda las direcciones de cada jugador y viajan en los registros de la sala para que los clientes se conecten entre sí. `0x0062` se reenvía entre miembros.
@@ -243,10 +252,13 @@ rakion-brokenyx/
 - [x] **6.4 Fin de Ronda y Partida (`0x004A`, `0x0049`, `0x0044`):** (#25)
   - Fin de ronda por objetivo o por tiempo, pausa de 15 s, siguiente ronda y fin de partida (última ronda o equipo vacío), con un temporizador de salas en `WorldServer`.
   - Evidencia: **Observed** (`RakionWorldServ.exe` 0x408E3E, 0x409A00). Verificado con cliente real: sí.
-- [ ] **6.5 Entidades maestras:** Golems (`SendFieldGameMasterGolem`, `0x004D`) y jefes (`SendFieldGameMasterBossHP`, `0x0060`); lógica de los modos de escenario 0 y 1.
-  - Hecho (#28, #29): Golem War (modo 1) termina la ronda cuando muere un golem o todo un equipo; al acabar el tiempo gana el golem con más vida (`RakionWorldServ.exe` 0x405D70, 0x4063A0, **Observed**). `0x0060` se guarda como vida del líder para el desempate de Leader Wars (**Inferred**).
-  - Pendiente: lógica del modo escenario (Stage, modo 0) y jefes.
-  - Verificado con cliente real: sí (Golem War).
+- [x] **6.5 Entidades maestras y modos de escenario:** (#28, #29, #32)
+  - Golem War (modo 1): la ronda termina cuando muere un golem o todo un equipo; al acabar el tiempo gana el golem con más vida (`RakionWorldServ.exe` 0x405D70, 0x4063A0, **Observed**).
+  - `0x0060` (`SendFieldGameMasterBossHP`): el original solo lo acepta de los líderes de Leader Wars (0x425CC0, **Observed**); se guarda para el desempate por tiempo.
+  - Stage (modo 0): el dueño de la sala cierra la ronda (`0x004A`, 2 superado / 3 fallado) y cada jugador cobra con `0x0053` solo si mejora su rango del stage; rangos, drops y recompensa en una transacción (0x405A90, 0x425010, 0x40BAE0, **Observed**).
+  - Verificado con cliente real: sí (Golem War y stages 1–2).
+- [ ] **6.7 Extras de Stage:** límites de nivel y de jugadores de cada stage (`StageInfo`) al crear la sala, y las compras `0x0070` (borrar rangos) y `0x0071` (acceso libre por nivel).
+  - Verificado con cliente real: no.
 - [x] **6.6 Recompensas (`SendFieldGamePoint`, `0x0050`):** (#28, #29, #30)
   - El cliente calcula la EXP y el oro; el servidor aplica los topes por modo del original, +50 % de EXP a PowerUser y los multiplicadores `World:Rewards` (`RakionWorldServ.exe` 0x424B60, **Observed**). Persistencia con `IMatchResultRepository` (C-4).
   - Subida de nivel con la tabla del cliente (`--import-levels`, `DataSetup.xfs`), +3 puntos por nivel y aviso `0x0051`; victorias/derrotas/empates, EXP de criaturas (tabla `NPCInfo`) y aviso a la sala `0x0052`.
@@ -256,29 +268,38 @@ rakion-brokenyx/
 
 ### Fase 7: Servicios de Mantenimiento, Rankings y Herramientas GM
 > **Objetivo:** Dotar al ecosistema de herramientas de administración en vivo, sistema de rangos y detección de tramposos.
-> **Carril:** A. **Código:** `src/Rakion.Maintenance/` (nuevo, hospedado por `Rakion.App`), `src/Rakion.Database/`.
+> **Carril:** A. **Código:** `src/Rakion.Maintenance/` (hospedado por `Rakion.App`), `src/Rakion.Database/`, `src/Rakion.World/Features/Admin/`.
 
-- [ ] **7.1 Motor de Rankings Atómicos (Reemplazo de `RankUpdate.exe`):**
-  - `BackgroundService` que recalcule periódicamente las clasificaciones generales y por clase con doble buffer (`TotalRank` → `TotalRankP`, **Observed** en cadenas SQL de `RankUpdate.exe`).
-  - Tabla de grados 26 → 15 por EXP: **Inferred** hasta contrastarla con datos reales; grados 14 → 1: **Unknown**.
-  - Verificado con cliente real: no.
+> **Estado:** 7.1 y 7.3 mergeados (PRs #35, #36). Pendientes 7.2 y 7.4. Detalle en `src/Rakion.Maintenance/README.md` y `src/Rakion.World/README.md`.
+
+- [x] **7.1 Motor de Rankings (Reemplazo de `RankUpdate.exe`):** (#36)
+  - `RankingScheduler` (al arrancar y cada 24 h) y `/rankupdate`: puesto por país y por clase con empates, grados 26 → 15 por EXP y cupos 1 / 4 / 16 / porcentajes acumulados para los grados 14 → 1, cuentas activas en 2 meses, sin `auth` 2, 10 y 0x34. **Observed** (SQL de `RankUpdate.exe`, 0x402300, 0x402409).
+  - Rangos en la ficha del personaje y tablas `ranking_total` / `ranking_class` para una futura web. Pendiente: ranking de clanes (cuando existan los clanes).
+  - Verificado con cliente real: sí.
 - [ ] **7.2 Módulo Antifraude y Detector de Abusers:**
   - Umbrales `CheckWinSum=200`, `CheckExpSum=6000`, `CheckGoldSum=12000` y consulta de agregación de 24 h: **Observed** (`Config.ini` y SQL de `RankUpdate.exe`).
   - Solo marca para revisión de un GM; no banea automáticamente.
   - Verificado con cliente real: no aplica (proceso batch).
-- [ ] **7.3 Comandos de Administrador en el Chat (In-Game GM Commands):**
-  - `/notice <mensaje>`, `/kick <jugador>`, `/ban <jugador> <días>`, `/givegold`, `/givecash`, `/giveitem`.
-  - Evidencia: sintaxis de **diseño propio** (sin evidencia de comandos en el retail). Requiere C-5. Toda asignación de oro/cash/items en transacción y con log.
-  - Verificado con cliente real: no.
+- [x] **7.3 Comandos de Administrador en el Chat (In-Game GM Commands):** (#35)
+  - `/notice` es nativo del cliente (`0x0005`, entregado por `0x0063`; **Observed** en 0x41F290 / 0x40C870). Comandos de **diseño propio** vía C-5: `/gm`, `/givegold`, `/givecash`, `/giveitem`, `/ban`, `/unban`, `/kickout`, `/close`, `/rankupdate`. Oro, cash e ítems en transacción y con log.
+  - GM = autoridad 100 o más (**Inferred**, equivalente al 0x34 del original). Los avisos se recortan a 128 caracteres (más largos tumban el cliente).
+  - Verificado con cliente real: sí.
 - [ ] **7.4 API REST de Telemetría y Monitoreo:**
   - Jugadores conectados, salas en combate, uso de memoria y estado del servidor. Requiere C-6. Escucha solo en `localhost` por defecto.
   - Evidencia: diseño propio. Verificado con cliente real: no aplica.
 
 ---
 
+### Pendientes detectados (sin fase asignada)
+
+- [ ] **Mensajería y amigos (Messenger, F5):** lista de amigos, mensajes y estado en línea. El cliente tiene el botón «Messenger(F5)».
+- [ ] **Clanes:** creación, miembros, puntos y su ranking (`ClanRank` del original).
+
+---
+
 ### Transversal (lo asigna el integrador)
 
-- [ ] **T.1 Despliegue con Docker:** `Dockerfile` + `docker-compose.yml` con MariaDB (criterio de éxito 3).
+- [ ] **T.1 Despliegue con Docker:** `Dockerfile` + `docker-compose.yml` con MariaDB (criterio de éxito 3). Pospuesto hasta que el servidor esté completo y estable.
 - [ ] **T.2 Golden tests:** test contra bytes capturados del cliente por cada paquete marcado "verificado con cliente real: sí".
 
 ---

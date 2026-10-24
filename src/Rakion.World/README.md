@@ -1,6 +1,6 @@
 # Rakion.World
 
-`Rakion.World` implementa la lógica de juego del World Server de Rakion: autenticación mediante Token de Sesión, bypass orgánico de GameGuard, gestión y persistencia de personajes, y soporte de sondeo UDP para NAT traversal / hole punching.
+`Rakion.World` implementa la lógica de juego del World Server de Rakion: autenticación mediante Token de Sesión, bypass orgánico de GameGuard, personajes, canales y chat, economía (`Features/Economy/`), salas y partidas en todos los modos, recompensas, votaciones, comandos de GM (`Features/Admin/`) y el sondeo UDP para que los jugadores se conecten entre sí.
 
 ## Arquitectura y Componentes
 
@@ -30,7 +30,7 @@
   - **`ChannelEnter` (`0x001F`):** Procesa la entrada del jugador a un canal, validando restricciones de nivel (ej. nivel máximo 15 en Principiante) y capacidad de jugadores.
   - **`ChannelExit` (`0x0020`):** Procesa la salida limpia del canal activo y confirma la desvinculación de sesión.
   - **`ChannelCharacters` (`0x001E`):** Entrega la lista de personajes presentes en el lobby del canal actual.
-  - **`ChannelChat` (`0x0022`):** Recibe mensajes de chat de lobby y los difunde a todas las sesiones activas en el mismo canal (tolerante al formato cliente que antepone `"{Personaje} : "`).
+  - **`ChannelChat` (`0x0022`):** Recibe mensajes de chat de lobby y los difunde a todas las sesiones activas en el mismo canal (tolerante al formato cliente que antepone `"{Personaje} : "`). Antes de difundir consulta `IChatCommandInterceptor` (contrato C-5), que atiende los comandos de GM.
   - **`CharacterWhisper` (`0x0016`):** Enrutamiento bidireccional de susurros (mensajes privados) entre personajes conectados en el servidor.
   - **`FieldList` (`0x0036`):** Solicitud periódica o al entrar al canal para obtener las salas activas. Responde con `FieldListResponsePacket` con paginación real o `.Empty` cuando no hay salas creadas, cerrando el diálogo modal de espera (*"Waiting for game list from the world."*) y habilitando la navegación del Lobby.
   - **`FieldCreate` (`0x003B`):** Creación de sala por el host (`?SendFieldCreate`). Valida parámetros, instancia `GameField`, asigna la ranura 0 al host y confirma con `0x003B` (`ResultCode = 0`, `RoomNumber`), permitiendo el ingreso inmediato a la sala de espera.

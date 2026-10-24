@@ -19,6 +19,8 @@
 - **`ItemEntity`:** Catálogo maestro de armas, armaduras, accesorios y células de invocación con precios y requisitos de nivel.
 - **`UserItemEntity`:** Instancias de objetos pertenecientes a los jugadores con nivel de forja/refinamiento, experiencia acumulada de criaturas y duración de renta.
 - **`ClanEntity`** y **`BuddyEntity`:** Datos de gremios y sistema social de amigos.
+- **`ClassLevelEntity`** y **`CreatureLevelEntity`:** Tablas de niveles del personaje (`class_level_info`, del `DataSetup.xfs` del cliente) y de las criaturas (`creature_level_info`, `NPCInfo` del dump).
+- **`RankingCandidate`** y **`RankingEntry`:** Personajes que entran al ranking y sus nuevos puestos.
 
 ### 2. Seguridad y Criptografía (`Rakion.Database.Security`)
 - **`IPasswordHasher` / `PasswordHasher`:**
@@ -30,7 +32,14 @@
 - **`IUserRepository` / `UserRepository`:** Búsqueda por nombre de usuario e ID, creación atómica de cuentas y actualización de sellos de conexión.
 - **`ICharacterRepository` / `CharacterRepository`:** Validación de límites de slots, unicidad de nombres, creación y borrado seguro con clave.
 - **`IAccountBalanceRepository` / `AccountBalanceRepository`:** Gestión segura y transaccional de oro y cash.
-- **`IInventoryRepository` / `InventoryRepository`:** Consulta de catálogo, asignación y desequipamiento de objetos, y actualización de bolsas.
+- **`IInventoryRepository` / `InventoryRepository`:** Catálogo, box y equipo, compra, venta, movimiento y refinado de objetos (cada cambio en una transacción).
+- **`IMatchResultRepository` / `MatchResultRepository`:** Recompensas de ronda y de stage (EXP, oro, nivel, victorias/derrotas/empates, EXP de criaturas, rangos y drops de stage) y tablas de niveles (contrato C-4).
+- **`IAccountUpgradeRepository` / `AccountUpgradeRepository`:** Reseteo de puntos, bolsas y slots de poción.
+- **`IAdminRepository` / `AdminRepository`:** Baneos y entrega de ítems de los comandos GM.
+- **`IRankingRepository` / `RankingRepository`:** Población del ranking, puestos y tablas `ranking_total` / `ranking_class`.
+
+### 3b. Importadores (`Rakion.Database.Import`)
+- Catálogo de ítems, tabla de criaturas (`NPCInfo`) desde el dump del servidor original y tabla de niveles desde el `DataSetup.xfs` del cliente. Los usa `Rakion.App` con `--import-items` y `--import-levels`.
 
 ### 4. Esquema SQL (`src/Rakion.Database/Migrations/schema.sql`)
 - Script DDL completo con motor InnoDB, juego de caracteres `utf8mb4_unicode_ci` y restricciones de integridad referencial.

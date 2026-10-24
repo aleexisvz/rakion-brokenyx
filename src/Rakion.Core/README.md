@@ -49,7 +49,9 @@
 - **Sondeo UDP y NAT:** `UdpProbePacket` (0x0201 / 0x0202), `UdpSuccessPacket` (0x000E).
 - **Gestión de Personajes:** `CharacterCreateRequestPacket` (0x0012), `CharacterCreateResponsePacket` (0x002B), `CharacterDeleteRequestPacket` (0x0013), `CharacterDeleteResponsePacket` (0x002D), `CharacterSelectRequestPacket` (0x0014), `CharacterSelectResponsePacket` (0x002E), `CharacterChangeBuddyNameRequestPacket` (0x0015), `CharacterChangeBuddyNameResponsePacket` (0x0015).
 - **Canales de Lobby y Chat:** `ChannelListRequestPacket` (0x001D), `ChannelListResponsePacket` (0x001D), `ChannelCharactersRequestPacket` (0x001E), `ChannelCharactersResponsePacket` (0x001E), `ChannelEnterRequestPacket` (0x001F), `ChannelEnterResponsePacket` (0x001F), `ChannelExitRequestPacket` (0x0020), `ChannelExitResponsePacket` (0x0020), `ChannelChatRequestPacket` (0x0022), `ChannelChatBroadcastPacket` (0x0022), `CharacterWhisperRequestPacket` (0x0016), `CharacterWhisperResponsePacket` (0x0016).
-- **Salas de Juego (Fields):** `FieldListRequestPacket` (0x0036), `FieldListResponsePacket` (0x0036), `FieldListEntry`.
+- **Salas y partidas (Fields):** lista, creación, entrada, espera, inicio y salida de salas (`FieldPackets.cs`, `FieldJoinPackets.cs`, `FieldGamePackets.cs`); rondas, muertes, recompensas, niveles, golems y stage (`FieldRoundPackets.cs`); votaciones de expulsión (`FieldVotePackets.cs`).
+- **Economía (contrato C-3):** inventario, tienda, venta, movimiento, estadísticas, PowerUser y herrería (`InventoryPackets.cs` y relacionados); reseteo de puntos, bolsas y slots de poción (`AccountUpgradePackets.cs`).
+- **Administración:** aviso de GM `0x0005` y aviso del sistema `0x0063` (`AdminNoticePackets.cs`).
 - **Seguridad:** `GameGuardPacket` (0x0001 / 0x0002).
 
 ### 5. Utilidades (`Rakion.Core.Utilities`)
