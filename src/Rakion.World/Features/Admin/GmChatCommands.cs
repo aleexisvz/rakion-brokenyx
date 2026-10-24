@@ -18,7 +18,7 @@ public sealed class GmChatCommands : IChatCommandInterceptor
     [
         "GM: /givegold <pj> <n>, /givecash <pj> <n>, /giveitem <pj> <id>",
         "GM: /ban <pj> <dias, 0 = siempre> [motivo], /unban <pj>",
-        "GM: /kickout <pj>, /close, /notice <texto>",
+        "GM: /kickout <pj>, /close, /notice <texto>, /rankupdate",
     ];
 
     private const int SlotsPerBag = 30;
@@ -29,6 +29,7 @@ public sealed class GmChatCommands : IChatCommandInterceptor
     private readonly IUserRepository _users;
     private readonly IAccountBalanceRepository _balances;
     private readonly IAdminRepository _admin;
+    private readonly IRankingTrigger? _ranking;
     private readonly ILogger<GmChatCommands> _logger;
 
     public GmChatCommands(
@@ -37,13 +38,15 @@ public sealed class GmChatCommands : IChatCommandInterceptor
         IUserRepository users,
         IAccountBalanceRepository balances,
         IAdminRepository admin,
-        ILogger<GmChatCommands> logger)
+        ILogger<GmChatCommands> logger,
+        IRankingTrigger? ranking = null)
     {
         _sender = sender;
         _characters = characters;
         _users = users;
         _balances = balances;
         _admin = admin;
+        _ranking = ranking;
         _logger = logger;
     }
 
@@ -64,6 +67,9 @@ public sealed class GmChatCommands : IChatCommandInterceptor
             "/ban" => await BanAsync(context, parts, cancellationToken).ConfigureAwait(false),
             "/unban" => await UnbanAsync(parts, cancellationToken).ConfigureAwait(false),
             "/kickout" => await KickOutAsync(context, parts, cancellationToken).ConfigureAwait(false),
+            "/rankupdate" => _ranking is null
+                ? "El ranking no está disponible."
+                : $"Ranking actualizado: {await _ranking.RunAsync(cancellationToken).ConfigureAwait(false)} personajes (se ve al volver a entrar).",
             "/close" => await context.CloseRoomAsync(context.Sender, cancellationToken).ConfigureAwait(false) ? "Sala cerrada." : "No estás en una sala.",
             _ => string.Empty,
         };

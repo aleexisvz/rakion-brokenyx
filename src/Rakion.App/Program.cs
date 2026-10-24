@@ -13,6 +13,8 @@ using Rakion.Database.Repositories;
 using Rakion.Database.Security;
 using Rakion.Database.Entities;
 using Rakion.Database.Import;
+using Rakion.Maintenance;
+using Rakion.Maintenance.Ranking;
 using Rakion.World.Channels;
 using Rakion.World.Chat;
 using Rakion.World.Configuration;
@@ -180,6 +182,11 @@ builder.Services.AddSingleton<IAccountBalanceRepository, AccountBalanceRepositor
 builder.Services.AddSingleton<IAccountUpgradeRepository, AccountUpgradeRepository>();
 builder.Services.AddSingleton<IAdminRepository, AdminRepository>();
 builder.Services.AddSingleton<IChatCommandInterceptor, GmChatCommands>();
+builder.Services.Configure<MaintenanceOptions>(builder.Configuration.GetSection(MaintenanceOptions.SectionName));
+builder.Services.AddSingleton<IRankingRepository, RankingRepository>();
+builder.Services.AddSingleton<RankingJob>();
+builder.Services.AddSingleton<IRankingTrigger, RankingTrigger>();
+builder.Services.AddHostedService<RankingScheduler>();
 builder.Services.AddSingleton<IInventoryRepository, InventoryRepository>();
 builder.Services.AddSingleton<IMatchResultRepository, MatchResultRepository>();
 

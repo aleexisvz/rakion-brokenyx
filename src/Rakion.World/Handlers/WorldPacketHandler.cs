@@ -430,7 +430,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount,
                 inventory?.EquipmentOf(ce.Id),
                 stageRanks?.GetValueOrDefault(ce.Id),
-                Math.Clamp(ce.PotionSlotCount, (byte)3, (byte)6)));
+                Math.Clamp(ce.PotionSlotCount, (byte)3, (byte)6),
+                ce.RankGrade,
+                (uint)Math.Max(ce.TotalRank, 0),
+                (uint)Math.Max(ce.ClassRank, 0)));
         }
 
         byte unlockedSlots = gameInfo?.SlotCount ?? 3;

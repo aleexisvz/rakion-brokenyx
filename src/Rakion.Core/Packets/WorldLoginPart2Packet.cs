@@ -56,9 +56,9 @@ public sealed record WorldLoginPart2Packet(
                 writer.WriteUInt32(c.Win);                // [CharacterRecord + 0x04] Win
                 writer.WriteUInt32(c.Lose);               // [CharacterRecord + 0x08] Lose
                 writer.WriteUInt32(c.Draw);               // [CharacterRecord + 0x0C] Draw
-                writer.WriteByte(0);                      // [CharacterRecord + 0xB0] RankGrade
-                writer.WriteUInt32(0);                    // [CharacterRecord + 0xB4] TotalRank
-                writer.WriteUInt32(0);                    // [CharacterRecord + 0xB8] ClassRank
+                writer.WriteByte(c.RankGrade);            // [CharacterRecord + 0xB0] RankGrade
+                writer.WriteUInt32(c.TotalRank);          // [CharacterRecord + 0xB4] TotalRank
+                writer.WriteUInt32(c.ClassRank);          // [CharacterRecord + 0xB8] ClassRank
                 writer.WriteByte(0);                      // [CharacterRecord + 0x24] Auth
                 writer.WriteByte((byte)c.Class);          // [CharacterRecord + 0x2C] Class
                 writer.WriteByte(c.Level);                // [CharacterRecord + 0x2D] Level
