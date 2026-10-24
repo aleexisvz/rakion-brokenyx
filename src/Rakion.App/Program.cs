@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Rakion.App.HostedServices;
 using Rakion.Broker.Configuration;
+using Rakion.Buddy;
 using Rakion.Broker.Handlers;
 using Rakion.Broker.Hosting;
 using Rakion.Broker.Services;
@@ -216,6 +217,11 @@ builder.Services.AddSingleton<WorldServer>();
 
 // Hosted background services
 builder.Services.AddHostedService<BrokerHostedService>();
+builder.Services.Configure<BuddyOptions>(builder.Configuration.GetSection(BuddyOptions.SectionName));
+builder.Services.AddSingleton<IBuddyRepository, BuddyRepository>();
+builder.Services.AddSingleton<BuddyPacketHandler>();
+builder.Services.AddSingleton<BuddyServer>();
+builder.Services.AddHostedService<BuddyHostedService>();
 builder.Services.AddHostedService<WorldHostedService>();
 
 IHost host = builder.Build();
