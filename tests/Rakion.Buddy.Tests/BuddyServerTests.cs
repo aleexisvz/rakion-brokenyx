@@ -85,6 +85,34 @@ public sealed class BuddyServerTests
     }
 
     [TestMethod]
+    public async Task Tunnel_RelaysAFriendRequest_ButNotOtherMessagesBetweenStrangers()
+    {
+        using var alice = await LoginAsync("alice");
+        using var bob = await LoginAsync("bob");
+
+        await alice.Client.SendAsync(BuddyOpcode.TunnelRequest, Tunnel(0x1234, [9], "bob"));
+        await alice.Client.SendAsync(BuddyOpcode.TunnelRequest, Tunnel(BuddyTunnelRequest.AddBuddyAsk, [1, 2, 3], "bob"));
+
+        var notice = await bob.ReadAsync();
+        Assert.AreEqual((ushort)BuddyOpcode.TunnelNotice, notice.Opcode, "the non-friend 0x1234 was dropped, the request passed");
+        Assert.AreEqual("alice", Encoding.Latin1.GetString(notice.Payload.AsSpan(0, 5)));
+        Assert.AreEqual((ushort)3, BinaryPrimitives.ReadUInt16LittleEndian(notice.Payload.AsSpan(100)));
+        Assert.AreEqual(BuddyTunnelRequest.AddBuddyAsk, BinaryPrimitives.ReadUInt16LittleEndian(notice.Payload.AsSpan(102)));
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, notice.Payload[104..]);
+    }
+
+    private static byte[] Tunnel(ushort inner, byte[] data, string recipient)
+    {
+        var payload = new byte[5 + data.Length + 2 + 20];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(1), inner);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(3), (ushort)data.Length);
+        data.CopyTo(payload, 5);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(5 + data.Length), 1);
+        Encoding.Latin1.GetBytes(recipient).CopyTo(payload, 7 + data.Length);
+        return payload;
+    }
+
+    [TestMethod]
     public async Task Login_RefusesAWrongSeed()
     {
         using var client = new BuddyClient();

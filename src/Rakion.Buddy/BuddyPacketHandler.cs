@@ -77,6 +77,9 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
             case BuddyOpcode.RemoveBuddyRequest when session.IsAuthenticated:
                 await RemoveFriendAsync(session, payload, cancellationToken).ConfigureAwait(false);
                 break;
+            case BuddyOpcode.TunnelRequest when session.IsAuthenticated:
+                await RelayTunnelAsync(session, payload, cancellationToken).ConfigureAwait(false);
+                break;
             case BuddyOpcode.SetNickRequest when session.IsAuthenticated:
                 await SetNickAsync(session, payload, cancellationToken).ConfigureAwait(false);
                 break;
@@ -242,6 +245,45 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
         }
 
         await SendAsync(session, new BuddyResultPacket(BuddyOpcode.SetNickResponse, 0), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Relays a client-to-client message to each online recipient (0x2020 -> 0x2021). Between players who are not
+    /// friends only the friend request and its answer pass.
+    /// </summary>
+    private async Task RelayTunnelAsync(BuddySession session, ReadOnlyMemory<byte> payload, CancellationToken ct)
+    {
+        if (!BuddyTunnelRequest.TryParse(payload.Span, out var request))
+        {
+            _logger.LogWarning("[Buddy] Malformed tunnel packet from '{Account}' ({Length} bytes).", session.Account, payload.Length);
+            return;
+        }
+
+        var friends = (await _repository.GetFriendsAsync(session.Account!, ct).ConfigureAwait(false))
+            .Select(f => f.Account)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool friendRequest = request.InnerOpcode is BuddyTunnelRequest.AddBuddyAsk or BuddyTunnelRequest.AddBuddyAnswer;
+        var notice = new BuddyTunnelNoticePacket(session.Account!, session.DisplayName, string.Empty, request.InnerOpcode, request.Inner);
+        foreach (string recipient in request.Recipients)
+        {
+            if (!friendRequest && !friends.Contains(recipient))
+            {
+                continue;
+            }
+
+            if (_online.TryGetValue(recipient, out var target))
+            {
+                await SendAsync(target, notice, ct).ConfigureAwait(false);
+            }
+
+            _logger.LogInformation(
+                "[Buddy] '{Account}' -> '{Recipient}' tunnel 0x{Inner:X4} ({Length} bytes), delivered {Delivered}.",
+                session.Account,
+                recipient,
+                request.InnerOpcode,
+                request.Inner.Length,
+                target is not null);
+        }
     }
 
     private async Task NotifyFriendsAsync(BuddySession session, BuddyUserState state, CancellationToken ct)

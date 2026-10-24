@@ -194,3 +194,68 @@ public sealed record BuddyUserStatePacket(IReadOnlyList<BuddyUserState> States) 
         }
     }
 }
+
+/// <summary>
+/// A client-to-client Messenger message sent through the server when UDP cannot reach the peer:
+/// [u8 Flags][u16 InnerOpcode][u16 length, at most 255][inner][u16 count, at most 500][count x char account[20]].
+/// Evidence: Observed in the Buddy2.dll builder 0x10008784 (sent as 0x2020 at 0x100087F4).
+/// </summary>
+public sealed record BuddyTunnelRequest(byte Flags, ushort InnerOpcode, byte[] Inner, IReadOnlyList<string> Recipients)
+{
+    public const int MaxInner = 255;
+    public const int MaxRecipients = 500;
+
+    /// <summary>Friend request and its answer between players who are not friends yet (Inferred).</summary>
+    public const ushort AddBuddyAsk = 0xC041;
+    public const ushort AddBuddyAnswer = 0xC042;
+
+    public static bool TryParse(ReadOnlySpan<byte> payload, out BuddyTunnelRequest request)
+    {
+        request = null!;
+        if (payload.Length < 7)
+        {
+            return false;
+        }
+
+        int length = payload[3] | (payload[4] << 8);
+        if (length > MaxInner || payload.Length < 7 + length)
+        {
+            return false;
+        }
+
+        int countAt = 5 + length;
+        int count = payload[countAt] | (payload[countAt + 1] << 8);
+        if (count is < 1 or > MaxRecipients || payload.Length < countAt + 2 + (count * BuddyText.AccountBytes))
+        {
+            return false;
+        }
+
+        var recipients = new string[count];
+        for (int i = 0; i < count; i++)
+        {
+            recipients[i] = BuddyText.ReadAccount(payload.Slice(countAt + 2 + (i * BuddyText.AccountBytes), BuddyText.AccountBytes));
+        }
+
+        request = new BuddyTunnelRequest(payload[0], (ushort)(payload[1] | (payload[2] << 8)), payload.Slice(5, length).ToArray(), recipients);
+        return true;
+    }
+}
+
+/// <summary>
+/// A tunnelled message delivered to its recipient: [sender as account / name / group][u16 length][u16 InnerOpcode][inner].
+/// Evidence: Observed in the Buddy2.dll 0x2021 reader 0x10007D43.
+/// </summary>
+public sealed record BuddyTunnelNoticePacket(string Account, string DisplayName, string GroupName, ushort InnerOpcode, byte[] Inner) : IPacket
+{
+    public ushort Opcode => (ushort)BuddyOpcode.TunnelNotice;
+
+    public void Serialize(PacketWriter writer)
+    {
+        BuddyText.WriteAccount(writer, Account);
+        BuddyText.WriteWide(writer, DisplayName);
+        BuddyText.WriteWide(writer, GroupName);
+        writer.WriteUInt16((ushort)Inner.Length);
+        writer.WriteUInt16(InnerOpcode);
+        writer.WriteBytes(Inner);
+    }
+}

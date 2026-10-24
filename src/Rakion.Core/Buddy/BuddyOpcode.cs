@@ -14,6 +14,8 @@ public enum BuddyOpcode : ushort
     LoginResponse = 0x1011,
     VipIpPortNotice = 0x101F,
     CloseConnectionNotice = 0x1FFF,
+    TunnelRequest = 0x2020,
+    TunnelNotice = 0x2021,
     AddBuddyRequest = 0x3000,
     AddBuddyResponse = 0x3001,
     RemoveBuddyRequest = 0x3002,
