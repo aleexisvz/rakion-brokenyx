@@ -417,6 +417,13 @@ public enum ClientOpcode : ushort
     FieldClose = 0x003F,
 
     /// <summary>
+    /// GM notice, sent by the client's /notice chat command: (u8 scope, string target character, string text).
+    /// Evidence: Observed in engine.dll ?SendAdminNotice@IScavengerWorldNet (opcode 0x0005) and RakionWorldServ.exe
+    /// 0x41F290 (target below 13 characters, text below 0x81).
+    /// </summary>
+    AdminNotice = 0x0005,
+
+    /// <summary>
     /// Opens a kick vote: (u8 target slot, string reason).
     /// Evidence: Observed in engine.dll ?SendFieldGameVoteOpen@IScavengerWorldNet@@UAEXEPAD@Z (opcode 0x005D).
     /// </summary>

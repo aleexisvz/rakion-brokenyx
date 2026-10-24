@@ -320,6 +320,19 @@ public enum ServerOpcode : ushort
     FieldGameVoteOpen = 0x005D,
 
     /// <summary>
+    /// Answer to a targeted GM notice: [u8 result] 0 delivered, 1 no such character online.
+    /// Evidence: Observed in RakionWorldServ.exe 0x41F449 and engine.dll jump table opcode 0x05.
+    /// </summary>
+    AdminNotice = 0x0005,
+
+    /// <summary>
+    /// System notice shown to a player: [string text].
+    /// Evidence: Observed in RakionWorldServ.exe 0x41F30E (GM notice delivery) and engine.dll jump table opcode
+    /// 0x63 (0x36197809 -> 0x36194460).
+    /// </summary>
+    SystemNotice = 0x0063,
+
+    /// <summary>
     /// Kick vote refusal or result (see FieldGameVoteResultPacket).
     /// Evidence: Observed in engine.dll jump table opcode 0x5F (0x361977FB -> 0x361943D0).
     /// </summary>
