@@ -20,6 +20,7 @@
     <ProjectReference Include="..\Rakion.Database\Rakion.Database.csproj" />
     <ProjectReference Include="..\Rakion.Broker\Rakion.Broker.csproj" />
     <ProjectReference Include="..\Rakion.World\Rakion.World.csproj" />
+    <ProjectReference Include="..\Rakion.Maintenance\Rakion.Maintenance.csproj" />
   </ItemGroup>
 
   <ItemGroup>

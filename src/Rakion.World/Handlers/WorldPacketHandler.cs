@@ -430,7 +430,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
                 (uint)ce.WinCount, (uint)ce.LossCount, (uint)ce.DrawCount,
                 inventory?.EquipmentOf(ce.Id),
                 stageRanks?.GetValueOrDefault(ce.Id),
-                Math.Clamp(ce.PotionSlotCount, (byte)3, (byte)6)));
+                Math.Clamp(ce.PotionSlotCount, (byte)3, (byte)6),
+                ce.RankGrade,
+                (uint)Math.Max(ce.TotalRank, 0),
+                (uint)Math.Max(ce.ClassRank, 0)));
         }
 
         byte unlockedSlots = gameInfo?.SlotCount ?? 3;
@@ -470,6 +473,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             unlockedSlots,
             gold,
             cash);
+
+        // The ranking only counts accounts connected recently (legacy UserGameInfo.lastconnect). The launcher login
+        // path of the Broker does not record it, so the World login does.
+        await _userRepository.UpdateLastConnectAsync(user.Id, DateTime.UtcNow, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask HandleGameGuardAsync(

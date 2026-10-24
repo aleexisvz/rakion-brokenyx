@@ -429,11 +429,15 @@ public sealed class WorldServerIntegrationTests
         using var writer = new PacketWriter((ushort)ClientOpcode.CharacterTutorialClear);
         await stream.WriteAsync(writer.Build());
 
-        // Allow handler a moment to process async database write
-        await Task.Delay(100);
+        // Wait for the handler's database write instead of a fixed delay: the login also writes (last connect).
+        var infoAfter = await _userRepository.GetGameInfoByUserIdAsync(user.Id);
+        for (int attempt = 0; attempt < 40 && infoAfter?.TutorialCompleted != true; attempt++)
+        {
+            await Task.Delay(50);
+            infoAfter = await _userRepository.GetGameInfoByUserIdAsync(user.Id);
+        }
 
         // Assert: Database updated
-        var infoAfter = await _userRepository.GetGameInfoByUserIdAsync(user.Id);
         Assert.IsNotNull(infoAfter);
         Assert.IsTrue(infoAfter.TutorialCompleted);
     }

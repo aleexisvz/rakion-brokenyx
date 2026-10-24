@@ -3,7 +3,7 @@
 Clean-room C# (.NET 10) server emulator for the **Rakion: Chaos Force v258**
 client. No binary patches, no legacy DLLs — the protocol implemented natively.
 
-> **Status:** Phases 0–3 completed (100%). Phase 3 items 3.1–3.5 verified in-game with the retail v258 client; 3.6 (lobby channels, chat, whispers) covered by automated tests. Next: Phase 4 (lane A) and Phase 5 (lane B), see the roadmap.
+> **Status:** Phases 0–3 and 5 completed; most of phases 4, 6 and 7 done and verified with the retail v258 client (economy, blacksmith, rooms, matches in every mode including Golem War and Stage, rewards and levels, kick votes, GM commands, rankings). Pending: presents, messenger, clans, server relay for public networks and Docker. See the roadmap.
 
 ## Documentation
 
@@ -20,10 +20,10 @@ client. No binary patches, no legacy DLLs — the protocol implemented natively.
 | **`Rakion.Network`** | High-performance asynchronous TCP/UDP socket listeners (`System.IO.Pipelines`), dual UDP hole punching servers, and lifecycle management. | [Rakion.Network/README.md](src/Rakion.Network/README.md) |
 | **`Rakion.Database`** | Relational persistence with MySQL 8+/MariaDB, Dapper micro-ORM, InnoDB ACID transactions, and BCrypt password security with legacy migration. | [Rakion.Database/README.md](src/Rakion.Database/README.md) |
 | **`Rakion.Broker`** | TCP Broker on port 40706 (server list, authentication, session ticket issuing) and Softnyx AutoFetch mini HTTP server. | [Rakion.Broker/README.md](src/Rakion.Broker/README.md) |
-| **`Rakion.World`** | World Server TCP on port 40708 (AES-128 crypto, session handshake, organic GameGuard bypass, 3-slot character list, creation, deletion, selection, tutorial completion) and Dual UDP listeners (40708/40709) for NAT hole punch probe. | [Rakion.World/README.md](src/Rakion.World/README.md) |
+| **`Rakion.World`** | World Server TCP on port 40708 and dual UDP listeners (40708/40709): characters, lobby channels and chat, economy (inventory, shop, blacksmith, stat points and resets, PowerUser), rooms, matches, rewards, kick votes and GM commands. | [Rakion.World/README.md](src/Rakion.World/README.md) |
 | **`Rakion.Relay`** *(planned, lane B)* | Socketless UDP relay routing (field-slot endpoint registry, tunneling `0x0401`) consumed by World's UDP listeners. | — |
-| **`Rakion.Maintenance`** *(planned, lane A)* | Ranking recalculation, anti-abuse checks and scheduled jobs (replaces `RankUpdate.exe`). | — |
-| **`Rakion.App`** | Unified console host running Broker (40706), World (TCP 40708 + UDP 40708/40709), and AutoFetch (8080) concurrently via `Microsoft.Extensions.Hosting`. | [Rakion.App](src/Rakion.App/) |
+| **`Rakion.Maintenance`** | Scheduled jobs hosted by the App: ranking recalculation (replaces `RankUpdate.exe`); anti-abuse checks pending. | [Rakion.Maintenance/README.md](src/Rakion.Maintenance/README.md) |
+| **`Rakion.App`** | Unified console host running Broker (40706), World (TCP 40708 + UDP 40708/40709), AutoFetch (8080) and the maintenance jobs via `Microsoft.Extensions.Hosting`. Also the import tools (`--import-items`, `--import-levels`) and `--create-user`. | [Rakion.App](src/Rakion.App/) |
 
 ## Building & Testing
 

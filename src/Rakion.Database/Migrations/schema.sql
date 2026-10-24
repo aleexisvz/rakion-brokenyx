@@ -150,6 +150,24 @@ CREATE TABLE IF NOT EXISTS `user_stage_info` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
+-- 4e. Ranking snapshots for ranking pages (legacy TotalRankP / <Class>RankP), rebuilt by the ranking job
+--     (Rakion.Maintenance); also created on first run.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `ranking_total` (
+    `character_id` INT NOT NULL, `rank` INT NOT NULL, `last_rank` INT NOT NULL, `class_rank` INT NOT NULL,
+    `country` INT NOT NULL, `username` VARCHAR(16) NOT NULL, `name` VARCHAR(16) NOT NULL, `level` INT NOT NULL,
+    `class_id` INT NOT NULL, `grade` INT NOT NULL, `exp` INT NOT NULL, `win` INT NOT NULL, `lose` INT NOT NULL, `draw` INT NOT NULL,
+    PRIMARY KEY (`character_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `ranking_class` (
+    `character_id` INT NOT NULL, `class_id` INT NOT NULL, `rank` INT NOT NULL, `last_rank` INT NOT NULL,
+    `country` INT NOT NULL, `username` VARCHAR(16) NOT NULL, `name` VARCHAR(16) NOT NULL, `level` INT NOT NULL,
+    `grade` INT NOT NULL, `exp` INT NOT NULL, `win` INT NOT NULL, `lose` INT NOT NULL, `draw` INT NOT NULL,
+    PRIMARY KEY (`character_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
 -- 5. Item Templates Catalog
 -- -----------------------------------------------------------------------------
 DROP TABLE IF EXISTS `item_templates`;
