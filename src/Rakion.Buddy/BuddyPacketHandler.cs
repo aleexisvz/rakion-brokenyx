@@ -93,7 +93,11 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
                 await SendAsync(session, new BuddyResultPacket(BuddyOpcode.SetExtUserResponse, 0), cancellationToken).ConfigureAwait(false);
                 break;
             case BuddyOpcode.GroupListRequest when session.IsAuthenticated:
-                await SendAsync(session, new BuddyGroupListPacket(), cancellationToken).ConfigureAwait(false);
+                var groups = await _repository.GetGroupsAsync(session.Account!, cancellationToken).ConfigureAwait(false);
+                await SendAsync(session, new BuddyGroupListPacket(groups.Select(g => new BuddyGroup((ushort)g.Id, g.Name, (ushort)g.Flags)).ToList()), cancellationToken).ConfigureAwait(false);
+                break;
+            case BuddyOpcode.GroupAddRequest when session.IsAuthenticated:
+                await AddGroupAsync(session, payload, cancellationToken).ConfigureAwait(false);
                 break;
             default:
                 _logger.LogInformation("[Buddy] Unhandled command 0x{Command:X4} from '{Account}' ({Length} bytes).", header.Opcode, session.Account ?? "?", payload.Length);
@@ -232,6 +236,15 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
         {
             await SendAsync(friendSession, new BuddyRemoveResponsePacket(0, session.Account!), ct).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>Stores a group the client created (0x3152 [44-byte group]); the client only logs the 0x3153 result.</summary>
+    private async Task AddGroupAsync(BuddySession session, ReadOnlyMemory<byte> payload, CancellationToken ct)
+    {
+        bool saved = BuddyGroup.TryParse(payload.Span, out var group) &&
+            await _repository.SaveGroupAsync(session.Account!, new BuddyGroupRow(group.Id, group.Name, group.Flags), ct).ConfigureAwait(false);
+        _logger.LogInformation("[Buddy] '{Account}' created group {Id} '{Name}': {Saved}.", session.Account, group?.Id, group?.Name, saved);
+        await SendAsync(session, new BuddyResultPacket(BuddyOpcode.GroupAddResponse, saved ? (ushort)0 : (ushort)1), ct).ConfigureAwait(false);
     }
 
     private async Task SetNickAsync(BuddySession session, ReadOnlyMemory<byte> payload, CancellationToken ct)

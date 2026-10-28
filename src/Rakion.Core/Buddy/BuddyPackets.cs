@@ -134,15 +134,53 @@ public sealed record BuddyResultPacket(BuddyOpcode Command, ushort Result) : IPa
     public void Serialize(PacketWriter writer) => writer.WriteUInt16(Result);
 }
 
-/// <summary>Group list answer: [u16 result][u16 count][count x 44-byte group]. Groups are not kept yet: always empty.</summary>
-public sealed record BuddyGroupListPacket : IPacket
+/// <summary>A Messenger group (44 bytes): [u16 Id][wchar name[20]][u16 Flags]. Observed in the Buddy2.dll reader 0x100080E8.</summary>
+public sealed record BuddyGroup(ushort Id, string Name, ushort Flags)
 {
+    public const int Size = 44;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteUInt16(Id);
+        BuddyText.WriteWide(writer, Name);
+        writer.WriteUInt16(Flags);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out BuddyGroup group)
+    {
+        group = null!;
+        if (span.Length < Size)
+        {
+            return false;
+        }
+
+        group = new BuddyGroup(
+            (ushort)(span[0] | (span[1] << 8)),
+            BuddyText.ReadWide(span.Slice(2, BuddyText.WideBytes)),
+            (ushort)(span[42] | (span[43] << 8)));
+        return true;
+    }
+}
+
+/// <summary>
+/// Group list answer: [u16 result][u16 count, at most 50][count x group]. Observed in the Buddy2.dll reader
+/// 0x1000807A. With an empty list the client creates its groups with 0x3152.
+/// </summary>
+public sealed record BuddyGroupListPacket(IReadOnlyList<BuddyGroup> Groups) : IPacket
+{
+    public const int MaxGroups = 50;
+
     public ushort Opcode => (ushort)BuddyOpcode.GroupListResponse;
 
     public void Serialize(PacketWriter writer)
     {
         writer.WriteUInt16(0);
-        writer.WriteUInt16(0);
+        int count = Math.Min(Groups.Count, MaxGroups);
+        writer.WriteUInt16((ushort)count);
+        for (int i = 0; i < count; i++)
+        {
+            Groups[i].Serialize(writer);
+        }
     }
 }
 

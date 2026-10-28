@@ -29,5 +29,7 @@ public enum BuddyOpcode : ushort
     SetExtUserResponse = 0x3105,
     GroupListRequest = 0x3150,
     GroupListResponse = 0x3151,
+    GroupAddRequest = 0x3152,
+    GroupAddResponse = 0x3153,
     UserStateNotice = 0x3FFF,
 }

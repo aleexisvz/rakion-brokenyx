@@ -45,6 +45,19 @@ public sealed class BuddyRepositoryTests
     }
 
     [TestMethod]
+    public async Task Groups_AreStoredPerOwner_AndReplacedById()
+    {
+        Assert.IsTrue(await _repository.SaveGroupAsync("alice", new BuddyGroupRow(1, "Friends", 0)));
+        Assert.IsTrue(await _repository.SaveGroupAsync("alice", new BuddyGroupRow(2, "Clan", 1)));
+        Assert.IsTrue(await _repository.SaveGroupAsync("alice", new BuddyGroupRow(1, "Amigos", 0)));
+
+        CollectionAssert.AreEqual(
+            new[] { new BuddyGroupRow(1, "Amigos", 0), new BuddyGroupRow(2, "Clan", 1) },
+            (await _repository.GetGroupsAsync("alice")).ToArray());
+        Assert.IsEmpty(await _repository.GetGroupsAsync("bob"));
+    }
+
+    [TestMethod]
     public async Task DisplayName_PrefersTheMessengerName()
     {
         var alice = await _repository.GetAccountAsync("alice");

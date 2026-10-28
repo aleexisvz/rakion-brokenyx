@@ -11,6 +11,14 @@ public sealed class BuddyRepository : IBuddyRepository
                  u.username)
         """;
 
+    private const int MaxGroups = 50;
+
+    private const string CreateGroups = """
+        CREATE TABLE IF NOT EXISTS buddy_groups (
+            owner VARCHAR(16) NOT NULL, group_id INT NOT NULL, name VARCHAR(20) NOT NULL, flags INT NOT NULL DEFAULT 0,
+            PRIMARY KEY (owner, group_id));
+        """;
+
     private readonly IDbConnectionFactory _connectionFactory;
 
     public BuddyRepository(IDbConnectionFactory connectionFactory)
@@ -95,6 +103,43 @@ public sealed class BuddyRepository : IBuddyRepository
         return removed > 0;
     }
 
+    public async Task<IReadOnlyList<BuddyGroupRow>> GetGroupsAsync(string owner, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await connection.ExecuteAsync(new CommandDefinition(CreateGroups, cancellationToken: ct));
+        var rows = await connection.QueryAsync<GroupRow>(new CommandDefinition(
+            "SELECT group_id AS Id, name AS Name, flags AS Flags FROM buddy_groups WHERE owner = @Owner ORDER BY group_id;",
+            new { Owner = owner },
+            cancellationToken: ct));
+        return rows.Select(r => new BuddyGroupRow(r.Id, r.Name, r.Flags)).ToList();
+    }
+
+    public async Task<bool> SaveGroupAsync(string owner, BuddyGroupRow group, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await connection.ExecuteAsync(new CommandDefinition(CreateGroups, cancellationToken: ct));
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        var args = new { Owner = owner, group.Id, Name = group.Name.Length > 20 ? group.Name[..20] : group.Name, group.Flags };
+        int replaced = await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE buddy_groups SET name = @Name, flags = @Flags WHERE owner = @Owner AND group_id = @Id;", args, tx, cancellationToken: ct));
+        if (replaced == 0)
+        {
+            int count = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT COUNT(*) FROM buddy_groups WHERE owner = @Owner;", args, tx, cancellationToken: ct));
+            if (count >= MaxGroups)
+            {
+                await tx.RollbackAsync(ct);
+                return false;
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO buddy_groups (owner, group_id, name, flags) VALUES (@Owner, @Id, @Name, @Flags);", args, tx, cancellationToken: ct));
+        }
+
+        await tx.CommitAsync(ct);
+        return true;
+    }
+
     public async Task SetDisplayNameAsync(int userId, string displayName, CancellationToken ct = default)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
@@ -111,6 +156,15 @@ public sealed class BuddyRepository : IBuddyRepository
         public string Account { get; set; } = string.Empty;
 
         public string DisplayName { get; set; } = string.Empty;
+    }
+
+    private sealed class GroupRow
+    {
+        public int Id { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public int Flags { get; set; }
     }
 
     private sealed class RelationRow
