@@ -111,15 +111,19 @@ public sealed class BuddyPacketHandler : ITcpPacketHandler, IUdpPacketHandler
     /// </summary>
     public async ValueTask HandleDatagramAsync(UdpServer server, ReadOnlyMemory<byte> datagram, IPEndPoint remoteEndPoint, CancellationToken cancellationToken)
     {
-        if (datagram.Length != 4)
-        {
-            return;
-        }
-
-        uint token = BinaryPrimitives.ReadUInt32LittleEndian(datagram.Span);
-        var session = _sessions.Values.FirstOrDefault(s => s.IsAuthenticated && s.UdpToken != 0 && s.UdpToken == token);
+        var session = datagram.Length == 4
+            ? _sessions.Values.FirstOrDefault(s => s.IsAuthenticated && s.UdpToken != 0 && s.UdpToken == BinaryPrimitives.ReadUInt32LittleEndian(datagram.Span))
+            : null;
         if (session is null)
         {
+            // Not a registration: log it to learn what else the Messenger sends to the server by UDP.
+            var sender = _sessions.Values.FirstOrDefault(s => s.PublicEndpoint is { } ep && ep.Port == remoteEndPoint.Port && ep.Address.Equals(remoteEndPoint.Address));
+            _logger.LogInformation(
+                "[Buddy] UDP {Length} bytes from {Remote} ('{Account}'): {Hex}",
+                datagram.Length,
+                remoteEndPoint,
+                sender?.Account ?? "?",
+                Convert.ToHexString(datagram.Span[..Math.Min(datagram.Length, 64)]));
             return;
         }
 
