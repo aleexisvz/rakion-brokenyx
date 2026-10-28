@@ -12,6 +12,19 @@ Servidor del Messenger (amigos) que usa la librería `Buddy2.dll` del cliente. E
 - Agregar (`0x3000`) y quitar (`0x3002`) amigos, siempre en los dos sentidos; nick (`0x3100`, se guarda como nombre visible), gremio y extensión (`0x3102` / `0x3104`, solo responden) y lista de grupos vacía (`0x3150`).
 - Nombre visible: el nick del Messenger, si no el primer personaje, si no el login.
 
+## Límite del cliente v258: agregar amigos no sale del cliente
+
+El objeto de `Buddy2.dll` guarda en `+0x140D4` una máscara de servicios. El constructor la pone a `1` (0x10001547) y ningún binario del cliente la vuelve a escribir: no hay otra referencia a ese desplazamiento en `Buddy2.dll`, `engine.dll`, `gamemp.dll` ni `rakion.bin` (**Observed**). Cada método de la vtable `0x100204D0` comprueba un bit de la máscara; si el bit está a 0, devuelve «éxito» **sin enviar nada** (**Observed**). Con la máscara a 1 son no-ops, entre otros:
+
+- solicitud de amistad P2P `0xC041` (método `+0x38`);
+- aceptar `0xC042`, que después envía `0x3000` (`+0x3C`);
+- quitar `0xC043` / `0x3002` (`+0x40`);
+- consulta de estado `0x3010` (`+0x44`) y `0x3006` (`+0x5C`).
+
+Así se explica lo que se vio con el cliente real: tras `0x19 GetUserName`, el cliente muestra «Sending message…» y no llega nada al servidor, ni por TCP ni por UDP. Los `0x3010` y `0x2020` de una prueba anterior salieron por otra ruta sin máscara: `OnUserUnreachable` (0x1000A520) y el reenvío `0x2000` / túnel (0x10008640, 0x1000A490), que se usan cuando falla un envío P2P.
+
+Sin modificar el cliente, las amistades tienen que crearse fuera del Messenger: por ejemplo con un comando del World o con la futura web. El servidor ya entrega la lista en `0x1011`.
+
 ## Pendiente
 
 - Comprobar con el cliente real que la lista de amigos aparece en la ventana del Messenger.
