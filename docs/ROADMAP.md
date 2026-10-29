@@ -64,6 +64,7 @@ rakion-brokenyx/
 │   ├── Rakion.World/            # Servidor de Juego: Lobby, Salas, Inventario, Herrería (Puerto 40708 + UDP dual)
 │   ├── Rakion.Relay/            # Lógica de relevo UDP P2P (sin sockets; los listeners 40708/40709 viven en World)
 │   ├── Rakion.Maintenance/      # Rankings, antifraude y tareas programadas (fase 7)
+│   ├── Rakion.Buddy/            # Servidor del Messenger (Buddy2.dll), TCP/UDP 8500
 │   └── Rakion.App/              # Punto de entrada unificado / Daemon CLI para ejecutar todos los servicios
 ├── tests/
 │   ├── Rakion.Core.Tests/       # Pruebas unitarias de serialización de paquetes, opcodes y AES-128
@@ -71,7 +72,8 @@ rakion-brokenyx/
 │   ├── Rakion.Database.Tests/   # Pruebas de persistencia, concurrencia de balance y repositorios SQLite
 │   ├── Rakion.Broker.Tests/     # Pruebas de autenticación Broker, tickets de sesión y AutoFetch HTTP
 │   ├── Rakion.World.Tests/      # Pruebas de ciclo de vida de WorldServer, login y UDP hole punching
-│   └── Rakion.Maintenance.Tests/ # Pruebas del cálculo de rankings
+│   ├── Rakion.Maintenance.Tests/ # Pruebas del cálculo de rankings
+│   └── Rakion.Buddy.Tests/      # Pruebas de extremo a extremo del Messenger (TCP/UDP)
 ├── config/
 │   └── appsettings.json         # Configuración centralizada de IPs, puertos, base de datos y tasas de juego
 └── docs/
@@ -292,7 +294,11 @@ rakion-brokenyx/
 
 ### Pendientes detectados (sin fase asignada)
 
-- [ ] **Mensajería y amigos (Messenger, F5):** lista de amigos, mensajes y estado en línea. El cliente tiene el botón «Messenger(F5)».
+- [ ] **Mensajería y amigos (Messenger, F9):** *parcial, integrado en `src/Rakion.Buddy/`.*
+  - Hecho: servidor TCP/UDP 8500, login y cifrado del Messenger, registro UDP, nick, lista de amigos al conectar (`0x1011`), estado en línea (`0x3FFF`), túnel `0x2020` → `0x2021`, consulta de estado `0x3010`, grupos (`0x3150` / `0x3152`) y `0x19 GetUserName` en el World.
+  - Verificado con cliente real: login, registro UDP, nick y `0x19`. **Sin verificar:** que la lista de amigos se vea en la ventana del Messenger.
+  - **Pospuesto:** agregar, aceptar y quitar amigos desde el cliente. `Buddy2.dll` v258 tiene una máscara de servicios fija a 1 que convierte esas acciones en no-ops: nunca llegan al servidor (**Observed**). Hay una idea sin parche por probar; detalle en `src/Rakion.Buddy/README.md`.
+  - Pendiente: mensajes (`0x2030` / `0x2010`) y la seguridad del login (el original no prueba la contraseña).
 - [ ] **Clanes:** creación, miembros, puntos y su ranking (`ClanRank` del original).
 
 ---

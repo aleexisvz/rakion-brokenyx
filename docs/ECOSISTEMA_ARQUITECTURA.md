@@ -77,7 +77,7 @@ El cliente de Rakion en su versión v258 está compuesto por:
   - Su código expone de forma directa la tabla de métodos virtuales (vtable) y nombres desensamblados de la interfaz maestra de red: **`IScavengerWorldNet`**.
 - **`engine.dll` (Motor Gráfico y Físico):** Desarrollado sobre una evolución del motor Serious Engine adaptado por Softnyx para combate cuerpo a cuerpo y tercera persona en arenas.
 - **`entitiesmp.dll` & `gamemp.dll`:** Entidades de juego (clases de personajes, criaturas invocables/cells, proyectiles, espadas, cajas de colisión y sincronización multijugador).
-- **`Buddy2.dll`:** Subsistema de mensajería social, amigos y chat fuera de partida.
+- **`Buddy2.dll`:** Subsistema de mensajería social, amigos y chat fuera de partida. Se conecta a su propio servidor (`BuddyIP` / `BuddyPort` de `DataSetup/Locale.ini`, 8500), que aquí implementa `Rakion.Buddy` (ver su README, incluido el límite de la máscara de servicios del cliente v258).
 
 ### 2.2 La Interfaz de Red del Cliente: `IScavengerWorldNet`
 A través de la ingeniería inversa de los símbolos en `BinDev\rakion.bin`, se ha reconstruido el mapa exacto de funciones que el cliente invoca para comunicarse con el servidor. Este es el contrato que nuestro nuevo servidor en C# debe satisfacer al 100%:

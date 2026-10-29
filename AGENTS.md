@@ -69,6 +69,7 @@ src/
   Rakion.Relay/      UDP relay routing logic — no sockets; the 40708/40709
                      listeners live in World
   Rakion.Maintenance/ rankings, anti-abuse, scheduled jobs (phase 7)
+  Rakion.Buddy/      Messenger (Buddy2.dll) server, TCP/UDP 8500
   Rakion.App/        host/composition root, configuration, logging
 tests/
 ```
