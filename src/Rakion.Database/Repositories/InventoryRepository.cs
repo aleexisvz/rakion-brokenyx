@@ -392,7 +392,8 @@ public sealed class InventoryRepository : IInventoryRepository
         byte stoneSlot,
         int stoneItemId,
         int levelDelta,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        IReadOnlyList<(byte Slot, int ItemId)>? materials = null)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
@@ -414,11 +415,28 @@ public sealed class InventoryRepository : IInventoryRepository
                 return null;
             }
 
-            await connection.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM user_items WHERE id = @Id AND user_id = @UserId;",
-                new { stone.Id, UserId = userId },
-                tx,
-                cancellationToken: ct));
+            var consumed = new List<int> { stone.Id };
+            foreach (var (slot, itemId) in materials ?? [])
+            {
+                var material = await connection.QuerySingleOrDefaultAsync<LevelRow>(new CommandDefinition(
+                    findSql, new { UserId = userId, Slot = slot, ItemId = itemId }, tx, cancellationToken: ct));
+                if (material is null || material.Id == target.Id || consumed.Contains(material.Id))
+                {
+                    await tx.RollbackAsync(ct);
+                    return null;
+                }
+
+                consumed.Add(material.Id);
+            }
+
+            foreach (int id in consumed)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "DELETE FROM user_items WHERE id = @Id AND user_id = @UserId;",
+                    new { Id = id, UserId = userId },
+                    tx,
+                    cancellationToken: ct));
+            }
 
             byte level = (byte)Math.Clamp(target.Level + levelDelta, 0, byte.MaxValue);
             await connection.ExecuteAsync(new CommandDefinition(

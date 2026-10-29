@@ -191,9 +191,9 @@ rakion-brokenyx/
 - [x] **4.4 Asignación de Puntos (`SendInventoryAllocationPoint(uint8 statIndex)`, `0x0033`):** (#20)
   - Reparto de puntos a las 10 estadísticas con tope 50 (**Inferred**); primero gasta los puntos de nivel y luego los de PowerUser.
   - Evidencia: layout **Observed** (`engine.dll` 0x361938A0, `rakion.bin` 0x47DBB0). Verificado con cliente real: sí.
-- [x] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`, `0x0074`):** (#27, #30)
+- [x] **4.5 El Sistema de Herrería y Refinado (`SendEncahntReinforce`, `0x0074`):** (#27, #30, #43)
   - Comprobaciones del servidor original (equipo por debajo de +15, piedras 13001–13005) y resultados 0–8 **Observed** (`RakionWorldServ.exe` 0x40C310); nunca destruye el objeto (0x40C7A9).
-  - Probabilidades **Unknown** (tabla provisional); la probabilidad de bajar de nivel se ajusta con `World:Rewards:EnchantDowngradeScale`. Materiales 14001–14003 todavía rechazados.
+  - Probabilidades del original (`RakionWorldServ.exe` 0x40C404–0x40C790, tabla por piedra en 0x41E6F4, **Observed**): éxito base y caída por nivel de cada piedra, más los catalizadores 14001 (rotura → sin cambio), 14002 y 14003 (Charm, +5 % de éxito seguro cada uno), hasta 3 y consumidos con la piedra. La probabilidad de bajar de nivel se sigue ajustando con `World:Rewards:EnchantDowngradeScale`.
   - Verificado con cliente real: sí.
 - [x] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*: (#41)
   - Bandeja `pending_presents` (la `pendingpresents` del original): ver el más antiguo (`0x006B` → `[res][id][ítem][u16]`), aceptar a un slot vacío de la caja (`0x006C` → `[res][u32]`, 3 si el slot está ocupado) y descartar (`0x006D` → `[res]`). **Observed** (`RakionWorldServ.exe` 0x416BF0, 0x41710E; `engine.dll` 0x36194530–0x36194590).

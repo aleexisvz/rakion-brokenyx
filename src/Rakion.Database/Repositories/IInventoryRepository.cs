@@ -22,9 +22,10 @@ public interface IInventoryRepository
     /// Returns null (and changes nothing) when that slot no longer holds that item; otherwise the balances.
     /// </summary>
     /// <summary>
-    /// Consumes the stone in <paramref name="stoneSlot"/> and changes the level of the item in
-    /// <paramref name="targetSlot"/> by <paramref name="levelDelta"/> (never below 0), in one transaction. Both are
-    /// account box slots and must still hold the expected item ids. Returns the new level, or null when they don't.
+    /// Consumes the stone in <paramref name="stoneSlot"/> and the catalysts in <paramref name="materials"/>, and changes
+    /// the level of the item in <paramref name="targetSlot"/> by <paramref name="levelDelta"/> (never below 0), in one
+    /// transaction. All are account box slots and must still hold the expected item ids. Returns the new level, or null
+    /// when they don't.
     /// </summary>
     Task<byte?> ReinforceInBoxAsync(
         int userId,
@@ -33,7 +34,8 @@ public interface IInventoryRepository
         byte stoneSlot,
         int stoneItemId,
         int levelDelta,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        IReadOnlyList<(byte Slot, int ItemId)>? materials = null);
 
     Task<SaleOutcome?> SellFromBoxAsync(int userId, byte slot, int itemId, long goldGained, CancellationToken ct = default);
 

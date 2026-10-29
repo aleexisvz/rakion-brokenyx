@@ -18,11 +18,11 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 | :--- | :--- | :--- | :--- |
 | 4.1 Carga de inventario | `InventoryEnter` `0x002C`, `InventoryLeave` `0x002D` (**Observed**) | Responde `0x002C` con `[u8 Result][u32 ServerTimeMinutes]` (**Observed**). El Box de la cuenta (120 slots) viaja en la cola de `WorldLoginPart2` (`0x000D`) y lo llena `AccountInventoryProvider`. Los 19 slots de equipo de cada personaje viajan en sus registros de `0x000C`/`0x000D`. | `0x002C`: sí. Box: pendiente de probar |
 | 4.3 Mover ítems | `InventoryMove` `0x0031` (**Observed**) | Box ↔ Box, Box ↔ equipo y equipo ↔ equipo del personaje activo: intercambio atómico en BD y respuesta `0x0031` con el estado nuevo de ambos slots. Falta validar qué ítem cabe en cada slot de equipo (reglas **Unknown**).  | Box: sí. Equipo: pendiente de probar |
-| 4.3 Vender ítems | `InventorySell` `0x002F` (**Observed**) | Venta desde el Box por oro con la fórmula del original; borrado del ítem y abono en una transacción. Rechazadas por ahora: criaturas (8000–8999). | pendiente de probar |
-| 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones y paquetes (tipo 10). Ítems PowerUser: solo con PowerUser activo, como el original. | pendiente de probar |
-| 4.4 Reparto de puntos | `InventoryAllocationPoint` `0x0033` (**Observed**) | Gasta un punto de nivel (o de PowerUser si no quedan) en una de las 10 estadísticas, en una transacción; tope 50 por estadística (**Inferred**). Reseteo (`0x001B`) pendiente. | pendiente de probar |
-| 4.2 PU Card | `InventoryBuyPowerUser` `0x0034` (**Observed**) | Compra nueva (8000 cash, caduca ahora + 30 días) o renovación (6000 cash, +30 días), +5 puntos PowerUser, tope de 180 días por delante; una transacción. Cupones rechazados. | pendiente de probar |
-| 4.5 Herrería | `EnchantReinforce` `0x0074` (**Observed**) | Refinado de un ítem de equipo del Box con una piedra (13001–13005): valida como el original, sortea el resultado con probabilidades configurables (**Inferred**), consume la piedra y ajusta el nivel en una transacción. Sin rotura (como el original). Materiales 14001–14003 rechazados por ahora. | pendiente de probar |
+| 4.3 Vender ítems | `InventorySell` `0x002F` (**Observed**) | Venta desde el Box por oro con la fórmula del original; borrado del ítem y abono en una transacción. Rechazadas por ahora: criaturas (8000–8999). | verificado con cliente real |
+| 4.2 Tienda | `InventoryBuy` `0x002E` (**Observed**) | Compra con oro o cash: validación como el original (tienda 1/2/3, saldo), slot libre más alto dentro de las bolsas, cobro e inserción en una transacción y respuesta con saldos e ítem. Rechazados por ahora: cupones y paquetes (tipo 10). Ítems PowerUser: solo con PowerUser activo, como el original. | verificado con cliente real |
+| 4.4 Reparto de puntos | `InventoryAllocationPoint` `0x0033` (**Observed**) | Gasta un punto de nivel (o de PowerUser si no quedan) en una de las 10 estadísticas, en una transacción; tope 50 por estadística (**Inferred**). Reseteo (`0x001B`) pendiente. | verificado con cliente real |
+| 4.2 PU Card | `InventoryBuyPowerUser` `0x0034` (**Observed**) | Compra nueva (8000 cash, caduca ahora + 30 días) o renovación (6000 cash, +30 días), +5 puntos PowerUser, tope de 180 días por delante; una transacción. Cupones rechazados. | verificado con cliente real |
+| 4.5 Herrería | `EnchantReinforce` `0x0074` (**Observed**) | Refinado de un ítem de equipo del Box con una piedra (13001–13005): valida como el original, sortea el resultado con la fórmula del original (**Observed**), consume la piedra y los catalizadores 14001–14003 y ajusta el nivel en una transacción. Sin rotura (como el original). | verificado con cliente real |
 | 4.6 | ver `ClientOpcode` (`0x002E`–`0x0035`, `0x006B`–`0x0074`, **Observed**) | Pendiente | no |
 
 ## Evidencia y decisiones
@@ -120,11 +120,18 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
     para ese nivel (original 0x40C310). **Observed**; significados **Derived**.
   - Reglas del original: el ítem debe ser equipo (id < 8000) y estar por debajo de +15; piedra 13001 solo por debajo
     de +5; 13004 solo desde +10. La rotura nunca ocurre: el original la convierte en −3 (nivel ≤ 3) o en "sin cambio".
-  - Probabilidades: el original las lee de una tabla de configuración por piedra y materiales que no está en el
-    binario (**Unknown**). `EnchantOdds.DefaultFor` es provisional (**Inferred**): 100 % hasta +3 y después menos
-    éxito y algo de −1. Se puede sustituir al construir `BlacksmithModule`.
+  - Probabilidades: la fórmula del original (`RakionWorldServ.exe` 0x40C404–0x40C790, **Observed**; `EnchantOdds.Legacy`):
+    - Cada piedra tiene un éxito base y una caída por nivel (tabla fija en 0x41E6F4): 13001 70/6, 13002 85/6, 13003 90/5,
+      13004 75/4, 13005 95/3 (%).
+    - Con u = 0,05 por Charm (14003): p = (1 − u)·éxito + u, y por cada nivel i = 1..nivel, p = p·(1 − i·caída)·(1 − u) + u.
+    - El resto (1 − p) se reparte en quinceavos: sin cambio 4 + 0,2·a + 1,2·b, −1 3 + 0,6·b, −2 2 + 0,4·b, −3 1 + 0,1·b y
+      rotura 1 − 0,2·a (a = 14001, b = 14002); lo que sobra es «sin cambio» (código 6, que la base de datos no toca, 0x419642).
+    - La rotura pasa a −3 a +3 o menos y a «sin cambio» por encima, así que el 14001 solo protege hasta +3. El cliente
+      describe el 14002 como «menos bajadas», pero la fórmula sube las partes de −1 a −3: se mantiene tal cual.
+    - Catalizadores: hasta 3, solo 14001–14003 (otro ítem responde 7); se consumen con la piedra.
+    - `World:Rewards:EnchantDowngradeScale` sigue reduciendo las bajadas (lo que quita pasa a «sin cambio»).
 - Reseteo de puntos (`0x001B`, 4.7):
-  - Petición `[u8 usa cupón][u16 slot del cupón]`; respuesta `[u8 resultado][u32 cash][u16 puntos][u16 puntos PU][u8 N][N × u32 regalos]` (cliente `engine.dll` 0x36195400, **Observed**). El servidor responde por `0x001B`, el mismo número que la confirmación de GameGuard.
+  - Petición `[u8 usa cupón][u16 slot del cupón]`; respuesta `[u8 resultado][u32 cash][u16 puntos][u16 puntos PU][u8 N][N × u32 regalos]` (cliente `engine.dll` 0x36195400, **Observed**). El servidor responde por `0x001B`.
   - Precio en cash según nivel: 7000 hasta 15, 12000 hasta 40, 19000 por encima (`RakionWorldServ.exe` 0x413FD4, **Observed**). Resultado 1 sin cash, 2 sin puntos repartidos.
   - El personaje se queda con 3 puntos por nivel por encima de 1 y el resto vuelve a los puntos PowerUser de la cuenta (**Derived** de 0x414043).
   - Cupones de descuento (ítems 11000–11999) rechazados con 0x14: su tabla de descuentos no está en el binario (**Unknown**). La lotería de regalos del original no se envía.
