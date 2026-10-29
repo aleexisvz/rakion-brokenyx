@@ -28,5 +28,6 @@ Sin modificar el cliente, las amistades tienen que crearse fuera del Messenger: 
 ## Pendiente
 
 - Comprobar con el cliente real que la lista de amigos aparece en la ventana del Messenger.
+- **Agregar amigos en vivo (pospuesto).** Idea sin parche, sin probar: usar el `0x19 GetUserName` del World como intención de agregar, crear la amistad en el servidor y avisar a los dos clientes con un paquete que acepten sin pedirlo (`0x3001`, `0x3FFF` o `0x2021` con `0xC041`). Falta analizar esos lectores (0x10007CD8 y siguientes) y confirmar que `0x19` solo lo usa la ventana del Messenger (**Unknown**). La amistad sería automática, porque aceptar tampoco sale del cliente.
 - Mensajes (`0x2030` y entrega `0x2010`) y grupos.
 - Seguridad: el login original no prueba la contraseña. El puerto debe quedarse en una red de confianza hasta que el World emita un token para el Messenger.
