@@ -84,20 +84,21 @@ public sealed class InventoryModule : IWorldOpcodeModule
     {
         IWorldSessionView view = session;
         if (!FieldGamePotionRequestPacket.TryParse(payload.Span, out var request) || view.UserId is not int userId ||
-            !session.IsInField || request.ItemId is < 12000 or > 12999 || request.BoxSlot >= AccountBoxBlock.SlotCount)
+            view.CharacterId is not int characterId || !session.IsInField || request.ItemId is < 12000 or > 12999 ||
+            request.EquipmentSlot >= CharacterEquipment.SlotCount)
         {
             _logger.LogWarning("[{ConnectionId}] FieldGamePotion rejected: malformed, not in a room or not a potion.", view.ConnectionId);
             return;
         }
 
-        long? left = await _inventoryRepository.ConsumePotionAsync(userId, request.BoxSlot, request.ItemId, cancellationToken).ConfigureAwait(false);
+        long? left = await _inventoryRepository.ConsumePotionAsync(userId, characterId, request.EquipmentSlot, request.ItemId, cancellationToken).ConfigureAwait(false);
         if (left is null)
         {
-            _logger.LogWarning("[{ConnectionId}] FieldGamePotion refused: box slot {Slot} has no potion {ItemId} left.", view.ConnectionId, request.BoxSlot, request.ItemId);
+            _logger.LogWarning("[{ConnectionId}] FieldGamePotion refused: equipment slot {Slot} has no potion {ItemId} left.", view.ConnectionId, request.EquipmentSlot, request.ItemId);
             return;
         }
 
-        _logger.LogInformation("[{ConnectionId}] Potion {ItemId} drunk from box slot {Slot}: {Left} left.", view.ConnectionId, request.ItemId, request.BoxSlot, left);
+        _logger.LogInformation("[{ConnectionId}] Potion {ItemId} drunk from equipment slot {Slot}: {Left} left.", view.ConnectionId, request.ItemId, request.EquipmentSlot, left);
     }
 
     private async ValueTask HandleInventoryEnterAsync(

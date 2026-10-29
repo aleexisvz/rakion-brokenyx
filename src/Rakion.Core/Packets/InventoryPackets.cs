@@ -915,17 +915,18 @@ public sealed record EnchantReinforceResponsePacket(
 }
 
 /// <summary>
-/// A potion drunk during a match (0x006E): [u8 BoxSlot][u16 ItemId]. The legacy server (RakionWorldServ.exe
-/// 0x428C90 -> 0x40E5F0, Observed) checks that the box slot holds that item with a quantity left, lowers the
-/// quantity (kept in the item's exp) by one and answers nothing.
+/// A potion drunk during a match (0x006E): [u8 EquipmentSlot][u16 ItemId]. The legacy server (RakionWorldServ.exe
+/// 0x428C90 -> 0x40E5F0, Observed) checks that the character's equipment slot (the 19-entry arrays loaded at
+/// 0x40BE4F, where the potion slots live) holds that item with a quantity left, lowers the quantity (kept in the
+/// item's exp) by one and answers nothing.
 /// </summary>
-public sealed record FieldGamePotionRequestPacket(byte BoxSlot, ushort ItemId) : IPacket
+public sealed record FieldGamePotionRequestPacket(byte EquipmentSlot, ushort ItemId) : IPacket
 {
     public ushort Opcode => (ushort)ClientOpcode.FieldGamePotion;
 
     public void Serialize(PacketWriter writer)
     {
-        writer.WriteByte(BoxSlot);
+        writer.WriteByte(EquipmentSlot);
         writer.WriteUInt16(ItemId);
     }
 

@@ -74,15 +74,16 @@ public sealed class InventorySwapTests
     }
 
     [TestMethod]
-    public async Task ConsumePotion_LowersTheQuantity_AndRefusesAnEmptyOrWrongSlot()
+    public async Task ConsumePotion_LowersTheEquippedQuantity_AndRefusesAnEmptyOrWrongSlot()
     {
-        var potion = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = 1, CharacterId = 0, ItemId = 12001, SlotIndex = 3, Exp = 2 });
+        var potion = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = 1, CharacterId = 9, ItemId = 12001, SlotIndex = 3, Exp = 2 });
 
-        Assert.AreEqual(1L, await _invRepo.ConsumePotionAsync(1, 3, 12001));
-        Assert.AreEqual(0L, await _invRepo.ConsumePotionAsync(1, 3, 12001));
-        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 3, 12001), "none left");
-        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 3, 12002), "another item");
-        Assert.IsNull(await _invRepo.ConsumePotionAsync(2, 3, 12001), "another account");
+        Assert.AreEqual(1L, await _invRepo.ConsumePotionAsync(1, 9, 3, 12001));
+        Assert.AreEqual(0L, await _invRepo.ConsumePotionAsync(1, 9, 3, 12001));
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 9, 3, 12001), "none left");
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 9, 3, 12002), "another item");
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 8, 3, 12001), "another character");
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(2, 9, 3, 12001), "another account");
         Assert.AreEqual(0L, (await _invRepo.GetUserItemsAsync(1)).Single(i => i.Id == potion.Id).Exp);
     }
 

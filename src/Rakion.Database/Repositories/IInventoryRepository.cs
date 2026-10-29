@@ -50,10 +50,7 @@ public interface IInventoryRepository
     Task<UserItemEntity> AddUserItemAsync(UserItemEntity item, CancellationToken ct = default);
     Task<bool> RemoveUserItemAsync(int userItemId, int userId, CancellationToken ct = default);
     Task<bool> UpdateSlotAsync(int userItemId, int userId, byte newSlotIndex, CancellationToken ct = default);
-    /// <summary>
-    /// Lowers by one the quantity (exp) of the potion in the account box slot. Returns the quantity left, or null when
-    /// the slot does not hold that item or none is left.
-    /// </summary>
+
     /// <summary>
     /// Moves the quantity of the item in <paramref name="sourceSlot"/> onto the one in <paramref name="targetSlot"/> of
     /// the account box and deletes the source row. False when either slot is empty or they are the same slot.
@@ -63,7 +60,11 @@ public interface IInventoryRepository
     /// <summary>The item ids in two account box slots, null for an empty slot.</summary>
     Task<(int? Source, int? Target)> GetBoxItemIdsAsync(int userId, byte sourceSlot, byte targetSlot, CancellationToken ct = default);
 
-    Task<long?> ConsumePotionAsync(int userId, byte boxSlot, int itemId, CancellationToken ct = default);
+    /// <summary>
+    /// Lowers by one the quantity (exp) of the potion in the character's equipment slot. Returns the quantity left, or
+    /// null when the slot does not hold that item or none is left.
+    /// </summary>
+    Task<long?> ConsumePotionAsync(int userId, int characterId, byte equipmentSlot, int itemId, CancellationToken ct = default);
 
     Task<bool> UpdateLevelAndExpAsync(int userItemId, byte newLevel, long newExp, CancellationToken ct = default);
 
