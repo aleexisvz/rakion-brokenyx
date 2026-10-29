@@ -261,7 +261,22 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             // A dropped client never sends FieldExit; free its slot so the room does not stay behind.
             LeaveCurrentFieldInBackground(session);
+            var channel = session.ActiveChannel;
             _channelManager.LeaveChannel(session);
+            if (channel is not null)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RefreshRostersAsync(channel, session, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "[{ConnectionId}] Failed to refresh the channel roster after a disconnect.", session.Connection.ConnectionId);
+                    }
+                });
+            }
             if (session.UdpIndex != 0)
             {
                 _udpEndpoints.Release(session.UdpIndex);
@@ -685,6 +700,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         // 2. Automatically assign character to appropriate channel (Beginner if level <= 15, otherwise Free)
         byte targetChannelIndex = ch.Level <= 15 ? (byte)0 : (byte)1;
+        var previousChannel = session.ActiveChannel;
         if (!_channelManager.TryEnterChannel(targetChannelIndex, session, string.Empty, out _))
         {
             _channelManager.TryEnterChannel(1, session, string.Empty, out _);
@@ -708,14 +724,13 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             // 4. Send ChannelCharacters response (Opcode 0x001E)
             await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
 
-            // 5. Broadcast user entrance to other players in this channel
-            foreach (var member in activeCh.Sessions.Values)
-            {
-                if (member.Connection.ConnectionId != session.Connection.ConnectionId)
-                {
-                    await SendPacketAsync(member, enterResp, cancellationToken).ConfigureAwait(false);
-                }
-            }
+            // 5. Refresh the roster of the other players in this channel
+            await RefreshRostersAsync(activeCh, session, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (previousChannel is not null && previousChannel != session.ActiveChannel)
+        {
+            await RefreshRostersAsync(previousChannel, session, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -787,6 +802,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        var previousChannel = session.ActiveChannel;
         if (_channelManager.TryEnterChannel(req.ChannelIndex, session, req.Password, out byte reason))
         {
             var ch = session.ActiveChannel!;
@@ -801,17 +817,14 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
             await SendPacketAsync(session, resp, cancellationToken).ConfigureAwait(false);
 
-            // Broadcast entrance to other players in the newly entered channel
-            foreach (var member in ch.Sessions.Values)
-            {
-                if (member.Connection.ConnectionId != session.Connection.ConnectionId)
-                {
-                    await SendPacketAsync(member, resp, cancellationToken).ConfigureAwait(false);
-                }
-            }
-
             // Send channel character roster
             await HandleChannelCharactersAsync(session, cancellationToken).ConfigureAwait(false);
+
+            await RefreshRostersAsync(ch, session, cancellationToken).ConfigureAwait(false);
+            if (previousChannel is not null && previousChannel != ch)
+            {
+                await RefreshRostersAsync(previousChannel, session, cancellationToken).ConfigureAwait(false);
+            }
         }
         else
         {
@@ -823,20 +836,45 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         WorldSession session,
         CancellationToken cancellationToken)
     {
+        var channel = session.ActiveChannel;
         _channelManager.LeaveChannel(session);
         await SendPacketAsync(session, new ChannelExitResponsePacket(ResultCode: 0), cancellationToken).ConfigureAwait(false);
+        if (channel is not null)
+        {
+            await RefreshRostersAsync(channel, session, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Sends the current roster (0x1E) to every player of the channel except <paramref name="changed"/>.
+    /// The 0x1F enter answer must not be echoed to others: the client then reads its channel name as a player
+    /// (rakion.bin 0x473DEA compares the id and, when it is not its own, hands the record to 0x40CC40), which showed
+    /// "Beginner 01" in the user list. Observed with the real client; that 0x1E fully replaces the list is Inferred.
+    /// </summary>
+    private async ValueTask RefreshRostersAsync(LobbyChannel channel, WorldSession changed, CancellationToken cancellationToken)
+    {
+        foreach (var member in channel.Sessions.Values)
+        {
+            if (member.Connection.ConnectionId != changed.Connection.ConnectionId && member.ActiveChannel == channel)
+            {
+                await SendRosterAsync(member, channel, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 
     private async ValueTask HandleChannelCharactersAsync(
         WorldSession session,
         CancellationToken cancellationToken)
     {
-        if (session.ActiveChannel is null)
+        if (session.ActiveChannel is not null)
         {
-            return;
+            await SendRosterAsync(session, session.ActiveChannel, cancellationToken).ConfigureAwait(false);
         }
+    }
 
-        var members = session.ActiveChannel.Sessions.Values
+    private async ValueTask SendRosterAsync(WorldSession session, LobbyChannel channel, CancellationToken cancellationToken)
+    {
+        var members = channel.Sessions.Values
             .Where(s => s.ActiveCharacter is not null)
             .Select(s => new ChannelCharacterSummary(
                 Slot: 0,
@@ -848,10 +886,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             .ToList();
 
         var resp = new ChannelCharactersResponsePacket(
-            session.ActiveChannel.Index,
+            channel.Index,
             (byte)members.Count,
             PageIndex: 0,
-            ChannelName: session.ActiveChannel.Name,
+            ChannelName: channel.Name,
             ServerName: _options.Value.ServerName,
             Characters: members);
 

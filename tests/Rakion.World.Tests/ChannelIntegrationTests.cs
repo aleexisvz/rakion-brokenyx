@@ -251,20 +251,23 @@ public sealed class ChannelIntegrationTests
         await ReadServerPacketAsync(stream2); // auto channel enter resp (0x001F)
         await ReadServerPacketAsync(stream2); // auto channel chars resp (0x001E)
 
-        // Alice receives broadcast of Bob entering channel 0
-        await ReadServerPacketAsync(stream1);
+        // Alice gets the refreshed roster, not Bob's 0x1F (the client would list the channel name as a player)
+        await AssertRosterAsync(stream1, "Alice", "Bob");
 
         // Both enter Free Channel (1)
         await SendClientPacketAsync(stream1, 3, (ushort)ClientOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
         await ReadServerPacketAsync(stream1); // enter resp (0x001F)
         await ReadServerPacketAsync(stream1); // channel chars (0x001E)
 
+        // Bob, still in channel 0, sees Alice leave
+        await AssertRosterAsync(stream2, "Bob");
+
         await SendClientPacketAsync(stream2, 3, (ushort)ClientOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
         await ReadServerPacketAsync(stream2); // enter resp (0x001F)
         await ReadServerPacketAsync(stream2); // channel chars (0x001E)
 
-        // Alice receives broadcast of Bob entering Free Channel 1
-        await ReadServerPacketAsync(stream1);
+        // Alice receives the roster with Bob in Free Channel 1
+        await AssertRosterAsync(stream1, "Alice", "Bob");
 
         // 1. Channel Chat: Alice sends chat message
         await SendClientPacketAsync(stream1, 4, (ushort)ClientOpcode.ChannelChat, new ChannelChatRequestPacket("Hello Bob!"));
@@ -347,6 +350,14 @@ public sealed class ChannelIntegrationTests
         Assert.AreEqual(0x0036, (ushort)fieldOp);
         Assert.IsTrue(FieldListResponsePacket.TryParse(fieldPayload, out var fieldResp));
         Assert.IsEmpty(fieldResp.Fields);
+    }
+
+    private static async Task AssertRosterAsync(NetworkStream stream, params string[] names)
+    {
+        var (op, payload) = await ReadServerPacketAsync(stream);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, op);
+        Assert.IsTrue(ChannelCharactersResponsePacket.TryParse(payload, out var roster));
+        CollectionAssert.AreEquivalent(names, roster.Characters.Select(c => c.Name).ToArray());
     }
 
     private static async Task SendClientPacketAsync(NetworkStream stream, ushort sequenceId, ushort opcode, IPacket packet)
