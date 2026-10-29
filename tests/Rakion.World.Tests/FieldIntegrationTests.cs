@@ -160,7 +160,7 @@ public sealed class FieldIntegrationTests
         // 4. Player 2 joins via QuickEnter (0x0039)
         var (c2, s2) = await CreateAuthenticatedPlayerAsync("guestUser", "GuestNinja", 0);
 
-        // Host (s1) was in channel 0, so it receives guest's ChannelEnter broadcast (0x001F)
+        // Host (s1) was in channel 0, so it receives the guest's record (0x001F)
         var (opBroadcastChan, _) = await ReadServerPacketAsync(s1);
         Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, opBroadcastChan);
 

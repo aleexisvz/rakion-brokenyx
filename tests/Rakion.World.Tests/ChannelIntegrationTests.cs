@@ -251,20 +251,25 @@ public sealed class ChannelIntegrationTests
         await ReadServerPacketAsync(stream2); // auto channel enter resp (0x001F)
         await ReadServerPacketAsync(stream2); // auto channel chars resp (0x001E)
 
-        // Alice receives broadcast of Bob entering channel 0
-        await ReadServerPacketAsync(stream1);
+        // Alice gets Bob's record (not the channel name) to add to her user list
+        await AssertUserEnteredAsync(stream1, "Bob");
 
         // Both enter Free Channel (1)
         await SendClientPacketAsync(stream1, 3, (ushort)ClientOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
         await ReadServerPacketAsync(stream1); // enter resp (0x001F)
         await ReadServerPacketAsync(stream1); // channel chars (0x001E)
 
+        // Bob, still in channel 0, sees Alice leave
+        var (leaveOp, leavePayload) = await ReadServerPacketAsync(stream2);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelExit, leaveOp);
+        Assert.AreNotEqual((byte)0, leavePayload[0], "the list id of Alice, never the own-exit 0");
+
         await SendClientPacketAsync(stream2, 3, (ushort)ClientOpcode.ChannelEnter, new ChannelEnterRequestPacket(1));
         await ReadServerPacketAsync(stream2); // enter resp (0x001F)
         await ReadServerPacketAsync(stream2); // channel chars (0x001E)
 
-        // Alice receives broadcast of Bob entering Free Channel 1
-        await ReadServerPacketAsync(stream1);
+        // Alice gets Bob's record in Free Channel 1
+        await AssertUserEnteredAsync(stream1, "Bob");
 
         // 1. Channel Chat: Alice sends chat message
         await SendClientPacketAsync(stream1, 4, (ushort)ClientOpcode.ChannelChat, new ChannelChatRequestPacket("Hello Bob!"));
@@ -347,6 +352,16 @@ public sealed class ChannelIntegrationTests
         Assert.AreEqual(0x0036, (ushort)fieldOp);
         Assert.IsTrue(FieldListResponsePacket.TryParse(fieldPayload, out var fieldResp));
         Assert.IsEmpty(fieldResp.Fields);
+    }
+
+    private static async Task AssertUserEnteredAsync(NetworkStream stream, string name)
+    {
+        var (op, payload) = await ReadServerPacketAsync(stream);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, op);
+        Assert.AreEqual((byte)0, payload[0]);
+        Assert.AreNotEqual((byte)0, payload[1], "list id");
+        Assert.AreEqual(name, System.Text.Encoding.ASCII.GetString(payload, 4, name.Length));
+        Assert.AreEqual((byte)0, payload[4 + name.Length]);
     }
 
     private static async Task SendClientPacketAsync(NetworkStream stream, ushort sequenceId, ushort opcode, IPacket packet)

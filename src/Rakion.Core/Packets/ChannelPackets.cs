@@ -304,7 +304,10 @@ public sealed record ChannelChatBroadcastPacket(
 }
 
 /// <summary>
-/// Character summary inside ChannelCharactersResponsePacket.
+/// Character summary inside ChannelCharactersResponsePacket: [u8 list id][u16 grade][cstr name][u8 level][u8 class][u32].
+/// The list id names the line for a later 0x0020 removal (rakion.bin 0x42EB30), so it must be unique in the channel.
+/// engine.dll 0x36193384 drops an entry whose first byte after the name is 0 (Observed), so that byte cannot be the
+/// class (Swordman is 0): it is taken to be the level (Inferred).
 /// </summary>
 public sealed record ChannelCharacterSummary(
     byte Slot,
@@ -361,8 +364,8 @@ public sealed record ChannelCharactersResponsePacket(
             writer.WriteByte(c.Slot);
             writer.WriteUInt16(c.Grade);
             writer.WriteNullTerminatedString(c.Name);
-            writer.WriteByte(c.Class);
             writer.WriteByte(c.Level);
+            writer.WriteByte(c.Class);
             writer.WriteUInt32(c.ClanId);
         }
     }
@@ -399,8 +402,8 @@ public sealed record ChannelCharactersResponsePacket(
                 return false;
             }
 
-            byte cls = reader.ReadByte();
             byte level = reader.ReadByte();
+            byte cls = reader.ReadByte();
             uint clanId = reader.ReadUInt32();
 
             chars.Add(new ChannelCharacterSummary(slot, grade, name, cls, level, clanId));
