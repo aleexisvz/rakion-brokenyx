@@ -941,3 +941,41 @@ public sealed record FieldGamePotionRequestPacket(byte BoxSlot, ushort ItemId) :
         return true;
     }
 }
+
+/// <summary>Potion stack request (0x0073): [u8 SourceSlot][u8 TargetSlot], both account box slots (RakionWorldServ.exe 0x421AC1, Observed).</summary>
+public sealed record InventoryStackPotionRequestPacket(byte SourceSlot, byte TargetSlot) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.InventoryStackPotion;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(SourceSlot);
+        writer.WriteByte(TargetSlot);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out InventoryStackPotionRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 2)
+        {
+            return false;
+        }
+
+        packet = new InventoryStackPotionRequestPacket(span[0], span[1]);
+        return true;
+    }
+}
+
+/// <summary>
+/// Potion stack answer (0x0073): [u8 Result]. rakion.bin 0x4782E0 merges the slots on 0 and shows a message for 1 and
+/// 2 (Observed); which refusal maps to 1 or 2 is Inferred.
+/// </summary>
+public sealed record InventoryStackPotionResponsePacket(byte Result) : IPacket
+{
+    public const byte Stacked = 0;
+    public const byte Refused = 1;
+
+    public ushort Opcode => (ushort)ServerOpcode.InventoryStackPotion;
+
+    public void Serialize(PacketWriter writer) => writer.WriteByte(Result);
+}

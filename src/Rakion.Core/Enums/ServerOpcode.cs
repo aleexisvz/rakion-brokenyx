@@ -362,6 +362,12 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryBuyStageLevelFree = 0x0071,
 
+    /// <summary>
+    /// Potion stack answer: [u8 result]. On 0 the client merges the two box slots itself.
+    /// Evidence: Observed in engine.dll jump table opcode 0x73 (0x3619771B -> 0x36194080) and rakion.bin 0x4782E0.
+    /// </summary>
+    InventoryStackPotion = 0x0073,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).

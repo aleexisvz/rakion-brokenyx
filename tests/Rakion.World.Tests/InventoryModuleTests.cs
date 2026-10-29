@@ -47,7 +47,8 @@ public sealed class InventoryModuleTests
         Assert.IsTrue(_registry.IsMapped(ClientOpcode.InventoryLeave));
         Assert.IsTrue(_registry.IsMapped(ClientOpcode.InventoryMove));
         Assert.IsTrue(_registry.IsMapped(ClientOpcode.FieldGamePotion));
-        Assert.AreEqual(4, _registry.Count);
+        Assert.IsTrue(_registry.IsMapped(ClientOpcode.InventoryStackPotion));
+        Assert.AreEqual(5, _registry.Count);
     }
 
     [TestMethod]
