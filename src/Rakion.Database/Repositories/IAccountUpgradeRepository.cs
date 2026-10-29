@@ -24,4 +24,16 @@ public interface IAccountUpgradeRepository
         int characterId,
         Func<byte, (bool PayWithGold, int Price)?> priceForCurrentSlots,
         CancellationToken ct = default);
+
+    /// <summary>Deletes every Stage rank of the character for <paramref name="cashPrice"/> cash (0x0070).</summary>
+    Task<UpgradeOutcome> BuyStageRankClearAsync(int userId, int characterId, int cashPrice, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lets the account play any Stage whatever its level until <paramref name="nowMinute"/> +
+    /// <paramref name="durationMinutes"/> (0x0071). <see cref="UpgradeStatus.AtMaximum"/> while one is still active.
+    /// </summary>
+    Task<UpgradeOutcome> BuyStageLevelFreeAsync(int userId, int cashPrice, long nowMinute, int durationMinutes, CancellationToken ct = default);
+
+    /// <summary>The minute until which the account's Stage level pass lasts; null when it never bought one.</summary>
+    Task<long?> GetStageLevelFreeUntilAsync(int userId, CancellationToken ct = default);
 }
