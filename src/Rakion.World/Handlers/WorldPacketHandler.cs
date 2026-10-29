@@ -869,8 +869,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         }
     }
 
-    /// <summary>The line id in the user list: the UDP index, unique while connected and never 0 (0x20 [0] is the own exit answer).</summary>
-    private static byte ListId(WorldSession session) => (byte)session.UdpIndex;
+    /// <summary>The line id in the user list, given by the channel (1-255; 0x20 [0] is the own exit answer).</summary>
+    private static byte ListId(WorldSession session) => session.ChannelListId;
 
     private static ChannelCharacterSummary ToSummary(WorldSession s) => new(
         Slot: ListId(s),

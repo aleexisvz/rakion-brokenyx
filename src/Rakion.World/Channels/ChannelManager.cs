@@ -101,7 +101,12 @@ public sealed class ChannelManager : IChannelManager
         LeaveChannel(session);
 
         // Add to new channel
-        targetChannel.Sessions[session.Connection.ConnectionId] = session;
+        if (!targetChannel.TryAdd(session))
+        {
+            failureReason = 2;
+            return false;
+        }
+
         session.ActiveChannel = targetChannel;
 
         _logger.LogInformation(
@@ -121,7 +126,7 @@ public sealed class ChannelManager : IChannelManager
         if (session.ActiveChannel is not null)
         {
             var channel = session.ActiveChannel;
-            channel.Sessions.TryRemove(session.Connection.ConnectionId, out _);
+            channel.Remove(session);
             session.ActiveChannel = null;
 
             _logger.LogInformation(
