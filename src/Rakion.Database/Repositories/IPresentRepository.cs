@@ -19,6 +19,9 @@ public interface IPresentRepository
     /// <summary>Queues a present (an item id) for the account. Returns the pending id.</summary>
     Task<int> SendAsync(int userId, int itemId, CancellationToken ct = default);
 
+    /// <summary>How many presents wait in the account's present box.</summary>
+    Task<int> CountAsync(int userId, CancellationToken ct = default);
+
     /// <summary>The oldest present of the account, or null when the box is empty.</summary>
     Task<PendingPresent?> PeekAsync(int userId, CancellationToken ct = default);
 

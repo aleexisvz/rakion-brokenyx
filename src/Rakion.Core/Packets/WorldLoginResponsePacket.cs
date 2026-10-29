@@ -52,7 +52,8 @@ public sealed record WorldLoginResponsePacket(
     ushort PowerUserPoints = 0,
     ushort ResponseOpcode = (ushort)ServerOpcode.WorldLogin,
     ushort UdpIndex = 0,
-    uint? UdpKey = null) : IPacket
+    uint? UdpKey = null,
+    uint PendingPresents = 0) : IPacket
 {
     public ushort Opcode => ResponseOpcode;
 
@@ -87,7 +88,10 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteUInt32(0);
         writer.WriteUInt16(0);
         writer.WriteUInt32(0);
-        writer.WriteUInt32(0);
+        // Presents waiting in the present box: the legacy login agent counts pendingpresents and writes the count in
+        // this field (RakionWorldServ.exe 0x4110E8 -> 0x411A90, Observed); that the client lights its Post icon and
+        // the "receive" button from it is Inferred.
+        writer.WriteUInt32(PendingPresents);
         writer.WriteUInt32(0);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteNullTerminatedString(string.Empty);

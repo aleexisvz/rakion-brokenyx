@@ -33,6 +33,14 @@ public sealed class PresentRepository : IPresentRepository
             "SELECT MAX(id) FROM pending_presents WHERE user_id = @UserId;", new { UserId = userId }, cancellationToken: ct));
     }
 
+    public async Task<int> CountAsync(int userId, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await connection.ExecuteAsync(new CommandDefinition(Schema(connection), cancellationToken: ct));
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT COUNT(*) FROM pending_presents WHERE user_id = @UserId;", new { UserId = userId }, cancellationToken: ct));
+    }
+
     public async Task<PendingPresent?> PeekAsync(int userId, CancellationToken ct = default)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);

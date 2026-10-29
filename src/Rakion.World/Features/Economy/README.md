@@ -146,5 +146,6 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
 - Aceptar (`0x006C` `[u32 id][u16 slot de la caja]`): pasa el ítem al slot vacío de la caja y lo quita de la cola en una transacción; responde `[resultado][u32 tiempo límite]`, con 1 si no existe y 3 si el slot está ocupado (0x41710E..0x417216, **Observed**). Las pociones llegan con su cantidad del catálogo (`hit2`), como en la tienda.
 - Descartar (`0x006D` `[u32 id]`): lo borra; `[0]` o `[1]` si no existía.
 - Los GM envían regalos con `/present <pj> <id del ítem>`; más adelante, la web.
+- Aviso: el login lleva el número de regalos pendientes en el bloque fijo de la cabecera (como el original, 0x4110E8 → 0x411A90, **Observed**); el cliente enciende con él el icono de correo y el botón de recibir (**Inferred**). Un regalo enviado con el jugador conectado se ve al volver a entrar.
 - No hecho: el regalo aleatorio que el original añadía a las compras en cash (`CWorld::GetRandomPresentIndex`, tabla **Unknown**) y los regalos de oro (`loggoldpresents`).
 

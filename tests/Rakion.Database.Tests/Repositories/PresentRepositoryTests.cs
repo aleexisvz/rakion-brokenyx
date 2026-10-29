@@ -31,6 +31,7 @@ public sealed class PresentRepositoryTests
         int second = await _presents.SendAsync(1, 3001);
         await _presents.SendAsync(2, 3002);
 
+        Assert.AreEqual(2, await _presents.CountAsync(1));
         Assert.AreEqual(new PendingPresent(first, 12001), await _presents.PeekAsync(1));
         Assert.AreEqual(new PendingPresent(second, 3001), await _presents.GetAsync(1, second));
         Assert.IsNull(await _presents.GetAsync(2, second), "another account's present");
