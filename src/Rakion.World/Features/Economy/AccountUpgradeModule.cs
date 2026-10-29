@@ -19,6 +19,13 @@ public sealed class AccountUpgradeModule : IWorldOpcodeModule
     public static int StatResetPrice(byte level) => level > 40 ? 19000 : level > 15 ? 12000 : 7000;
 
     public const int BagCashPrice = 8000;   // 0x415033, Observed
+
+    /// <summary>Character slot: 12000 cash (RakionWorldServ.exe 0x40B249), at most 6 slots (0x40B25F), Observed.</summary>
+    public const int CharacterSlotCashPrice = 12000;
+    public const byte MaxCharacterSlots = 6;
+
+    /// <summary>The legacy server answers 3 both at the slot maximum and without enough cash (0x40B26A, 0x415775).</summary>
+    public const byte CharacterSlotRefused = 3;
     public const byte MaxBags = 4;          // Derived: the 120-slot box and 30 slots per bag (ShopModule)
 
     /// <summary>Potion slots 3 -> 4 -> 5 -> 6 are sold as shop items 10008..10010 (0x428E02, Observed).</summary>
@@ -60,6 +67,7 @@ public sealed class AccountUpgradeModule : IWorldOpcodeModule
     {
         registry.Map(ClientOpcode.CharacterStateClear, HandleStatResetAsync);
         registry.Map(ClientOpcode.InventoryBuyBag, HandleBuyBagAsync);
+        registry.Map(ClientOpcode.InventoryBuyCharacterSlot, HandleBuyCharacterSlotAsync);
         registry.Map(ClientOpcode.InventoryBuyPotionSlot, HandleBuyPotionSlotAsync);
         registry.Map(ClientOpcode.InventoryBuyStageRankClear, HandleBuyStageRankClearAsync);
         registry.Map(ClientOpcode.InventoryBuyStageLevelFree, HandleBuyStageLevelFreeAsync);
@@ -169,6 +177,34 @@ public sealed class AccountUpgradeModule : IWorldOpcodeModule
             (uint)Math.Max(outcome.Cash, 0),
             (ushort)Math.Clamp(outcome.LevelPoints, 0, ushort.MaxValue),
             (ushort)Math.Clamp(outcome.PowerPoints, 0, ushort.MaxValue));
+        await _sender.SendAsync(view, response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask HandleBuyCharacterSlotAsync(WorldSession session, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        IWorldSessionView view = session;
+        if (!CouponRequestPacket.TryParse(ClientOpcode.InventoryBuyCharacterSlot, payload.Span, out var request) || view.UserId is not int userId)
+        {
+            _logger.LogWarning("[{ConnectionId}] BuyCharacterSlot rejected: malformed payload or not logged in.", view.ConnectionId);
+            return;
+        }
+
+        UpgradeOutcome outcome = request.UseCoupon
+            ? new UpgradeOutcome(UpgradeStatus.AtMaximum, 0, 0, session.GameInfo?.SlotCount ?? 3)
+            : await _upgrades.BuyCharacterSlotAsync(userId, CharacterSlotCashPrice, MaxCharacterSlots, cancellationToken).ConfigureAwait(false);
+        if (outcome.Status == UpgradeStatus.Bought && session.GameInfo is { } gameInfo)
+        {
+            gameInfo.SlotCount = outcome.Count;
+        }
+
+        _logger.LogInformation("[{ConnectionId}] BuyCharacterSlot: {Status}, slots {Slots}, cash {Cash}.", view.ConnectionId, outcome.Status, outcome.Count, outcome.Cash);
+        byte result = outcome.Status == UpgradeStatus.Bought ? AccountUpgradeResponsePacket.Success : CharacterSlotRefused;
+        var response = new AccountUpgradeResponsePacket(
+            ServerOpcode.InventoryBuyCharacterSlot,
+            result,
+            (uint)Math.Clamp(outcome.Gold, 0, uint.MaxValue),
+            (uint)Math.Max(outcome.Cash, 0),
+            outcome.Count);
         await _sender.SendAsync(view, response, cancellationToken).ConfigureAwait(false);
     }
 

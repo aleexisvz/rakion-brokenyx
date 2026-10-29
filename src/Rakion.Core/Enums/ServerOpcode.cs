@@ -314,6 +314,12 @@ public enum ServerOpcode : ushort
     FieldGameStagePoint = 0x0053,
 
     /// <summary>
+    /// Character slot purchase answer (see AccountUpgradeResponsePacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x35 (0x361975A1 -> 0x361959C0).
+    /// </summary>
+    InventoryBuyCharacterSlot = 0x0035,
+
+    /// <summary>
     /// Bag purchase answer (see AccountUpgradeResponsePacket).
     /// Evidence: Observed in engine.dll jump table opcode 0x32 (0x36197577 -> 0x361957C0).
     /// </summary>

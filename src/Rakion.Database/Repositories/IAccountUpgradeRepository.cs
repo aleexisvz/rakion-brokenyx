@@ -12,6 +12,9 @@ public interface IAccountUpgradeRepository
     /// </summary>
     Task<StatResetOutcome> ResetStatsAsync(int userId, int characterId, int cashPrice, CancellationToken ct = default);
 
+    /// <summary>Adds one character slot for <paramref name="cashPrice"/> cash while the account has fewer than <paramref name="maxSlots"/>.</summary>
+    Task<UpgradeOutcome> BuyCharacterSlotAsync(int userId, int cashPrice, byte maxSlots, CancellationToken ct = default);
+
     /// <summary>Adds one bag for <paramref name="cashPrice"/> cash while the account has fewer than <paramref name="maxBags"/>.</summary>
     Task<UpgradeOutcome> BuyBagAsync(int userId, int cashPrice, byte maxBags, CancellationToken ct = default);
 
