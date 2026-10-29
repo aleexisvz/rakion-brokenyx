@@ -8,22 +8,6 @@ namespace Rakion.Core.Tests.Packets;
 public sealed class WorldPacketTests
 {
     [TestMethod]
-    public void GameGuardPacket_SerializesAndParsesCorrectly()
-    {
-        var packet = new GameGuardPacket(ResultCode: 0);
-        using var writer = new PacketWriter(packet.Opcode);
-        packet.Serialize(writer);
-        byte[] bytes = writer.Build();
-
-        Assert.IsTrue(PacketHeader.TryParse(bytes.AsSpan(0, PacketHeader.HeaderSize), out var header));
-        Assert.AreEqual((ushort)ServerOpcode.GameGuard, header.Opcode);
-
-        bool parsed = GameGuardPacket.TryParseResponse(bytes.AsSpan(PacketHeader.HeaderSize), out var response);
-        Assert.IsTrue(parsed);
-        Assert.AreEqual((byte)0, response.ResultCode);
-    }
-
-    [TestMethod]
     public void WorldLoginRequestPacket_SerializesAndParsesCorrectly()
     {
         var packet = new WorldLoginRequestPacket(12345678, "SwordMaster");

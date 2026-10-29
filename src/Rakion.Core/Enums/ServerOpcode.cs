@@ -81,11 +81,11 @@ public enum ServerOpcode : ushort
     CharacterGetUserName = 0x0019,
 
     /// <summary>
-    /// Server confirmation response to GameGuard verification.
-    /// Evidence: Observed in RakionWorldServ opcode 16 stub response (0x001B). The client dispatches 0x1B to the
-    /// stat reset answer (engine.dll 0x36195400), so CharacterStateClearResponsePacket uses this value too.
+    /// Stat reset answer (see CharacterStateClearResponsePacket).
+    /// Evidence: Observed in engine.dll 0x36195400, the client's handler for 0x1B. The legacy server sends nothing
+    /// back for the GameGuard check 0x0010 (RakionWorldServ.exe 0x41FC00), so 0x1B is only this answer.
     /// </summary>
-    GameGuard = 0x001B,
+    CharacterStateClear = 0x001B,
 
     // --- Inventory / Shop / Blacksmith ---
     /// <summary>

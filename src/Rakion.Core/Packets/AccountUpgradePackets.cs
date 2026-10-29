@@ -48,7 +48,7 @@ public sealed record CharacterStateClearResponsePacket(byte Result, uint Cash, u
 
     // The value collides with the GameGuard confirmation number (both directions share 0x1B); the client reads a
     // 0x1B it receives as this answer (engine.dll dispatcher entry 0x1B -> 0x36195400).
-    public ushort Opcode => (ushort)ServerOpcode.GameGuard;
+    public ushort Opcode => (ushort)ServerOpcode.CharacterStateClear;
 
     public void Serialize(PacketWriter writer)
     {

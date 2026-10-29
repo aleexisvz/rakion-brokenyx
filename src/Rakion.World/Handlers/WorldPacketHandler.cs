@@ -506,16 +506,20 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         await _userRepository.UpdateLastConnectAsync(user.Id, DateTime.UtcNow, cancellationToken).ConfigureAwait(false);
     }
 
-    private async ValueTask HandleGameGuardAsync(
+    /// <summary>
+    /// GameGuard check (0x10): the legacy server hands the client's bytes to ggauth and answers nothing; it only drops
+    /// the client when the check fails (RakionWorldServ.exe 0x41FC00 -> 0x40A9C0, 0x41EB20 code 0x18, Observed).
+    /// Without GameGuard every check passes, so nothing is sent. Replying 0x1B made the client read a stat reset
+    /// answer (engine.dll 0x36195400).
+    /// </summary>
+    private ValueTask HandleGameGuardAsync(
         WorldSession session,
         ReadOnlyMemory<byte> payload,
         CancellationToken cancellationToken)
     {
         session.GameGuardVerified = true;
-        _logger.LogDebug("[{ConnectionId}] GameGuard check received ({Length} bytes). Emitting organic confirmation.", session.Connection.ConnectionId, payload.Length);
-
-        var response = new GameGuardPacket(ResultCode: 0);
-        await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
+        _logger.LogDebug("[{ConnectionId}] GameGuard check received ({Length} bytes); no answer, as the legacy server.", session.Connection.ConnectionId, payload.Length);
+        return ValueTask.CompletedTask;
     }
 
     private void HandleKeepAlive(WorldSession session)
