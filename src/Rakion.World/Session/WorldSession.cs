@@ -25,6 +25,9 @@ public sealed class WorldSession : IWorldSessionView
     /// <summary>UDP probe identity given at WorldLogin (see <see cref="UdpEndpointRegistry"/>); 0 when none.</summary>
     public ushort UdpIndex { get; set; }
 
+    /// <summary>Id of this player's line in the user list of its channel (1-255), given by the channel on entry.</summary>
+    public byte ChannelListId { get; set; }
+
     public uint UdpKey { get; set; }
 
     Guid IWorldSessionView.ConnectionId => Connection.ConnectionId;
