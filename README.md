@@ -3,7 +3,7 @@
 Clean-room C# (.NET 10) server emulator for the **Rakion: Chaos Force v258**
 client. No binary patches, no legacy DLLs — the protocol implemented natively.
 
-> **Status:** Phases 0–3 and 5 completed; most of phases 4, 6 and 7 done and verified with the retail v258 client (economy, blacksmith, rooms, matches in every mode including Golem War and Stage, rewards and levels, kick votes, GM commands, rankings). Messenger server integrated (login, presence, friend list delivery); adding friends from the client is postponed (blocked by the v258 client). Pending: presents, messenger messages, clans, server relay for public networks and Docker. See the roadmap.
+> **Status:** Phases 0–3 and 5 completed; most of phases 4, 6 and 7 done and verified with the retail v258 client (economy, blacksmith, rooms, matches in every mode including Golem War and Stage, rewards and levels, kick votes, GM commands, rankings, presents, potion use and stacking, character slots). Messenger server integrated (login, presence, friend list delivery); adding friends from the client is postponed (blocked by the v258 client). Pending: messenger messages, clans, server relay for public networks and Docker. See the roadmap.
 
 ## Documentation
 
