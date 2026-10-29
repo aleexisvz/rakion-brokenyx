@@ -176,7 +176,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir a los jugadores gestionar sus objetos, comprar en la tienda y mejorar equipamiento en la herrería.
 > **Carril:** A. **Código:** `src/Rakion.World/Features/Economy/`, `src/Rakion.Database/`, paquetes C-3 en `Rakion.Core`.
 
-> **Estado:** 4.0–4.8 mergeados (PRs #9–#21, #27, #30, #33, #41; contratos #9–#11). Pendientes 4.9 y los cupones de descuento (tabla **Unknown**). Detalle en `src/Rakion.World/Features/Economy/README.md`.
+> **Estado:** 4.0–4.9 mergeados (PRs #9–#21, #27, #30, #33, #41, #42; contratos #9–#11). Pendientes: los cupones de descuento (tabla **Unknown**). Detalle en `src/Rakion.World/Features/Economy/README.md`.
 
 - [x] **4.0 Prerrequisitos:** contratos C-0 (#9), C-1 (#10) y C-2 (#11) mergeados en `main`; C-3 (paquetes de economía en `InventoryPackets.cs`) entregado con cada ítem.
 - [x] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):** (#12, #13, #14, #15, #17)
@@ -202,7 +202,7 @@ rakion-brokenyx/
   - Verificado con cliente real: sí.
 - [x] **4.7 Reseteo de Puntos (`SendCharacterStateClear`, `0x001B`):** (#33)
   - Precio en cash por nivel (7000 / 12000 / 19000), resultados 1 (sin cash) y 2 (nada que resetear); el personaje conserva 3 puntos por nivel y el resto vuelve a los puntos PowerUser. **Observed** (`RakionWorldServ.exe` 0x413FD4, 0x41441D; cliente `engine.dll` 0x36195400); reparto **Derived**.
-  - La respuesta va por `0x001B`, el mismo número que nuestra confirmación de GameGuard (ver 4.9).
+  - La respuesta va por `0x001B`, que es solo la respuesta del reseteo (ver 4.9).
   - Verificado con cliente real: sí.
 - [x] **4.8 Otras compras y pociones:** (#33, #41)
   - Bolsa (`0x0032`, 8000 de cash, hasta 4 bolsas), slot de poción (`0x006F`, ítems 10008–10010 del catálogo) y cantidad de las pociones compradas (`hit2` del catálogo en `exp`). **Observed**.
@@ -210,7 +210,9 @@ rakion-brokenyx/
   - Gastar pociones en partida (`0x006E` `[slot de equipo][ítem]`): baja 1 la cantidad del slot de equipo del personaje (0x428C90, 0x40BE4F, **Observed**).
   - Apilar pociones (`0x0073`): dos pociones con el mismo `hit4` se suman en el destino y el origen se borra (0x421AC1, 0x40C140, **Observed**).
   - Verificado con cliente real: sí. Fuera: cupones de descuento (11000–11999, tabla **Unknown**) y la regla de un uso por slot fuera de Stage (**Unknown**).
-- [ ] **4.9 Revisar la confirmación de GameGuard:** respondemos a `0x0010` con `0x001B [0]`, pero el cliente lee `0x001B` como la respuesta del reseteo de puntos (9 bytes). Comprobar qué enviaba el original (`RakionWorldServ.exe` 0x41FC00).
+- [x] **4.9 Revisar la confirmación de GameGuard:** (#42)
+  - El original no responde al `0x0010`: pasa los bytes a GameGuard y solo desconecta si la comprobación falla (`RakionWorldServ.exe` 0x41FC00 → 0x40A9C0, 0x41EB20, **Observed**). Ya no enviamos `0x001B`, que el cliente leía como la respuesta del reseteo de puntos (`engine.dll` 0x36195400).
+  - Verificado con cliente real: sí.
   - Verificado con cliente real: no.
 
 ---

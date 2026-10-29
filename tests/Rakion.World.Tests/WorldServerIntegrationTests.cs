@@ -194,13 +194,12 @@ public sealed class WorldServerIntegrationTests
     }
 
     [TestMethod]
-    public async Task GameGuard_Receives0x0010_RespondsWith0x001BSuccess()
+    public async Task GameGuard_Receives0x0010_AnswersNothing()
     {
-        // Arrange
         using var client = await ConnectClientAsync();
         var stream = client.GetStream();
 
-        // Act: Send GameGuard check opcode 0x0010 with 16 dummy bytes
+        // GameGuard check 0x0010 with 16 dummy bytes: the legacy server keeps quiet when the check passes.
         using (var writer = new PacketWriter((ushort)ClientOpcode.GameGuard))
         {
             writer.WriteBytes(new byte[16]);
@@ -208,12 +207,9 @@ public sealed class WorldServerIntegrationTests
             await stream.FlushAsync();
         }
 
-        var (header, payload) = await ReadPacketAsync(stream);
-
-        // Assert: Server emits 0x001B confirmation
-        Assert.AreEqual((ushort)ServerOpcode.GameGuard, header.Opcode);
-        Assert.IsTrue(GameGuardPacket.TryParseResponse(payload, out var ggPacket));
-        Assert.AreEqual(0, ggPacket.ResultCode);
+        await Task.Delay(300);
+        Assert.AreEqual(0, client.Available, "no 0x1B: the client would read it as a stat reset answer");
+        Assert.IsTrue(client.Connected);
     }
 
     [TestMethod]

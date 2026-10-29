@@ -11,7 +11,7 @@
 ## Contenido del Módulo
 
 ### 1. Enums (`Rakion.Core.Enums`)
-- **`ClientOpcode`** (cliente → servidor) y **`ServerOpcode`** (servidor → cliente): opcodes observados en la ingeniería inversa, separados por dirección (contrato C-0 del roadmap). Un mismo valor puede significar mensajes distintos en cada dirección (por ejemplo `0x001B` es `ClientOpcode.CharacterStateClear` y `ServerOpcode.GameGuard`), así que nunca se mezclan. Ningún enum tiene alias con valores repetidos; lo garantiza `OpcodeTests`.
+- **`ClientOpcode`** (cliente → servidor) y **`ServerOpcode`** (servidor → cliente): opcodes observados en la ingeniería inversa, separados por dirección (contrato C-0 del roadmap). Un mismo valor puede significar mensajes distintos en cada dirección (por ejemplo `0x001B` es `ClientOpcode.CharacterStateClear`, la petición de reseteo, y `ServerOpcode.CharacterStateClear`, su respuesta), así que nunca se mezclan. Ningún enum tiene alias con valores repetidos; lo garantiza `OpcodeTests`.
   - `0xCDDF` (`ClientOpcode.ServerListRequest`): Petición de lista de servidores.
   - `0x0101` (`ServerOpcode.ServerListResponse`): Respuesta con los servidores disponibles.
   - `0x1310` (`ClientOpcode.Login`): Login estándar de v258 (`SV_AUTH_LOGIN`).
@@ -52,7 +52,6 @@
 - **Salas y partidas (Fields):** lista, creación, entrada, espera, inicio y salida de salas (`FieldPackets.cs`, `FieldJoinPackets.cs`, `FieldGamePackets.cs`); rondas, muertes, recompensas, niveles, golems y stage (`FieldRoundPackets.cs`); votaciones de expulsión (`FieldVotePackets.cs`).
 - **Economía (contrato C-3):** inventario, tienda, venta, movimiento, estadísticas, PowerUser y herrería (`InventoryPackets.cs` y relacionados); reseteo de puntos, bolsas y slots de poción (`AccountUpgradePackets.cs`).
 - **Administración:** aviso de GM `0x0005` y aviso del sistema `0x0063` (`AdminNoticePackets.cs`).
-- **Seguridad:** `GameGuardPacket` (0x0001 / 0x0002).
 
 ### 4b. Messenger (`Rakion.Core.Buddy`)
 - **`BuddyOpcode`:** comandos del protocolo de `Buddy2.dll` (puerto 8500).

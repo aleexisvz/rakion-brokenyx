@@ -18,7 +18,7 @@
     - Servidor -> Cliente: `[0..1] ushort Opcode`, `[2..] Payload bytes` (sin Sequence ID, relleno PKCS7 a múltiplo de 16 bytes).
   - **`WorldLogin` (`0x000C`):** Procesa la credencial de autenticación inicial presentada por el cliente contra el ticket emitido por el Broker Server. Responde con `0x000C` conteniendo la lista de personajes serializados, 3 ranuras habilitadas (`UnlockedSlots = 3`), oro (offset 40) y cash (offset 48).
   - **`WorldLoginPart2` (`0x000D`):** Handshake secundario de inicialización de mundo.
-  - **`SendGameGuard` (`0x0010`):** Responde con éxito (`0x001B`), eliminando la necesidad de emuladores GameGuard o DLLs anticheat legadas.
+  - **`SendGameGuard` (`0x0010`):** No responde nada, como el original: este solo desconectaba al cliente si la comprobación de GameGuard fallaba (`RakionWorldServ.exe` 0x41FC00, **Observed**). Responder `0x001B` hacía que el cliente lo leyera como la respuesta al reseteo de puntos (`engine.dll` 0x36195400).
   - **`KeepAlive` (`0x000F`):** Pings periódicos de actividad en lobby y selección de personajes (`?SendAlive@IScavengerWorldNet`).
   - **`UdpSuccess` (`0x000E`):** Al concluir el sondeo UDP de hole punching, el cliente emite Opcode `0x000E`. El servidor confirma con la estructura de 13 bytes (`Result = 0`, `IP1`, `Port1`, `IP2`, `Port2`), cerrando el temporizador y el diálogo modal *"Waiting for response from the world."* de forma definitiva.
   - **`CharacterCreate` (`0x0012`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y responde con `0x0012`.
