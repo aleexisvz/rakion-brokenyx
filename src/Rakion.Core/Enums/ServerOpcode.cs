@@ -75,6 +75,12 @@ public enum ServerOpcode : ushort
     CharacterWhisper = 0x0016,
 
     /// <summary>
+    /// Account of a character: [u8 status][string account][string Messenger name].
+    /// Evidence: Observed in engine.dll jump table opcode 0x19 (0x3619745F -> 0x36193170).
+    /// </summary>
+    CharacterGetUserName = 0x0019,
+
+    /// <summary>
     /// Server confirmation response to GameGuard verification.
     /// Evidence: Observed in RakionWorldServ opcode 16 stub response (0x001B). The client dispatches 0x1B to the
     /// stat reset answer (engine.dll 0x36195400), so CharacterStateClearResponsePacket uses this value too.

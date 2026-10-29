@@ -36,6 +36,7 @@
 - **`IMatchResultRepository` / `MatchResultRepository`:** Recompensas de ronda y de stage (EXP, oro, nivel, victorias/derrotas/empates, EXP de criaturas, rangos y drops de stage) y tablas de niveles (contrato C-4).
 - **`IAccountUpgradeRepository` / `AccountUpgradeRepository`:** Reseteo de puntos, bolsas y slots de poción.
 - **`IAdminRepository` / `AdminRepository`:** Baneos y entrega de ítems de los comandos GM.
+- **`IBuddyRepository` / `BuddyRepository`:** Amigos del Messenger (tabla `buddies`, dos filas por amistad), grupos (`buddy_groups`, se crea al primer uso, máximo 50) y nombre visible.
 - **`IRankingRepository` / `RankingRepository`:** Población del ranking, puestos y tablas `ranking_total` / `ranking_class`.
 
 ### 3b. Importadores (`Rakion.Database.Import`)

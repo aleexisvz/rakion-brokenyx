@@ -21,6 +21,7 @@
     <ProjectReference Include="..\Rakion.Broker\Rakion.Broker.csproj" />
     <ProjectReference Include="..\Rakion.World\Rakion.World.csproj" />
     <ProjectReference Include="..\Rakion.Maintenance\Rakion.Maintenance.csproj" />
+    <ProjectReference Include="..\Rakion.Buddy\Rakion.Buddy.csproj" />
   </ItemGroup>
 
   <ItemGroup>

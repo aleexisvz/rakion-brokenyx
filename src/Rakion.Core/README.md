@@ -54,5 +54,11 @@
 - **Administración:** aviso de GM `0x0005` y aviso del sistema `0x0063` (`AdminNoticePackets.cs`).
 - **Seguridad:** `GameGuardPacket` (0x0001 / 0x0002).
 
+### 4b. Messenger (`Rakion.Core.Buddy`)
+- **`BuddyOpcode`:** comandos del protocolo de `Buddy2.dll` (puerto 8500).
+- **`BuddyCrypto`:** credencial AES-128-ECB del login y bloques de datos con clave de sesión SHA-0.
+- **`BuddyPackets`:** login, lista de amigos (`BuddyFriend`, 148 bytes), estado de usuario (`0x3FFF`), túnel (`0x2020` / `0x2021`), grupos (`BuddyGroup`, 44 bytes) y textos anchos (`BuddyText`).
+- **`CharacterUserNamePackets`:** `0x0019` del World (petición y respuesta).
+
 ### 5. Utilidades (`Rakion.Core.Utilities`)
 - **`XfsPacker`:** Empacador de archivos `.xfs` con cabecera dual y compresión ZLIB, empleado para la generación dinámica o extracción de `NyxLauncherEnc.xfs`.

@@ -24,6 +24,7 @@
   - **`CharacterCreate` (`0x0012`):** Valida la disponibilidad del nombre, crea el nuevo personaje en base de datos y responde con `0x0012`.
   - **`CharacterDelete` (`0x0013`):** Verifica la clave de borrado y retira el personaje (respuesta `0x0013`; el valor legacy de RakionWorldServ era `0x002D`), aceptando claves vacías o de bypass (`sirmaster`) sin fallar ante la falta de diálogo de clave en el cliente retail v258.
   - **`CharacterChangeBuddyName` (`0x0015`):** Notificación de actualización del nombre de personaje para el sistema de mensajería (Buddy system) emitida por el cliente tras la creación de un personaje. El servidor confirma con código 0 y el nombre del personaje, cerrando el diálogo modal *"Notice: change request of character's name for messenger"* y habilitando la interactividad de la interfaz.
+  - **`CharacterGetUserName` (`0x0019`):** El Messenger pregunta la cuenta de un personaje (`[cstr nombre]`). Responde `[u8 estado][cstr cuenta][cstr nombre del Messenger]`.
   - **`CharacterSelect` (`0x0014`):** Selecciona el personaje activo y responde con `0x0014` (legacy `0x002E`), autorizando la transición a la pantalla de lobby/tutorial/canales.
   - **`CharacterTutorialClear` (`0x001A`):** Notificación emitida por el cliente tras completar el tutorial (`?SendCharacterTutorialClear@IScavengerWorldNet`).
   - **`ChannelList` (`0x001D`):** Retorna la lista de canales activos en el servidor (Canal Principiante, Canal Libre, Canal de Clanes) con su tipo, concurrencia actual y capacidad máxima.

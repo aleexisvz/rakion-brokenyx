@@ -167,6 +167,15 @@ public sealed class FieldJoinPacketTests
         CollectionAssert.AreEqual(new byte[] { 1 }, PayloadOf(new AdminNoticeResponsePacket(AdminNoticeResponsePacket.NotOnline)));
     }
 
+    [TestMethod]
+    public void GetUserNamePackets_MatchTheClientLayout()
+    {
+        Assert.IsTrue(CharacterGetUserNameRequestPacket.TryParse([(byte)'i', (byte)'F', 0], out var request));
+        Assert.AreEqual("iF", request.CharacterName);
+        Assert.IsFalse(CharacterGetUserNameRequestPacket.TryParse(PayloadOf(new CharacterGetUserNameRequestPacket(new string('a', 13))), out _));
+        CollectionAssert.AreEqual(new byte[] { 0, (byte)'b', 0, (byte)'B', 0 }, PayloadOf(new CharacterGetUserNameResponsePacket(0, "b", "B")));
+    }
+
     private static byte[] PayloadOf(IPacket packet)
     {
         using var writer = new PacketWriter(packet.Opcode);

@@ -3,7 +3,7 @@
 Clean-room C# (.NET 10) server emulator for the **Rakion: Chaos Force v258**
 client. No binary patches, no legacy DLLs — the protocol implemented natively.
 
-> **Status:** Phases 0–3 and 5 completed; most of phases 4, 6 and 7 done and verified with the retail v258 client (economy, blacksmith, rooms, matches in every mode including Golem War and Stage, rewards and levels, kick votes, GM commands, rankings). Pending: presents, messenger, clans, server relay for public networks and Docker. See the roadmap.
+> **Status:** Phases 0–3 and 5 completed; most of phases 4, 6 and 7 done and verified with the retail v258 client (economy, blacksmith, rooms, matches in every mode including Golem War and Stage, rewards and levels, kick votes, GM commands, rankings). Messenger server integrated (login, presence, friend list delivery); adding friends from the client is postponed (blocked by the v258 client). Pending: presents, messenger messages, clans, server relay for public networks and Docker. See the roadmap.
 
 ## Documentation
 
@@ -23,7 +23,8 @@ client. No binary patches, no legacy DLLs — the protocol implemented natively.
 | **`Rakion.World`** | World Server TCP on port 40708 and dual UDP listeners (40708/40709): characters, lobby channels and chat, economy (inventory, shop, blacksmith, stat points and resets, PowerUser), rooms, matches, rewards, kick votes and GM commands. | [Rakion.World/README.md](src/Rakion.World/README.md) |
 | **`Rakion.Relay`** *(planned, lane B)* | Socketless UDP relay routing (field-slot endpoint registry, tunneling `0x0401`) consumed by World's UDP listeners. | — |
 | **`Rakion.Maintenance`** | Scheduled jobs hosted by the App: ranking recalculation (replaces `RankUpdate.exe`); anti-abuse checks pending. | [Rakion.Maintenance/README.md](src/Rakion.Maintenance/README.md) |
-| **`Rakion.App`** | Unified console host running Broker (40706), World (TCP 40708 + UDP 40708/40709), AutoFetch (8080) and the maintenance jobs via `Microsoft.Extensions.Hosting`. Also the import tools (`--import-items`, `--import-levels`) and `--create-user`. | [Rakion.App](src/Rakion.App/) |
+| **`Rakion.Buddy`** | Messenger server for the client's `Buddy2.dll` on TCP/UDP 8500: login, presence, friend list, tunnel and groups. Adding friends from the client is postponed. | [Rakion.Buddy/README.md](src/Rakion.Buddy/README.md) |
+| **`Rakion.App`** | Unified console host running Broker (40706), World (TCP 40708 + UDP 40708/40709), Messenger (TCP/UDP 8500), AutoFetch (8080) and the maintenance jobs via `Microsoft.Extensions.Hosting`. Also the import tools (`--import-items`, `--import-levels`) and `--create-user`. | [Rakion.App](src/Rakion.App/) |
 
 ## Building & Testing
 
