@@ -16,4 +16,13 @@ public sealed class MaintenanceOptions
 
     /// <summary>Runs the ranking once when the server starts.</summary>
     public bool RunRankingAtStartup { get; set; } = true;
+
+    /// <summary>Abuser check (legacy [ABUSER] CheckDay = 1, CheckWinSum = 200, CheckExpSum = 6000, CheckGoldSum = 12000; Observed).</summary>
+    public int AbuserCheckDays { get; set; } = 1;
+
+    public int AbuserWinSum { get; set; } = 200;
+
+    public long AbuserExpSum { get; set; } = 6000;
+
+    public long AbuserGoldSum { get; set; } = 12000;
 }
