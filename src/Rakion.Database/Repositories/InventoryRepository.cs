@@ -98,6 +98,31 @@ public sealed class InventoryRepository : IInventoryRepository
         return affected > 0;
     }
 
+    public async Task<long?> ConsumePotionAsync(int userId, byte boxSlot, int itemId, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        var args = new { UserId = userId, Slot = boxSlot, ItemId = itemId };
+        int changed = await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE user_items SET exp = exp - 1 WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot AND item_id = @ItemId AND exp > 0;",
+            args,
+            tx,
+            cancellationToken: ct));
+        if (changed != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        long left = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT exp FROM user_items WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot AND item_id = @ItemId;",
+            args,
+            tx,
+            cancellationToken: ct));
+        await tx.CommitAsync(ct);
+        return left;
+    }
+
     public async Task<bool> UpdateLevelAndExpAsync(int userItemId, byte newLevel, long newExp, CancellationToken ct = default)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);

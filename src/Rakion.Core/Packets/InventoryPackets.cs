@@ -914,3 +914,30 @@ public sealed record EnchantReinforceResponsePacket(
     public override int GetHashCode() => HashCode.Combine(Result, TargetSlot, StoneSlot, MaterialSlots.Count);
 }
 
+/// <summary>
+/// A potion drunk during a match (0x006E): [u8 BoxSlot][u16 ItemId]. The legacy server (RakionWorldServ.exe
+/// 0x428C90 -> 0x40E5F0, Observed) checks that the box slot holds that item with a quantity left, lowers the
+/// quantity (kept in the item's exp) by one and answers nothing.
+/// </summary>
+public sealed record FieldGamePotionRequestPacket(byte BoxSlot, ushort ItemId) : IPacket
+{
+    public ushort Opcode => (ushort)ClientOpcode.FieldGamePotion;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(BoxSlot);
+        writer.WriteUInt16(ItemId);
+    }
+
+    public static bool TryParse(ReadOnlySpan<byte> span, out FieldGamePotionRequestPacket packet)
+    {
+        packet = null!;
+        if (span.Length < 3)
+        {
+            return false;
+        }
+
+        packet = new FieldGamePotionRequestPacket(span[0], (ushort)(span[1] | (span[2] << 8)));
+        return true;
+    }
+}

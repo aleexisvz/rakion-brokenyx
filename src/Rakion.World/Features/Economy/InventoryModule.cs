@@ -36,6 +36,32 @@ public sealed class InventoryModule : IWorldOpcodeModule
         registry.Map(ClientOpcode.InventoryEnter, HandleInventoryEnterAsync);
         registry.Map(ClientOpcode.InventoryLeave, HandleInventoryLeaveAsync);
         registry.Map(ClientOpcode.InventoryMove, HandleInventoryMoveAsync);
+        registry.Map(ClientOpcode.FieldGamePotion, HandleFieldGamePotionAsync);
+    }
+
+    /// <summary>
+    /// Potions drunk in a match (0x6E). Only potions (12000..12999) during a match; the legacy server logs a refused
+    /// use as a cheat (0x41EB20 code 0xD2) and here it is only logged. The legacy one-use-per-slot flag outside Stage
+    /// (0x40E608) is not applied: when it is cleared is Unknown.
+    /// </summary>
+    private async ValueTask HandleFieldGamePotionAsync(WorldSession session, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        IWorldSessionView view = session;
+        if (!FieldGamePotionRequestPacket.TryParse(payload.Span, out var request) || view.UserId is not int userId ||
+            !session.IsInField || request.ItemId is < 12000 or > 12999 || request.BoxSlot >= AccountBoxBlock.SlotCount)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGamePotion rejected: malformed, not in a room or not a potion.", view.ConnectionId);
+            return;
+        }
+
+        long? left = await _inventoryRepository.ConsumePotionAsync(userId, request.BoxSlot, request.ItemId, cancellationToken).ConfigureAwait(false);
+        if (left is null)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGamePotion refused: box slot {Slot} has no potion {ItemId} left.", view.ConnectionId, request.BoxSlot, request.ItemId);
+            return;
+        }
+
+        _logger.LogInformation("[{ConnectionId}] Potion {ItemId} drunk from box slot {Slot}: {Left} left.", view.ConnectionId, request.ItemId, request.BoxSlot, left);
     }
 
     private async ValueTask HandleInventoryEnterAsync(

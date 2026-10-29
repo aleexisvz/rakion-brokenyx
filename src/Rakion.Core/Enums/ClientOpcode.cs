@@ -273,6 +273,13 @@ public enum ClientOpcode : ushort
     PresentDispose = 0x006D,
 
     /// <summary>
+    /// Drinks a potion during a match: (u8 box slot, u16 item id). No answer.
+    /// Evidence: Observed in engine.dll ?SendFieldGamePotion@IScavengerWorldNet@@UAEXEG@Z and the legacy handler
+    /// RakionWorldServ.exe 0x428C90 (opcode 0x006E).
+    /// </summary>
+    FieldGamePotion = 0x006E,
+
+    /// <summary>
     /// Buys a potion slot. No payload.
     /// Evidence: Observed in engine.dll ?SendInventoryBuyPotionSlot@IScavengerWorldNet@@UAEXXZ (0x006F).
     /// </summary>
