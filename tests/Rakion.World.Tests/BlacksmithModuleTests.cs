@@ -70,36 +70,81 @@ public sealed class BlacksmithModuleTests
         await AddAsync(13001, slot: 1);     // low-level stone, item already +6
         await AddAsync(8001, slot: 2);      // not equipment
         await AddAsync(1002, slot: 3);      // not a stone
+        await AddAsync(13002, slot: 4);
 
         var wrongStone = await ReinforceAsync(new EnchantReinforceRequestPacket(0, 1, []));
         var notEquipment = await ReinforceAsync(new EnchantReinforceRequestPacket(2, 1, []));
         var notAStone = await ReinforceAsync(new EnchantReinforceRequestPacket(0, 3, []));
-        var withMaterial = await ReinforceAsync(new EnchantReinforceRequestPacket(0, 1, [3]));
+        var withMaterial = await ReinforceAsync(new EnchantReinforceRequestPacket(0, 4, [3]));
 
         Assert.AreEqual(EnchantReinforceResponsePacket.StoneNotForThisLevel, wrongStone.Result);
         Assert.AreEqual(EnchantReinforceResponsePacket.NotReinforceable, notEquipment.Result);
         Assert.AreEqual(EnchantReinforceResponsePacket.InvalidStoneOrMaterial, notAStone.Result);
         Assert.AreEqual(EnchantReinforceResponsePacket.InvalidStoneOrMaterial, withMaterial.Result);
-        Assert.HasCount(4, await _inventoryRepository.GetUserItemsAsync(_userId));
+        Assert.HasCount(5, await _inventoryRepository.GetUserItemsAsync(_userId));
     }
 
     [TestMethod]
-    public void DefaultOdds_AlwaysSucceedUpToLevel3_AndSumTo100()
+    public async Task Reinforce_WithCatalysts_UsesTheirCounts_AndConsumesThem()
     {
-        Assert.AreEqual(100, EnchantOdds.DefaultFor(3).LevelUp);
+        await AddAsync(1001, slot: 0, level: 5);
+        await AddAsync(13002, slot: 1);
+        await AddAsync(14003, slot: 2);
+        await AddAsync(14003, slot: 3);
+        await AddAsync(14001, slot: 4);
+        EnchantAttempt? seen = null;
+
+        var response = await ReinforceAsync(new EnchantReinforceRequestPacket(0, 1, [2, 3, 4]), attempt =>
+        {
+            seen = attempt;
+            return EnchantOdds.Legacy(attempt.Level, attempt.StoneId, attempt.DestroyGuards, attempt.DownGuards, attempt.Charms);
+        });
+
+        Assert.AreEqual(new EnchantAttempt(5, 13002, DestroyGuards: 1, DownGuards: 0, Charms: 2), seen);
+        Assert.AreEqual(EnchantReinforceResponsePacket.LevelUp, response.Result);
+        var left = await _inventoryRepository.GetUserItemsAsync(_userId);
+        Assert.AreEqual((byte)6, left.Single().Level, "stone and the three catalysts are consumed");
+    }
+
+    [TestMethod]
+    public void LegacyOdds_FollowTheLegacyFormula()
+    {
+        // Level 0: the stone's base chance; each charm blends in 5 % of sure success.
+        Assert.AreEqual(700_000, EnchantOdds.Legacy(0, 13001).LevelUp);
+        Assert.AreEqual(857_500, EnchantOdds.Legacy(0, 13002, charms: 1).LevelUp);
+
+        // Each level i multiplies by (1 - i * decay): 13002 loses 6 % per level step.
+        Assert.AreEqual((int)Math.Round(0.85 * 0.94 * 0.88 * 1_000_000), EnchantOdds.Legacy(2, 13002).LevelUp);
+
         for (int level = 0; level < BlacksmithModule.MaxLevel; level++)
         {
-            Assert.AreEqual(100, EnchantOdds.DefaultFor(level).Total, $"level {level}");
+            Assert.AreEqual(EnchantOdds.Scale, EnchantOdds.Legacy(level, 13003).Total, 2, $"level {level} sums to one");
         }
+
+        // Destruction is never rolled: at +3 or below it becomes -3, above it becomes "no change".
+        var low = EnchantOdds.Legacy(3, 13002);
+        var high = EnchantOdds.Legacy(10, 13002);
+        Assert.AreEqual(Fifteenths(low, 2), low.Down3, 2);
+        Assert.AreEqual(Fifteenths(high, 1), high.Down3, 2);
+
+        // 14001 moves the destroyed share to "no change": it only matters at +3 or below, where destruction would be -3.
+        Assert.IsLessThan(EnchantOdds.Legacy(3, 13002).Down3, EnchantOdds.Legacy(3, 13002, destroyGuards: 3).Down3);
+        Assert.AreEqual(EnchantOdds.Legacy(10, 13002), EnchantOdds.Legacy(10, 13002, destroyGuards: 3));
+
+        // 14002 grows the -1..-3 shares, as the legacy formula does.
+        Assert.IsGreaterThan(EnchantOdds.Legacy(10, 13002).Down1, EnchantOdds.Legacy(10, 13002, downGuards: 1).Down1);
+
+        static double Fifteenths(EnchantOdds odds, int fifteenths) => (EnchantOdds.Scale - odds.LevelUp) * fifteenths / 15.0;
     }
 
     private Task AddAsync(int itemId, byte slot, byte level = 1) =>
         _inventoryRepository.AddUserItemAsync(new UserItemEntity { UserId = _userId, CharacterId = 0, ItemId = itemId, SlotIndex = slot, Level = level });
 
-    private async Task<EnchantReinforceResponsePacket> ReinforceAsync(EnchantReinforceRequestPacket request, Func<int, EnchantOdds>? odds = null)
+    private async Task<EnchantReinforceResponsePacket> ReinforceAsync(EnchantReinforceRequestPacket request, Func<EnchantAttempt, EnchantOdds>? odds = null)
     {
         var registry = new WorldOpcodeRegistry();
-        new BlacksmithModule(_sender, _inventoryRepository, odds ?? EnchantOdds.DefaultFor, _ => _nextRoll, NullLogger<BlacksmithModule>.Instance)
+        odds ??= attempt => EnchantOdds.Legacy(attempt.Level, attempt.StoneId, attempt.DestroyGuards, attempt.DownGuards, attempt.Charms);
+        new BlacksmithModule(_sender, _inventoryRepository, odds, _ => _nextRoll, NullLogger<BlacksmithModule>.Instance)
             .Register(registry);
         var session = new WorldSession(new TcpConnection(new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp), null!, NullLogger.Instance))
         {
@@ -121,7 +166,7 @@ public sealed class BlacksmithModuleTests
 
         Assert.AreEqual(new EnchantOdds(42, 38, 20, 0, 0), odds);
         Assert.AreEqual(100, odds.Total);
-        Assert.AreEqual(EnchantOdds.DefaultFor(12), EnchantOdds.DefaultFor(12).WithDowngradeScale(1));
+        Assert.AreEqual(EnchantOdds.Legacy(12, 13002), EnchantOdds.Legacy(12, 13002).WithDowngradeScale(1));
     }
 
     private sealed class RecordingSender : ISessionSender
