@@ -137,3 +137,14 @@ herrería. **Carril A.** El resto de `Rakion.World` pertenece al carril B.
   - Resultado 2: no hay cash suficiente.
 - Pociones: al comprarlas, la cantidad (ítems 12000–12999) se guarda en `exp`, como el original (0x4174E9, **Observed**); sale de la columna `hit2` del catálogo (cargador 0x40A670, **Observed**). Al beber una poción en partida (`0x006E` `[slot de la caja][ítem]`) se descuenta una de esa cantidad; el original no responde (0x428C90 → 0x40E5F0, **Observed**). Apilar pociones (`0x0073` `[slot origen][slot destino]`): las dos deben ser pociones con el mismo `hit4` en el catálogo; la cantidad del origen se suma al destino sin límite y el origen se borra (0x421AC1, 0x40C140, **Observed**). La respuesta es `[resultado]`: con 0 el cliente fusiona los slots; con 1 muestra un error (`rakion.bin` 0x4782E0). La regla del original de un solo uso por slot fuera de Stage (0x40E608) no se aplica: no se sabe cuándo se reinicia (**Unknown**).
 - Pendientes de 4.8: comprar slot de personaje (el login muestra como máximo 3 personajes, hay que revisarlo antes) y apilar pociones (`0x0073`, falta saber cómo se guardan las cantidades).
+
+## Regalos (4.6)
+
+`PresentModule`, sobre la cola `pending_presents` (la `pendingpresents` del original; se crea al primer uso):
+
+- Ver (`0x006B`): el regalo más antiguo, `[resultado][id pendiente][id del ítem][u16 0]`; 1 si no hay ninguno (`RakionWorldServ.exe` 0x416BF0, `engine.dll` 0x36194530, **Observed**).
+- Aceptar (`0x006C` `[u32 id][u16 slot de la caja]`): pasa el ítem al slot vacío de la caja y lo quita de la cola en una transacción; responde `[resultado][u32 tiempo límite]`, con 1 si no existe y 3 si el slot está ocupado (0x41710E..0x417216, **Observed**). Las pociones llegan con su cantidad del catálogo (`hit2`), como en la tienda.
+- Descartar (`0x006D` `[u32 id]`): lo borra; `[0]` o `[1]` si no existía.
+- Los GM envían regalos con `/present <pj> <id del ítem>`; más adelante, la web.
+- No hecho: el regalo aleatorio que el original añadía a las compras en cash (`CWorld::GetRandomPresentIndex`, tabla **Unknown**) y los regalos de oro (`loggoldpresents`).
+

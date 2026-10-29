@@ -37,6 +37,7 @@
 - **`IAccountUpgradeRepository` / `AccountUpgradeRepository`:** Reseteo de puntos, bolsas y slots de poción.
 - **`IAdminRepository` / `AdminRepository`:** Baneos y entrega de ítems de los comandos GM.
 - **`IBuddyRepository` / `BuddyRepository`:** Amigos del Messenger (tabla `buddies`, dos filas por amistad), grupos (`buddy_groups`, se crea al primer uso, máximo 50) y nombre visible.
+- **`IPresentRepository` / `PresentRepository`:** Cola de regalos (`pending_presents`): enviar, ver el más antiguo, aceptar a un slot de la caja y descartar.
 - **`IRankingRepository` / `RankingRepository`:** Población del ranking, puestos y tablas `ranking_total` / `ranking_class`.
 
 ### 3b. Importadores (`Rakion.Database.Import`)

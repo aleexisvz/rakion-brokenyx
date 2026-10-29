@@ -313,6 +313,15 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldGameStagePoint = 0x0053,
 
+    /// <summary>Present box peek answer (see PresentPeekResponsePacket). Evidence: engine.dll jump table 0x6B -> 0x36194530.</summary>
+    PresentPeek = 0x006B,
+
+    /// <summary>Present accept answer (see PresentAcceptResponsePacket). Evidence: engine.dll jump table 0x6C -> 0x36194560.</summary>
+    PresentAccept = 0x006C,
+
+    /// <summary>Present dispose answer (see PresentDisposeResponsePacket). Evidence: engine.dll jump table 0x6D -> 0x36194590.</summary>
+    PresentDispose = 0x006D,
+
     /// <summary>
     /// Character slot purchase answer (see AccountUpgradeResponsePacket).
     /// Evidence: Observed in engine.dll jump table opcode 0x35 (0x361975A1 -> 0x361959C0).
