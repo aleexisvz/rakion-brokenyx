@@ -283,16 +283,18 @@ rakion-brokenyx/
 > **Objetivo:** Dotar al ecosistema de herramientas de administración en vivo, sistema de rangos y detección de tramposos.
 > **Carril:** A. **Código:** `src/Rakion.Maintenance/` (hospedado por `Rakion.App`), `src/Rakion.Database/`, `src/Rakion.World/Features/Admin/`.
 
-> **Estado:** 7.1 y 7.3 mergeados (PRs #35, #36). Pendientes 7.2 y 7.4. Detalle en `src/Rakion.Maintenance/README.md` y `src/Rakion.World/README.md`.
+> **Estado:** 7.1, 7.2 y 7.3 mergeados (PRs #35, #36, #44). Pendiente 7.4. Detalle en `src/Rakion.Maintenance/README.md` y `src/Rakion.World/README.md`.
 
 - [x] **7.1 Motor de Rankings (Reemplazo de `RankUpdate.exe`):** (#36)
   - `RankingScheduler` (al arrancar y cada 24 h) y `/rankupdate`: puesto por país y por clase con empates, grados 26 → 15 por EXP y cupos 1 / 4 / 16 / porcentajes acumulados para los grados 14 → 1, cuentas activas en 2 meses, sin `auth` 2, 10 y 0x34. **Observed** (SQL de `RankUpdate.exe`, 0x402300, 0x402409).
   - Rangos en la ficha del personaje y tablas `ranking_total` / `ranking_class` para una futura web. Pendiente: ranking de clanes (cuando existan los clanes).
   - Verificado con cliente real: sí.
-- [ ] **7.2 Módulo Antifraude y Detector de Abusers:**
-  - Umbrales `CheckWinSum=200`, `CheckExpSum=6000`, `CheckGoldSum=12000` y consulta de agregación de 24 h: **Observed** (`Config.ini` y SQL de `RankUpdate.exe`).
-  - Solo marca para revisión de un GM; no banea automáticamente.
-  - Verificado con cliente real: no aplica (proceso batch).
+- [x] **7.2 Módulo Antifraude y Detector de Abusers:** (#44)
+  - El World guarda cada informe de ronda y de stage premiado en `match_point_log` (la `LogFieldGamePointList` del original, **Observed**), con la EXP y el oro que informó el cliente, antes de bonus y multiplicadores (**Inferred**).
+  - Tras el ranking, `AbuserCheckJob` suma el último día por personaje y marca en `abuser_check` a quien llega a 200 victorias, 6000 de EXP o 12 000 de oro: consulta y umbrales de `RankUpdate.exe` y su `Config.ini` (**Observed**), configurables en `Maintenance`.
+  - Solo marca para revisión: los GM ven los últimos marcados con `/abusers`; no banea automáticamente.
+  - Verificado con cliente real: sí (con umbral bajado para la prueba).
+  - Posible ampliación: validación por partida con las fórmulas del cliente (volcado de `entitiesmp.dll`).
 - [x] **7.3 Comandos de Administrador en el Chat (In-Game GM Commands):** (#35)
   - `/notice` es nativo del cliente (`0x0005`, entregado por `0x0063`; **Observed** en 0x41F290 / 0x40C870). Comandos de **diseño propio** vía C-5: `/gm`, `/givegold`, `/givecash`, `/giveitem`, `/ban`, `/unban`, `/kickout`, `/close`, `/rankupdate`. Oro, cash e ítems en transacción y con log.
   - GM = autoridad 100 o más (**Inferred**, equivalente al 0x34 del original). Los avisos se recortan a 128 caracteres (más largos tumban el cliente).
