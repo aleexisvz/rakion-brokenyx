@@ -259,3 +259,34 @@ CREATE TABLE IF NOT EXISTS `pending_presents` (
     `added_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_pending_presents_user` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Abuser check (roadmap 7.2): legacy LogFieldGamePointList and LogFieldGameAbuserCheck. Also created on first use by
+-- AbuserRepository.
+CREATE TABLE IF NOT EXISTS `match_point_log` (
+    `host_character_id` INT NOT NULL,
+    `host_character_name` VARCHAR(16) NOT NULL,
+    `character_id` INT NOT NULL,
+    `character_name` VARCHAR(16) NOT NULL,
+    `power_user` TINYINT NOT NULL,
+    `mode` TINYINT NOT NULL,
+    `max_rounds` TINYINT NOT NULL,
+    `round` TINYINT NOT NULL,
+    `win` SMALLINT NOT NULL,
+    `loss` SMALLINT NOT NULL,
+    `exp` BIGINT NOT NULL,
+    `gold` BIGINT NOT NULL,
+    `created_at` DATETIME NOT NULL,
+    KEY `idx_match_point_log_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `abuser_check` (
+    `character_id` INT NOT NULL,
+    `character_name` VARCHAR(16) NOT NULL,
+    `power_user` TINYINT NOT NULL,
+    `wins` BIGINT NOT NULL,
+    `losses` BIGINT NOT NULL,
+    `exp` BIGINT NOT NULL,
+    `gold` BIGINT NOT NULL,
+    `checked_at` DATETIME NOT NULL,
+    KEY `idx_abuser_check_checked` (`checked_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

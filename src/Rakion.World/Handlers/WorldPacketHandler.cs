@@ -43,6 +43,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly IChatCommandInterceptor? _chatCommands;
     private readonly IAccountUpgradeRepository? _upgrades;
     private readonly IPresentRepository? _presents;
+    private readonly IAbuserRepository? _abusers;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -64,8 +65,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         IMatchResultRepository? matchResults = null,
         IChatCommandInterceptor? chatCommands = null,
         IAccountUpgradeRepository? upgrades = null,
-        IPresentRepository? presents = null)
+        IPresentRepository? presents = null,
+        IAbuserRepository? abusers = null)
     {
+        _abusers = abusers;
         _upgrades = upgrades;
         _presents = presents;
         _options = options;
@@ -2236,6 +2239,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             return;
         }
 
+        await LogMatchPointAsync(session, field, powerUser, result, report.Exp, report.Gold, cancellationToken).ConfigureAwait(false);
         session.ActiveCharacter.Level = outcome.Level;
         session.ActiveCharacter.Exp = outcome.Exp;
         session.ActiveCharacter.LevelPoint = (byte)outcome.LevelPoint;
@@ -2289,6 +2293,43 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             _logger.LogInformation("Room #{Number} stage round {Round} ended by the master: reason {Reason}.", field.Number, field.Round, request.Reason);
             await SendToLoadedAsync(field, roundEnd, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// One row per rewarded report for the daily abuser check (legacy "INSERT INTO LogFieldGamePointList (BossCharID,
+    /// BossCharName,CharID,CharName,Poweruser,FieldMode,maxround,round,win,loss,exp,gold,createtime)", Observed). The exp
+    /// and gold logged are what the client reported, before the PowerUser bonus and the server multipliers (Inferred),
+    /// so the legacy thresholds keep their meaning. Stage clears are logged too, as a draw (Inferred).
+    /// </summary>
+    private async ValueTask LogMatchPointAsync(WorldSession session, GameField field, bool powerUser, byte result, uint exp, uint gold, CancellationToken cancellationToken)
+    {
+        if (_abusers is null || session.ActiveCharacter is not { } character)
+        {
+            return;
+        }
+
+        var host = field.Players.FirstOrDefault(p => p.IsMaster)?.Session.ActiveCharacter;
+        var entry = new MatchPointLogEntry(
+            host?.Id ?? 0,
+            host?.Name ?? field.HostCharacterName,
+            character.Id,
+            character.Name,
+            powerUser,
+            field.Rules.Mode,
+            field.Rounds,
+            field.Round,
+            result == GameField.RoundOutcomeWin,
+            result == GameField.RoundOutcomeLoss,
+            exp,
+            gold);
+        try
+        {
+            await _abusers.LogMatchPointAsync(entry, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "[{ConnectionId}] Could not log the round result of '{Character}'.", session.Connection.ConnectionId, character.Name);
         }
     }
 
@@ -2354,6 +2395,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         {
             return;
         }
+
+        await LogMatchPointAsync(session, field, powerUser, GameField.RoundOutcomeDraw, report.Exp, report.Gold, cancellationToken).ConfigureAwait(false);
 
         if (!clear.Improved || clear.Reward is not { } outcome)
         {
