@@ -97,7 +97,10 @@ public readonly record struct ItemSlot(ushort ItemId, byte Level, uint Exp, uint
 ///   120 x u8               Level per slot
 ///   120 x u32              Exp per slot
 ///   120 x u32              LimitTime per slot (LegacyGameClock minutes, 0 = permanent; Inferred)
-///   u32                    UNKNOWN: purpose not yet verified (sent as 0)
+///   u32                    Stage level pass purchase time (LegacyGameClock minutes, 0 = none). engine.dll 0x36196C4C passes
+///                          it to rakion.bin 0x47E781, which keeps it at AccountInfo+0x2D98; 0x47E7A7 turns it into the
+///                          hours left of the 24 h pass, and the Stage list (0x46553F) skips its level check while more
+///                          than 0.1 h remain. Observed offsets; the legacy agent stores the purchase minute (0x418738).
 /// BagCount: rakion.bin 0x47E75A stores this byte at listener+0x80, the same field the BuyBag reply
 /// (rakion.bin 0x475283) updates as the account's bag count. Observed offsets; meaning Derived.
 /// </summary>
@@ -138,6 +141,9 @@ public sealed record AccountBoxBlock
 
     public static AccountBoxBlock Empty { get; } = new();
 
+    /// <summary>Stage level pass purchase time in LegacyGameClock minutes; 0 when the account has none.</summary>
+    public uint StageLevelFreeBoughtMinute { get; init; }
+
     public IReadOnlyList<ItemSlot> Slots => _slots;
     public IReadOnlyList<ushort> ExpiredItemIds => _expiredItemIds;
     public byte BagCount { get; }
@@ -172,7 +178,7 @@ public sealed record AccountBoxBlock
             writer.WriteUInt32(slot.LimitTime);
         }
 
-        writer.WriteUInt32(0); // UNKNOWN: purpose not yet verified.
+        writer.WriteUInt32(StageLevelFreeBoughtMinute);
     }
 
     public static bool TryParse(ReadOnlySpan<byte> span, out AccountBoxBlock block)

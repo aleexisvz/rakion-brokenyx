@@ -485,7 +485,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         if (session.IsEncrypted)
         {
             // Send Part 2 packet (Opcode 0x000D) to satisfy client check (0x4ff4ad == 2) and enter Character Selection UI
-            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries, AccountBox: inventory?.Box), cancellationToken).ConfigureAwait(false);
+            await SendPacketAsync(session, new WorldLoginPart2Packet(UnlockedSlots: unlockedSlots, Characters: summaries, AccountBox: WithStageLevelPass(inventory?.Box ?? AccountBoxBlock.Empty, session)), cancellationToken).ConfigureAwait(false);
         }
 
         _logger.LogInformation(
@@ -1134,6 +1134,21 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var response = new FieldCreateResponsePacket(ResultCode: failureReason, RoomNumber: 0);
             await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Puts the Stage level pass purchase time in the account block: the client works out the hours left from it and
+    /// the server time, and only then lets the Stage list ignore the level range.
+    /// </summary>
+    private static AccountBoxBlock WithStageLevelPass(AccountBoxBlock box, WorldSession session)
+    {
+        if (session.StageLevelFreeUntilMinute is not long until)
+        {
+            return box;
+        }
+
+        var bought = DateTimeOffset.FromUnixTimeSeconds((until - Features.Economy.AccountUpgradeModule.StageLevelFreeMinutes) * 60).LocalDateTime;
+        return box with { StageLevelFreeBoughtMinute = LegacyGameClock.ToMinutes(bought) };
     }
 
     /// <summary>
