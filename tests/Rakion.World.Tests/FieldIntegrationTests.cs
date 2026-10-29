@@ -160,9 +160,9 @@ public sealed class FieldIntegrationTests
         // 4. Player 2 joins via QuickEnter (0x0039)
         var (c2, s2) = await CreateAuthenticatedPlayerAsync("guestUser", "GuestNinja", 0);
 
-        // Host (s1) was in channel 0, so it receives the refreshed roster (0x001E)
+        // Host (s1) was in channel 0, so it receives the guest's record (0x001F)
         var (opBroadcastChan, _) = await ReadServerPacketAsync(s1);
-        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, opBroadcastChan);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, opBroadcastChan);
 
         var quickReq = new FieldQuickEnterRequestPacket();
         await SendClientPacketAsync(s2, 3, quickReq.Opcode, quickReq);
@@ -302,7 +302,7 @@ public sealed class FieldIntegrationTests
         // 4. Guest joins room (auto-assigned to Team 1, slot 10)
         var (c2, s2) = await CreateAuthenticatedPlayerAsync("guestUser2", "GuestMage", 0);
         var (opBroadcastChan, _) = await ReadServerPacketAsync(s1);
-        Assert.AreEqual((ushort)ServerOpcode.ChannelCharacters, opBroadcastChan);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelEnter, opBroadcastChan);
 
         var quickReq = new FieldQuickEnterRequestPacket();
         await SendClientPacketAsync(s2, 13, quickReq.Opcode, quickReq);

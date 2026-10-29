@@ -241,4 +241,35 @@ public sealed class ChannelPacketTests
         Assert.AreEqual((byte)1, parsedE.ResultCode);
         Assert.AreEqual("OfflinePlayer", parsedE.CharacterName);
     }
+    [TestMethod]
+    public void ChannelUserNotices_UseTheListEntryLayout()
+    {
+        var bob = new ChannelCharacterSummary(Slot: 7, Grade: 3, Name: "Bob", Class: 0, Level: 3, ClanId: 0);
+        using var enter = new PacketWriter();
+        new ChannelUserEnterNoticePacket(7, 0x0102, bob).Serialize(enter);
+        CollectionAssert.AreEqual(
+            new byte[] { 0, 7, 0x02, 0x01, (byte)'B', (byte)'o', (byte)'b', 0, 3, 0, 0, 0, 0, 0 },
+            enter.WrittenSpan.ToArray());
+
+        using var leave = new PacketWriter();
+        var leavePacket = new ChannelUserLeaveNoticePacket(7);
+        leavePacket.Serialize(leave);
+        Assert.AreEqual((ushort)ServerOpcode.ChannelExit, leavePacket.Opcode);
+        CollectionAssert.AreEqual(new byte[] { 7 }, leave.WrittenSpan.ToArray());
+    }
+
+    [TestMethod]
+    public void ChannelCharacters_PutsTheLevelBeforeTheClass_SoASwordmanIsNotDropped()
+    {
+        var swordman = new ChannelCharacterSummary(Slot: 2, Grade: 5, Name: "Ann", Class: 0, Level: 5, ClanId: 0);
+        var packet = new ChannelCharactersResponsePacket(0, 1, 0, "Beginner 01", "World", [swordman]);
+        using var writer = new PacketWriter();
+        packet.Serialize(writer);
+
+        byte[] bytes = writer.WrittenSpan.ToArray();
+        int afterName = Array.IndexOf(bytes, (byte)0, 3 + "Beginner 01".Length + 1 + "World".Length + 1 + 3) + 1;
+        Assert.AreEqual((byte)5, bytes[afterName], "engine.dll drops an entry whose byte after the name is 0");
+        Assert.IsTrue(ChannelCharactersResponsePacket.TryParse(bytes, out var parsed));
+        Assert.AreEqual(swordman, parsed.Characters.Single());
+    }
 }
