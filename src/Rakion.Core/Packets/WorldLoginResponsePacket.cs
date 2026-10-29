@@ -88,10 +88,8 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteUInt32(0);
         writer.WriteUInt16(0);
         writer.WriteUInt32(0);
-        // Presents waiting in the present box: the legacy login agent counts pendingpresents and writes the count in
-        // this field (RakionWorldServ.exe 0x4110E8 -> 0x411A90, Observed); that the client lights its Post icon and
-        // the "receive" button from it is Inferred.
-        writer.WriteUInt32(PendingPresents);
+        // rakion.bin 0x47E22B keeps this field at listener+0x2C3C and nothing reads it there (Observed).
+        writer.WriteUInt32(0);
         writer.WriteUInt32(0);
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteNullTerminatedString(string.Empty);
@@ -103,7 +101,12 @@ public sealed record WorldLoginResponsePacket(
         writer.WriteNullTerminatedString(string.Empty);
         writer.WriteByte(0);
         writer.WriteByte(0); // Buddy count (engine.dll 0x3619608D)
-        writer.WriteUInt16(0); // Post-buddy uint16 (engine.dll 0x361960D0)
+        // Presents waiting in the present box: engine.dll 0x361960D0 reads this u16, rakion.bin 0x47E3EB stores it at
+        // AccountInfo+0x5C, the counter the purchase answers raise when they carry presents (0x405587), and the login
+        // clears the "new present" flag at +0x60 that the inventory button (0x44EC18) and the lobby (0x403908) test.
+        // Observed: on entering the lobby the client shows its present notice when the flag is 0 and the count above 0
+        // (0x47C3A7), and each accepted present lowers the count and clears the flag at 0 (0x47355D).
+        writer.WriteUInt16((ushort)Math.Min(PendingPresents, ushort.MaxValue));
         writer.WriteUInt32(Gold); // Gold (engine.dll 0x361960DA -> [AccountInfo + 0x64], RakionWorldServ 0x00427008)
         writer.WriteUInt32(Cash); // Cash (engine.dll 0x361960E8 -> [AccountInfo + 0x68], RakionWorldServ 0x00427002)
         writer.WriteByte(UnlockedSlots); // UnlockedSlots (engine.dll 0x361960F5 -> [AccountInfo + 0x6C], RakionWorldServ 0x00427032)
