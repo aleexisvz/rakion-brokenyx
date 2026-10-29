@@ -71,6 +71,16 @@ public sealed class GameFieldJoinTests
     }
 
     [TestMethod]
+    public void StageRankClearItem_FollowsTheLegacyLevelBands()
+    {
+        Assert.IsNull(Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(9), "free below level 10");
+        Assert.AreEqual((10011, 2900), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(10));
+        Assert.AreEqual((10011, 2900), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(20));
+        Assert.AreEqual((10012, 6400), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(21));
+        Assert.AreEqual((10013, 9900), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(41));
+    }
+
+    [TestMethod]
     public void StageCatalog_HoldsTheLegacyTable()
     {
         Assert.AreEqual(new StageLimits(1, 1, 10), StageCatalog.Get(1));
