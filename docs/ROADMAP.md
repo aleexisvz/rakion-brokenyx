@@ -240,7 +240,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir que los jugadores jueguen la partida de forma fluida, intercambien golpes y el servidor registre muertes, rondas y recompensas.
 > **Carril:** B. **Código:** `src/Rakion.Relay/` (librería sin sockets), `src/Rakion.World/` (listeners UDP ya existentes desde 3.1). 6.4 consume el contrato C-4 del carril A.
 
-> **Estado:** 6.1 y 6.3–6.6 mergeados (PRs #24, #25, #28–#30, #32). El combate va de cliente a cliente por UDP y funciona con dos y tres clientes en la misma red. Pendientes: el relevo por servidor (6.2, para cuando se abra al público) y los extras de Stage (6.7).
+> **Estado:** 6.1 y 6.3–6.7 mergeados (PRs #24, #25, #28–#30, #32, #40). El combate va de cliente a cliente por UDP y funciona con dos y tres clientes en la misma red. Pendiente: el relevo por servidor (6.2, para cuando se abra al público).
 
 - [x] **6.1 Registro de Endpoints UDP por Jugador (`SendFieldSlotUDP`, `0x0062`):** (#24)
   - Los sondeos UDP llevan el índice y la clave del login; `UdpEndpointRegistry` guarda las direcciones de cada jugador y viajan en los registros de la sala para que los clientes se conecten entre sí. `0x0062` se reenvía entre miembros.
@@ -259,7 +259,11 @@ rakion-brokenyx/
   - `0x0060` (`SendFieldGameMasterBossHP`): el original solo lo acepta de los líderes de Leader Wars (0x425CC0, **Observed**); se guarda para el desempate por tiempo.
   - Stage (modo 0): el dueño de la sala cierra la ronda (`0x004A`, 2 superado / 3 fallado) y cada jugador cobra con `0x0053` solo si mejora su rango del stage; rangos, drops y recompensa en una transacción (0x405A90, 0x425010, 0x40BAE0, **Observed**).
   - Verificado con cliente real: sí (Golem War y stages 1–2).
-- [ ] **6.7 Extras de Stage:** límites de nivel y de jugadores de cada stage (`StageInfo`) al crear la sala, y las compras `0x0070` (borrar rangos) y `0x0071` (acceso libre por nivel).
+- [x] **6.7 Extras de Stage:** límites de nivel y de jugadores de cada stage (`StageInfo`) al crear la sala, y las compras `0x0070` (borrar rangos) y `0x0071` (acceso libre por nivel). (#40)
+  - Tabla de 48 stages (`StageCatalog`, filas de `StageInfo` del original): la sala abre solo los slots del stage; crear fuera de rango responde 2 y unirse, 7 (0x4055C8, 0x41DB17, 0x406FEB, **Observed**).
+  - `0x0070`: borra los rangos del personaje por el precio en cash de su franja de nivel (ítems 10011–10013, gratis por debajo de nivel 10). `0x0071`: acceso libre 24 h (ítem 10014), no se vende mientras sigue activo (resultado 3). Respuesta `[resultado][oro][cash][0]` (0x36195BD0 / 0x36195CC0, **Observed**).
+  - El cliente salta el límite de nivel de la lista de stages por su cuenta: lo sabe por la hora de compra que va al final del bloque de cuenta del `0x000D` (`rakion.bin` 0x47E781 → 0x46553F, **Observed**). Tras comprar hay que volver a iniciar sesión.
+  - Verificado con cliente real: sí.
   - Verificado con cliente real: no.
 - [x] **6.6 Recompensas (`SendFieldGamePoint`, `0x0050`):** (#28, #29, #30)
   - El cliente calcula la EXP y el oro; el servidor aplica los topes por modo del original, +50 % de EXP a PowerUser y los multiplicadores `World:Rewards` (`RakionWorldServ.exe` 0x424B60, **Observed**). Persistencia con `IMatchResultRepository` (C-4).

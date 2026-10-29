@@ -31,6 +31,42 @@ public sealed class AccountUpgradeRepositoryTests
     }
 
     [TestMethod]
+    public async Task StageRankClear_ChargesCash_AndDeletesOnlyThatCharactersRanks()
+    {
+        int other = (await new CharacterRepository(_factory).CreateCharacterAsync(_userId, "Other", CharacterClass.Mage, 1)).Id;
+        await ExecuteAsync("INSERT INTO user_stage_info (character_id, stage, `rank`) VALUES (@A, 1, 3), (@A, 2, 4), (@B, 1, 2);", new { A = _characterId, B = other });
+
+        var outcome = await _repository.BuyStageRankClearAsync(_userId, _characterId, 2900);
+
+        Assert.AreEqual(new UpgradeOutcome(UpgradeStatus.Bought, 200000, 17100, 0), outcome);
+        Assert.AreEqual(0, await ScalarAsync("SELECT COUNT(*) FROM user_stage_info WHERE character_id = @Id;", new { Id = _characterId }));
+        Assert.AreEqual(1, await ScalarAsync("SELECT COUNT(*) FROM user_stage_info WHERE character_id = @Id;", new { Id = other }));
+
+        var poor = await _repository.BuyStageRankClearAsync(_userId, _characterId, 50000);
+        Assert.AreEqual(UpgradeStatus.NotEnoughMoney, poor.Status);
+        Assert.AreEqual(17100, poor.Cash);
+    }
+
+    [TestMethod]
+    public async Task StageLevelFree_LastsTheGivenMinutes_AndCannotBeBoughtWhileActive()
+    {
+        Assert.IsNull(await _repository.GetStageLevelFreeUntilAsync(_userId));
+
+        var bought = await _repository.BuyStageLevelFreeAsync(_userId, 16500, nowMinute: 1000, durationMinutes: 1440);
+        Assert.AreEqual(new UpgradeOutcome(UpgradeStatus.Bought, 200000, 3500, 0), bought);
+        Assert.AreEqual(2440L, await _repository.GetStageLevelFreeUntilAsync(_userId));
+
+        await ExecuteAsync("UPDATE cash_balances SET cash_amount = 40000 WHERE user_id = @Id;", new { Id = _userId });
+        var again = await _repository.BuyStageLevelFreeAsync(_userId, 16500, nowMinute: 2000, durationMinutes: 1440);
+        Assert.AreEqual(UpgradeStatus.AtMaximum, again.Status);
+        Assert.AreEqual(40000, again.Cash, "nothing charged while the pass is active");
+
+        var renewed = await _repository.BuyStageLevelFreeAsync(_userId, 16500, nowMinute: 2440, durationMinutes: 1440);
+        Assert.AreEqual(UpgradeStatus.Bought, renewed.Status);
+        Assert.AreEqual(3880L, await _repository.GetStageLevelFreeUntilAsync(_userId));
+    }
+
+    [TestMethod]
     public async Task ResetStats_KeepsThreePointsPerLevel_AndReturnsTheRestAsPowerPoints()
     {
         await ExecuteAsync("UPDATE characters SET level = 5, level_point = 2, hit1 = 10, hp = 4 WHERE id = @Id;", new { Id = _characterId });

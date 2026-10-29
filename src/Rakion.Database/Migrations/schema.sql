@@ -149,6 +149,13 @@ CREATE TABLE IF NOT EXISTS `user_stage_info` (
     UNIQUE KEY `uq_user_stage_info` (`character_id`, `stage`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Stage level pass (0x0071): the account plays any Stage whatever its level until this minute. Also created on first
+-- use by AccountUpgradeRepository.
+CREATE TABLE IF NOT EXISTS `user_stage_level_free` (
+    `user_id` INT NOT NULL PRIMARY KEY,
+    `until_minute` BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- -----------------------------------------------------------------------------
 -- 4e. Ranking snapshots for ranking pages (legacy TotalRankP / <Class>RankP), rebuilt by the ranking job
 --     (Rakion.Maintenance); also created on first run.

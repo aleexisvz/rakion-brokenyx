@@ -139,6 +139,15 @@ public sealed class FieldJoinPacketTests
     }
 
     [TestMethod]
+    public void StagePurchaseResponse_HasNoCountByte()
+    {
+        var rankClear = new StagePurchaseResponsePacket(ServerOpcode.InventoryBuyStageRankClear, 0, 1, 2);
+        Assert.AreEqual((ushort)0x70, rankClear.Opcode);
+        Assert.AreEqual((ushort)0x71, new StagePurchaseResponsePacket(ServerOpcode.InventoryBuyStageLevelFree, 3, 0, 0).Opcode);
+        CollectionAssert.AreEqual(new byte[] { 0, 1, 0, 0, 0, 2, 0, 0, 0, 0 }, PayloadOf(rankClear));
+    }
+
+    [TestMethod]
     public void VotePackets_MatchTheClientLayouts()
     {
         var open = new FieldGameVoteOpenRequestPacket(4, "afk");

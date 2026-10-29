@@ -58,6 +58,17 @@ public sealed class InventoryPacketTests
     }
 
     [TestMethod]
+    public void AccountBoxBlock_EndsWithTheStageLevelPassPurchaseTime()
+    {
+        using var writer = new PacketWriter();
+        (AccountBoxBlock.Empty with { StageLevelFreeBoughtMinute = 0x01020304 }).Serialize(writer);
+
+        byte[] bytes = writer.WrittenSpan.ToArray();
+        Assert.HasCount(AccountBoxBlock.EmptyBlockSize, bytes);
+        CollectionAssert.AreEqual(new byte[] { 4, 3, 2, 1 }, bytes[^4..]);
+    }
+
+    [TestMethod]
     public void AccountBoxBlock_RoundTrip_PreservesSlotsAndExpiredItems()
     {
         var slots = new ItemSlot[AccountBoxBlock.SlotCount];

@@ -299,7 +299,8 @@ public sealed partial class GameField
                 bool closed = Rules.Mode switch
                 {
                     >= 1 and <= 4 => i is (>= 6 and <= 9) or >= 16,
-                    0 => i >= 10,
+                    // Stage: the stage's own player count (legacy room init 0x4055C8 closes the rest, Observed).
+                    0 => i >= (StageCatalog.Get(Rules.Kind)?.MaxPlayers ?? 10),
                     _ => false,
                 };
                 _isSlotClosed[i] = closed && _slots[i] is null;
@@ -359,6 +360,14 @@ public sealed partial class GameField
             }
 
             if (Rules.Mode is >= 1 and <= 4 && !Rules.AllowsLevel(session.ActiveCharacter?.Level ?? 0))
+            {
+                failureReason = FieldPlayerEnterPacket.LevelOutOfRange;
+                return false;
+            }
+
+            // Stage: the stage's level range unless the account bought the level pass (legacy 0x406FEB, Observed).
+            if (Rules.Mode == 0 && StageCatalog.Get(Rules.Kind) is { } stage &&
+                !session.HasStageLevelPass(DateTimeOffset.UtcNow) && !stage.AllowsLevel(session.ActiveCharacter?.Level ?? 0))
             {
                 failureReason = FieldPlayerEnterPacket.LevelOutOfRange;
                 return false;

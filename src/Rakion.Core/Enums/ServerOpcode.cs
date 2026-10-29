@@ -350,6 +350,18 @@ public enum ServerOpcode : ushort
     /// </summary>
     InventoryBuyPotionSlot = 0x006F,
 
+    /// <summary>
+    /// Stage rank clear purchase answer (see StagePurchaseResponsePacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x70 (0x361975BD -> 0x36195BD0).
+    /// </summary>
+    InventoryBuyStageRankClear = 0x0070,
+
+    /// <summary>
+    /// Stage level pass purchase answer (see StagePurchaseResponsePacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x71 (0x361975CB -> 0x36195CC0).
+    /// </summary>
+    InventoryBuyStageLevelFree = 0x0071,
+
     // --- UDP (40708 / 40709) ---
     /// <summary>
     /// UDP hole punch echo on Port 1 (40708).

@@ -47,6 +47,49 @@ public sealed class GameFieldJoinTests
     }
 
     [TestMethod]
+    public void StageRoom_OpensTheStagePlayerCount_AndChecksItsLevelRange()
+    {
+        // Stage 19: 4 players, levels 10..21 (legacy StageInfo).
+        var field = CreateField(new FieldRules(19, 0, 0, 0, 0, 0, 0, 0, "map"), password: string.Empty);
+        field.ApplyDefaultSlots();
+
+        var slots = field.SnapshotSlots();
+        Assert.AreEqual(4, slots.Count(s => s.State != FieldSlotInfo.Closed), "the host and three open slots");
+
+        Assert.IsFalse(field.TryAddPlayer(CreateSession(2, level: 9), string.Empty, out _, out byte tooLow));
+        Assert.IsFalse(field.TryAddPlayer(CreateSession(3, level: 22), string.Empty, out _, out byte tooHigh));
+        Assert.AreEqual(FieldPlayerEnterPacket.LevelOutOfRange, tooLow);
+        Assert.AreEqual(FieldPlayerEnterPacket.LevelOutOfRange, tooHigh);
+
+        var withPass = CreateSession(4, level: 40);
+        withPass.StageLevelFreeUntilMinute = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60 + 60;
+        Assert.IsTrue(field.TryAddPlayer(withPass, string.Empty, out _, out _), "the level pass skips the range");
+
+        var expired = CreateSession(5, level: 40);
+        expired.StageLevelFreeUntilMinute = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60 - 1;
+        Assert.IsFalse(field.TryAddPlayer(expired, string.Empty, out _, out _));
+    }
+
+    [TestMethod]
+    public void StageRankClearItem_FollowsTheLegacyLevelBands()
+    {
+        Assert.IsNull(Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(9), "free below level 10");
+        Assert.AreEqual((10011, 2900), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(10));
+        Assert.AreEqual((10011, 2900), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(20));
+        Assert.AreEqual((10012, 6400), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(21));
+        Assert.AreEqual((10013, 9900), Rakion.World.Features.Economy.AccountUpgradeModule.StageRankClearItem(41));
+    }
+
+    [TestMethod]
+    public void StageCatalog_HoldsTheLegacyTable()
+    {
+        Assert.AreEqual(new StageLimits(1, 1, 10), StageCatalog.Get(1));
+        Assert.AreEqual(new StageLimits(3, 24, 35), StageCatalog.Get(48));
+        Assert.IsNull(StageCatalog.Get(0));
+        Assert.IsNull(StageCatalog.Get(49));
+    }
+
+    [TestMethod]
     public void SnapshotSlots_ReportsWireStates()
     {
         var field = CreateField(FieldRules.Default, password: string.Empty);

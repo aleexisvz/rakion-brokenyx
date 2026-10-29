@@ -11,6 +11,13 @@ public sealed class AccountUpgradeRepository : IAccountUpgradeRepository
 {
     private const string StatSum = "hit1 + hit2 + hit3 + hit4 + chit + hp + ap + attack_speed + speed + max_cp";
 
+    // The legacy usergameinfo.stagelevelfree is a tinyint (it cannot hold the purchase minute the legacy agent
+    // writes); the expiry minute is kept in its own table, created on first use like buddy_groups.
+    private const string CreateStageLevelFree = """
+        CREATE TABLE IF NOT EXISTS user_stage_level_free (
+            user_id INT NOT NULL PRIMARY KEY, until_minute BIGINT NOT NULL);
+        """;
+
     private readonly IDbConnectionFactory _connectionFactory;
 
     public AccountUpgradeRepository(IDbConnectionFactory connectionFactory)
@@ -152,6 +159,85 @@ public sealed class AccountUpgradeRepository : IAccountUpgradeRepository
             throw;
         }
     }
+
+    public async Task<UpgradeOutcome> BuyStageRankClearAsync(int userId, int characterId, int cashPrice, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        try
+        {
+            bool owned = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "SELECT COUNT(*) FROM characters WHERE id = @CharacterId AND user_id = @UserId;",
+                new { CharacterId = characterId, UserId = userId },
+                tx,
+                cancellationToken: ct)) > 0;
+            if (!owned)
+            {
+                return await RefuseAsync(connection, tx, userId, UpgradeStatus.CharacterNotFound, 0, ct);
+            }
+
+            if (!await ChargeAsync(connection, tx, userId, payWithGold: false, cashPrice, ct))
+            {
+                return await RefuseAsync(connection, tx, userId, UpgradeStatus.NotEnoughMoney, 0, ct);
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DELETE FROM user_stage_info WHERE character_id = @CharacterId;", new { CharacterId = characterId }, tx, cancellationToken: ct));
+            return await CommitAsync(connection, tx, userId, 0, ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<UpgradeOutcome> BuyStageLevelFreeAsync(int userId, int cashPrice, long nowMinute, int durationMinutes, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await connection.ExecuteAsync(new CommandDefinition(CreateStageLevelFree, cancellationToken: ct));
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        try
+        {
+            long? until = await GetLevelFreeUntilAsync(connection, tx, userId, ct);
+            if (until > nowMinute)
+            {
+                return await RefuseAsync(connection, tx, userId, UpgradeStatus.AtMaximum, 0, ct);
+            }
+
+            if (!await ChargeAsync(connection, tx, userId, payWithGold: false, cashPrice, ct))
+            {
+                return await RefuseAsync(connection, tx, userId, UpgradeStatus.NotEnoughMoney, 0, ct);
+            }
+
+            var args = new { UserId = userId, Until = nowMinute + durationMinutes };
+            int updated = await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE user_stage_level_free SET until_minute = @Until WHERE user_id = @UserId;", args, tx, cancellationToken: ct));
+            if (updated == 0)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "INSERT INTO user_stage_level_free (user_id, until_minute) VALUES (@UserId, @Until);", args, tx, cancellationToken: ct));
+            }
+
+            return await CommitAsync(connection, tx, userId, 0, ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
+    public async Task<long?> GetStageLevelFreeUntilAsync(int userId, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await connection.ExecuteAsync(new CommandDefinition(CreateStageLevelFree, cancellationToken: ct));
+        return await GetLevelFreeUntilAsync(connection, null, userId, ct);
+    }
+
+    private static Task<long?> GetLevelFreeUntilAsync(DbConnection connection, DbTransaction? tx, int userId, CancellationToken ct) =>
+        connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT until_minute FROM user_stage_level_free WHERE user_id = @UserId;", new { UserId = userId }, tx, cancellationToken: ct));
 
     private static async Task<bool> ChargeAsync(DbConnection connection, DbTransaction tx, int userId, bool payWithGold, int price, CancellationToken ct)
     {

@@ -85,3 +85,27 @@ public sealed record AccountUpgradeResponsePacket(ServerOpcode ResponseOpcode, b
         writer.WriteByte(0);
     }
 }
+
+/// <summary>
+/// Answer to a Stage purchase (rank clear 0x70, level pass 0x71): [u8 Result][u32 Gold][u32 Cash][u8 N][N x u32 PresentIds].
+/// Evidence: Observed in engine.dll 0x36195BD0 and 0x36195CC0 (fields read only for result 0; unlike 0x6F there is
+/// no count byte). Results 2 (not enough cash) and 3 (level pass still active) are Observed in the legacy agent
+/// (RakionWorldServ.exe 0x41863B and 0x418728); 1 is its generic failure.
+/// </summary>
+public sealed record StagePurchaseResponsePacket(ServerOpcode ResponseOpcode, byte Result, uint Gold, uint Cash) : IPacket
+{
+    public const byte Success = 0;
+    public const byte Failed = 1;
+    public const byte NotEnoughCash = 2;
+    public const byte StillActive = 3;
+
+    public ushort Opcode => (ushort)ResponseOpcode;
+
+    public void Serialize(PacketWriter writer)
+    {
+        writer.WriteByte(Result);
+        writer.WriteUInt32(Gold);
+        writer.WriteUInt32(Cash);
+        writer.WriteByte(0);
+    }
+}
