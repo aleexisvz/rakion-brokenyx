@@ -41,6 +41,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly UdpEndpointRegistry _udpEndpoints;
     private readonly IMatchResultRepository? _matchResults;
     private readonly IChatCommandInterceptor? _chatCommands;
+    private readonly IAccountUpgradeRepository? _upgrades;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -60,8 +61,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         ILogger<WorldPacketHandler> logger,
         UdpEndpointRegistry? udpEndpoints = null,
         IMatchResultRepository? matchResults = null,
-        IChatCommandInterceptor? chatCommands = null)
+        IChatCommandInterceptor? chatCommands = null,
+        IAccountUpgradeRepository? upgrades = null)
     {
+        _upgrades = upgrades;
         _options = options;
         _udpEndpoints = udpEndpoints ?? new UdpEndpointRegistry();
         _matchResults = matchResults;
@@ -412,6 +415,10 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         session.User = user;
         session.GameInfo = gameInfo;
+        if (_upgrades is not null)
+        {
+            session.StageLevelFreeUntilMinute = await _upgrades.GetStageLevelFreeUntilAsync(user.Id, cancellationToken).ConfigureAwait(false);
+        }
         if (session.UdpIndex == 0)
         {
             (session.UdpIndex, session.UdpKey) = _udpEndpoints.Register();
@@ -1081,6 +1088,13 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
 
         await LeaveStaleFieldAsync(session, cancellationToken).ConfigureAwait(false);
 
+        if (StageCreateRefusal(session, FieldRules.FromCreate(req)) is byte refusal)
+        {
+            _logger.LogInformation("[{ConnectionId}] Stage room refused for '{Character}' (level {Level}): result {Result}.", session.Connection.ConnectionId, session.ActiveCharacter.Name, session.ActiveCharacter.Level, refusal);
+            await SendPacketAsync(session, new FieldCreateResponsePacket(ResultCode: refusal), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (session.ActiveChannel.FieldManager.TryCreateField(
             session.ActiveChannel.Index,
             session,
@@ -1120,6 +1134,28 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             var response = new FieldCreateResponsePacket(ResultCode: failureReason, RoomNumber: 0);
             await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Stage rooms (mode 0) check the stage table first (RakionWorldServ.exe 0x423840 and 0x41DB17, Observed): an
+    /// unknown stage is refused (the legacy server drops the client as a cheat; Inferred result 1 here) and a level
+    /// outside the stage range answers 2, unless the account holds the level pass (0x0071).
+    /// </summary>
+    private static byte? StageCreateRefusal(WorldSession session, FieldRules rules)
+    {
+        if (rules.Mode != 0)
+        {
+            return null;
+        }
+
+        if (StageCatalog.Get(rules.Kind) is not { } stage)
+        {
+            return 1;
+        }
+
+        return session.HasStageLevelPass(DateTimeOffset.UtcNow) || stage.AllowsLevel(session.ActiveCharacter?.Level ?? 0)
+            ? null
+            : (byte)2;
     }
 
     private async ValueTask HandleFieldQuickEnterAsync(

@@ -25,6 +25,12 @@ public sealed class WorldSession : IWorldSessionView
     /// <summary>UDP probe identity given at WorldLogin (see <see cref="UdpEndpointRegistry"/>); 0 when none.</summary>
     public ushort UdpIndex { get; set; }
 
+    /// <summary>Minute (Unix time / 60) until which the account plays any Stage whatever its level (0x0071); null when none.</summary>
+    public long? StageLevelFreeUntilMinute { get; set; }
+
+    /// <summary>Whether the Stage level pass is active at <paramref name="now"/>.</summary>
+    public bool HasStageLevelPass(DateTimeOffset now) => StageLevelFreeUntilMinute > now.ToUnixTimeSeconds() / 60;
+
     /// <summary>Id of this player's line in the user list of its channel (1-255), given by the channel on entry.</summary>
     public byte ChannelListId { get; set; }
 
