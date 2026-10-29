@@ -73,6 +73,36 @@ public sealed class InventorySwapTests
         Assert.AreEqual((0, (byte)7), (nowBoxed.CharacterId, nowBoxed.SlotIndex));
     }
 
+    [TestMethod]
+    public async Task ConsumePotion_LowersTheEquippedQuantity_AndRefusesAnEmptyOrWrongSlot()
+    {
+        var potion = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = 1, CharacterId = 9, ItemId = 12001, SlotIndex = 3, Exp = 2 });
+
+        Assert.AreEqual(1L, await _invRepo.ConsumePotionAsync(1, 9, 3, 12001));
+        Assert.AreEqual(0L, await _invRepo.ConsumePotionAsync(1, 9, 3, 12001));
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 9, 3, 12001), "none left");
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 9, 3, 12002), "another item");
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(1, 8, 3, 12001), "another character");
+        Assert.IsNull(await _invRepo.ConsumePotionAsync(2, 9, 3, 12001), "another account");
+        Assert.AreEqual(0L, (await _invRepo.GetUserItemsAsync(1)).Single(i => i.Id == potion.Id).Exp);
+    }
+
+    [TestMethod]
+    public async Task StackBoxItems_AddsTheSourceQuantityToTheTarget_AndDeletesTheSource()
+    {
+        var source = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = 1, CharacterId = 0, ItemId = 12001, SlotIndex = 2, Exp = 5 });
+        var target = await _invRepo.AddUserItemAsync(new UserItemEntity { UserId = 1, CharacterId = 0, ItemId = 12002, SlotIndex = 7, Exp = 3 });
+
+        Assert.AreEqual(((int?)12001, (int?)12002), await _invRepo.GetBoxItemIdsAsync(1, 2, 7));
+        Assert.IsFalse(await _invRepo.StackBoxItemsAsync(1, 2, 2), "same slot");
+        Assert.IsFalse(await _invRepo.StackBoxItemsAsync(1, 2, 9), "empty target");
+        Assert.IsTrue(await _invRepo.StackBoxItemsAsync(1, 2, 7));
+
+        var items = await _invRepo.GetUserItemsAsync(1);
+        Assert.IsFalse(items.Any(i => i.Id == source.Id));
+        Assert.AreEqual(8L, items.Single(i => i.Id == target.Id).Exp);
+    }
+
     private Task<UserItemEntity> AddAsync(int userId, int characterId, int itemId, byte slot) =>
         _invRepo.AddUserItemAsync(new UserItemEntity { UserId = userId, CharacterId = characterId, ItemId = itemId, SlotIndex = slot });
 

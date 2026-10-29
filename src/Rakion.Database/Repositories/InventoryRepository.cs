@@ -98,6 +98,77 @@ public sealed class InventoryRepository : IInventoryRepository
         return affected > 0;
     }
 
+    public async Task<bool> StackBoxItemsAsync(int userId, byte sourceSlot, byte targetSlot, CancellationToken ct = default)
+    {
+        if (sourceSlot == targetSlot)
+        {
+            return false;
+        }
+
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        var source = await connection.QuerySingleOrDefaultAsync<UserItemEntity>(new CommandDefinition(
+            "SELECT id AS Id, exp AS Exp FROM user_items WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot LIMIT 1;",
+            new { UserId = userId, Slot = sourceSlot },
+            tx,
+            cancellationToken: ct));
+        if (source is null)
+        {
+            await tx.RollbackAsync(ct);
+            return false;
+        }
+
+        int moved = await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE user_items SET exp = exp + @Exp WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot;",
+            new { UserId = userId, Slot = targetSlot, source.Exp },
+            tx,
+            cancellationToken: ct));
+        if (moved != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return false;
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM user_items WHERE id = @Id AND user_id = @UserId;", new { source.Id, UserId = userId }, tx, cancellationToken: ct));
+        await tx.CommitAsync(ct);
+        return true;
+    }
+
+    public async Task<(int? Source, int? Target)> GetBoxItemIdsAsync(int userId, byte sourceSlot, byte targetSlot, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        const string sql = "SELECT item_id FROM user_items WHERE user_id = @UserId AND character_id = 0 AND slot_index = @Slot LIMIT 1;";
+        int? source = await connection.ExecuteScalarAsync<int?>(new CommandDefinition(sql, new { UserId = userId, Slot = sourceSlot }, cancellationToken: ct));
+        int? target = await connection.ExecuteScalarAsync<int?>(new CommandDefinition(sql, new { UserId = userId, Slot = targetSlot }, cancellationToken: ct));
+        return (source, target);
+    }
+
+    public async Task<long?> ConsumePotionAsync(int userId, int characterId, byte equipmentSlot, int itemId, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        var args = new { UserId = userId, CharacterId = characterId, Slot = equipmentSlot, ItemId = itemId };
+        int changed = await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE user_items SET exp = exp - 1 WHERE user_id = @UserId AND character_id = @CharacterId AND slot_index = @Slot AND item_id = @ItemId AND exp > 0;",
+            args,
+            tx,
+            cancellationToken: ct));
+        if (changed != 1)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
+
+        long left = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT exp FROM user_items WHERE user_id = @UserId AND character_id = @CharacterId AND slot_index = @Slot AND item_id = @ItemId;",
+            args,
+            tx,
+            cancellationToken: ct));
+        await tx.CommitAsync(ct);
+        return left;
+    }
+
     public async Task<bool> UpdateLevelAndExpAsync(int userItemId, byte newLevel, long newExp, CancellationToken ct = default)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);

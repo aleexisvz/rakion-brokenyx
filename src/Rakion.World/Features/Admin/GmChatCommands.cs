@@ -16,7 +16,7 @@ public sealed class GmChatCommands : IChatCommandInterceptor
     /// <summary>Help lines, each short enough for one notice (the client crashes on notices over 128 characters).</summary>
     public static readonly IReadOnlyList<string> Help =
     [
-        "GM: /givegold <pj> <n>, /givecash <pj> <n>, /giveitem <pj> <id>",
+        "GM: /givegold <pj> <n>, /givecash <pj> <n>, /giveitem <pj> <id>, /present <pj> <id>",
         "GM: /ban <pj> <dias, 0 = siempre> [motivo], /unban <pj>",
         "GM: /kickout <pj>, /close, /notice <texto>, /rankupdate",
     ];
@@ -30,6 +30,7 @@ public sealed class GmChatCommands : IChatCommandInterceptor
     private readonly IAccountBalanceRepository _balances;
     private readonly IAdminRepository _admin;
     private readonly IRankingTrigger? _ranking;
+    private readonly IPresentRepository? _presents;
     private readonly ILogger<GmChatCommands> _logger;
 
     public GmChatCommands(
@@ -39,8 +40,10 @@ public sealed class GmChatCommands : IChatCommandInterceptor
         IAccountBalanceRepository balances,
         IAdminRepository admin,
         ILogger<GmChatCommands> logger,
-        IRankingTrigger? ranking = null)
+        IRankingTrigger? ranking = null,
+        IPresentRepository? presents = null)
     {
+        _presents = presents;
         _sender = sender;
         _characters = characters;
         _users = users;
@@ -64,6 +67,7 @@ public sealed class GmChatCommands : IChatCommandInterceptor
             "/givegold" => await GiveCurrencyAsync(context, parts, gold: true, cancellationToken).ConfigureAwait(false),
             "/givecash" => await GiveCurrencyAsync(context, parts, gold: false, cancellationToken).ConfigureAwait(false),
             "/giveitem" => await GiveItemAsync(context, parts, cancellationToken).ConfigureAwait(false),
+            "/present" => await SendPresentAsync(parts, cancellationToken).ConfigureAwait(false),
             "/ban" => await BanAsync(context, parts, cancellationToken).ConfigureAwait(false),
             "/unban" => await UnbanAsync(parts, cancellationToken).ConfigureAwait(false),
             "/kickout" => await KickOutAsync(context, parts, cancellationToken).ConfigureAwait(false),
@@ -130,6 +134,29 @@ public sealed class GmChatCommands : IChatCommandInterceptor
         return slot is { } s
             ? $"Ítem {itemId} en el slot {s} del box de {character.Name} (se ve al volver a entrar)."
             : $"No se pudo: el ítem {itemId} no existe o el box está lleno.";
+    }
+
+    /// <summary>Queues a present in the character's account present box; the player takes it from the client's present window.</summary>
+    private async Task<string> SendPresentAsync(string[] parts, CancellationToken ct)
+    {
+        if (parts.Length < 3 || !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int itemId))
+        {
+            return "Uso: /present <pj> <id del ítem>";
+        }
+
+        if (_presents is null)
+        {
+            return "Los regalos no están disponibles.";
+        }
+
+        if (await _characters.GetCharacterByNameAsync(parts[1], ct).ConfigureAwait(false) is not { } character)
+        {
+            return $"No existe el personaje '{parts[1]}'.";
+        }
+
+        int pendingId = await _presents.SendAsync(character.UserId, itemId, ct).ConfigureAwait(false);
+        _logger.LogInformation("GM present {PendingId}: item {ItemId} to '{Character}'.", pendingId, itemId, character.Name);
+        return $"Regalo {itemId} enviado a {character.Name}.";
     }
 
     private async Task<string> BanAsync(ChatCommandContext context, string[] parts, CancellationToken ct)

@@ -36,6 +36,69 @@ public sealed class InventoryModule : IWorldOpcodeModule
         registry.Map(ClientOpcode.InventoryEnter, HandleInventoryEnterAsync);
         registry.Map(ClientOpcode.InventoryLeave, HandleInventoryLeaveAsync);
         registry.Map(ClientOpcode.InventoryMove, HandleInventoryMoveAsync);
+        registry.Map(ClientOpcode.FieldGamePotion, HandleFieldGamePotionAsync);
+        registry.Map(ClientOpcode.InventoryStackPotion, HandleStackPotionAsync);
+    }
+
+    /// <summary>
+    /// Stacks two potions of the account box (0x73). Legacy rules (RakionWorldServ.exe 0x421AC1 and 0x40C140, Observed):
+    /// both slots below 120, both items potions (12000..12999) with the same catalog hit4 (entry +0x12; that it is the
+    /// potion kind is Inferred); the quantities add up without a cap.
+    /// </summary>
+    private async ValueTask HandleStackPotionAsync(WorldSession session, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        IWorldSessionView view = session;
+        if (!InventoryStackPotionRequestPacket.TryParse(payload.Span, out var request) || view.UserId is not int userId ||
+            request.SourceSlot >= AccountBoxBlock.SlotCount || request.TargetSlot >= AccountBoxBlock.SlotCount)
+        {
+            _logger.LogWarning("[{ConnectionId}] StackPotion rejected: malformed or not logged in.", view.ConnectionId);
+            return;
+        }
+
+        bool stacked = await CanStackAsync(userId, request, cancellationToken).ConfigureAwait(false) &&
+            await _inventoryRepository.StackBoxItemsAsync(userId, request.SourceSlot, request.TargetSlot, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("[{ConnectionId}] StackPotion box {Source} -> {Target}: {Stacked}.", view.ConnectionId, request.SourceSlot, request.TargetSlot, stacked);
+        var response = new InventoryStackPotionResponsePacket(stacked ? InventoryStackPotionResponsePacket.Stacked : InventoryStackPotionResponsePacket.Refused);
+        await _sender.SendAsync(view, response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async ValueTask<bool> CanStackAsync(int userId, InventoryStackPotionRequestPacket request, CancellationToken cancellationToken)
+    {
+        var (source, target) = await _inventoryRepository.GetBoxItemIdsAsync(userId, request.SourceSlot, request.TargetSlot, cancellationToken).ConfigureAwait(false);
+        if (source is not (>= 12000 and <= 12999) || target is not (>= 12000 and <= 12999))
+        {
+            return false;
+        }
+
+        var sourceItem = await _inventoryRepository.GetItemTemplateAsync(source.Value, cancellationToken).ConfigureAwait(false);
+        var targetItem = await _inventoryRepository.GetItemTemplateAsync(target.Value, cancellationToken).ConfigureAwait(false);
+        return sourceItem is not null && targetItem is not null && sourceItem.Hit4 == targetItem.Hit4;
+    }
+
+    /// <summary>
+    /// Potions drunk in a match (0x6E). Only potions (12000..12999) during a match; the legacy server logs a refused
+    /// use as a cheat (0x41EB20 code 0xD2) and here it is only logged. The legacy one-use-per-slot flag outside Stage
+    /// (0x40E608) is not applied: when it is cleared is Unknown.
+    /// </summary>
+    private async ValueTask HandleFieldGamePotionAsync(WorldSession session, ReadOnlyMemory<byte> payload, CancellationToken cancellationToken)
+    {
+        IWorldSessionView view = session;
+        if (!FieldGamePotionRequestPacket.TryParse(payload.Span, out var request) || view.UserId is not int userId ||
+            view.CharacterId is not int characterId || !session.IsInField || request.ItemId is < 12000 or > 12999 ||
+            request.EquipmentSlot >= CharacterEquipment.SlotCount)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGamePotion rejected: malformed, not in a room or not a potion.", view.ConnectionId);
+            return;
+        }
+
+        long? left = await _inventoryRepository.ConsumePotionAsync(userId, characterId, request.EquipmentSlot, request.ItemId, cancellationToken).ConfigureAwait(false);
+        if (left is null)
+        {
+            _logger.LogWarning("[{ConnectionId}] FieldGamePotion refused: equipment slot {Slot} has no potion {ItemId} left.", view.ConnectionId, request.EquipmentSlot, request.ItemId);
+            return;
+        }
+
+        _logger.LogInformation("[{ConnectionId}] Potion {ItemId} drunk from equipment slot {Slot}: {Left} left.", view.ConnectionId, request.ItemId, request.EquipmentSlot, left);
     }
 
     private async ValueTask HandleInventoryEnterAsync(

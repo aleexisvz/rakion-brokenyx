@@ -87,6 +87,35 @@ public sealed class AccountUpgradeRepository : IAccountUpgradeRepository
         }
     }
 
+    public async Task<UpgradeOutcome> BuyCharacterSlotAsync(int userId, int cashPrice, byte maxSlots, CancellationToken ct = default)
+    {
+        await using var connection = await _connectionFactory.CreateConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        try
+        {
+            byte slots = await connection.ExecuteScalarAsync<byte>(new CommandDefinition(
+                "SELECT slot_count FROM user_game_info WHERE user_id = @UserId;", new { UserId = userId }, tx, cancellationToken: ct));
+            if (slots >= maxSlots)
+            {
+                return await RefuseAsync(connection, tx, userId, UpgradeStatus.AtMaximum, slots, ct);
+            }
+
+            if (!await ChargeAsync(connection, tx, userId, payWithGold: false, cashPrice, ct))
+            {
+                return await RefuseAsync(connection, tx, userId, UpgradeStatus.NotEnoughMoney, slots, ct);
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                "UPDATE user_game_info SET slot_count = slot_count + 1 WHERE user_id = @UserId;", new { UserId = userId }, tx, cancellationToken: ct));
+            return await CommitAsync(connection, tx, userId, (byte)(slots + 1), ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<UpgradeOutcome> BuyBagAsync(int userId, int cashPrice, byte maxBags, CancellationToken ct = default)
     {
         await using var connection = await _connectionFactory.CreateConnectionAsync(ct);

@@ -58,6 +58,14 @@ public sealed class InventoryPacketTests
     }
 
     [TestMethod]
+    public void FieldGamePotionRequest_ParsesSlotAndItem()
+    {
+        Assert.IsTrue(FieldGamePotionRequestPacket.TryParse([7, 0xE1, 0x2E], out var request));
+        Assert.AreEqual(new FieldGamePotionRequestPacket(7, 12001), request);
+        Assert.IsFalse(FieldGamePotionRequestPacket.TryParse([7, 0xE1], out _));
+    }
+
+    [TestMethod]
     public void AccountBoxBlock_EndsWithTheStageLevelPassPurchaseTime()
     {
         using var writer = new PacketWriter();

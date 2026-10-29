@@ -31,6 +31,20 @@ public sealed class AccountUpgradeRepositoryTests
     }
 
     [TestMethod]
+    public async Task BuyCharacterSlot_ChargesCash_UpToSixSlots()
+    {
+        var bought = await _repository.BuyCharacterSlotAsync(_userId, 12000, 6);
+        Assert.AreEqual(new UpgradeOutcome(UpgradeStatus.Bought, 200000, 8000, 4), bought);
+
+        var poor = await _repository.BuyCharacterSlotAsync(_userId, 12000, 6);
+        Assert.AreEqual(UpgradeStatus.NotEnoughMoney, poor.Status);
+        Assert.AreEqual((byte)4, poor.Count);
+
+        await ExecuteAsync("UPDATE user_game_info SET slot_count = 6 WHERE user_id = @Id;", new { Id = _userId });
+        Assert.AreEqual(UpgradeStatus.AtMaximum, (await _repository.BuyCharacterSlotAsync(_userId, 12000, 6)).Status);
+    }
+
+    [TestMethod]
     public async Task StageRankClear_ChargesCash_AndDeletesOnlyThatCharactersRanks()
     {
         int other = (await new CharacterRepository(_factory).CreateCharacterAsync(_userId, "Other", CharacterClass.Mage, 1)).Id;

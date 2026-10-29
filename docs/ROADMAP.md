@@ -176,7 +176,7 @@ rakion-brokenyx/
 > **Objetivo:** Permitir a los jugadores gestionar sus objetos, comprar en la tienda y mejorar equipamiento en la herrería.
 > **Carril:** A. **Código:** `src/Rakion.World/Features/Economy/`, `src/Rakion.Database/`, paquetes C-3 en `Rakion.Core`.
 
-> **Estado:** 4.0–4.5 y 4.7 mergeados (PRs #9–#21, #27, #30, #33; contratos #9–#11); 4.8 en parte (#33). Pendientes 4.6, el resto de 4.8 y 4.9. Detalle en `src/Rakion.World/Features/Economy/README.md`.
+> **Estado:** 4.0–4.8 mergeados (PRs #9–#21, #27, #30, #33, #41; contratos #9–#11). Pendientes 4.9 y los cupones de descuento (tabla **Unknown**). Detalle en `src/Rakion.World/Features/Economy/README.md`.
 
 - [x] **4.0 Prerrequisitos:** contratos C-0 (#9), C-1 (#10) y C-2 (#11) mergeados en `main`; C-3 (paquetes de economía en `InventoryPackets.cs`) entregado con cada ítem.
 - [x] **4.1 Carga y Envío de Inventario (`SendInventoryEnter`):** (#12, #13, #14, #15, #17)
@@ -195,16 +195,21 @@ rakion-brokenyx/
   - Comprobaciones del servidor original (equipo por debajo de +15, piedras 13001–13005) y resultados 0–8 **Observed** (`RakionWorldServ.exe` 0x40C310); nunca destruye el objeto (0x40C7A9).
   - Probabilidades **Unknown** (tabla provisional); la probabilidad de bajar de nivel se ajusta con `World:Rewards:EnchantDowngradeScale`. Materiales 14001–14003 todavía rechazados.
   - Verificado con cliente real: sí.
-- [ ] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*:
-  - Evidencia: `Peek()` `0x006B`, `Accept(u32, u16)` `0x006C`, `Dispose(u32)` `0x006D` **Observed**; respuestas **Unknown**.
-  - Verificado con cliente real: no.
+- [x] **4.6 Regalos (`SendPresentPeek` / `SendPresentAccept`)** *(opcional)*: (#41)
+  - Bandeja `pending_presents` (la `pendingpresents` del original): ver el más antiguo (`0x006B` → `[res][id][ítem][u16]`), aceptar a un slot vacío de la caja (`0x006C` → `[res][u32]`, 3 si el slot está ocupado) y descartar (`0x006D` → `[res]`). **Observed** (`RakionWorldServ.exe` 0x416BF0, 0x41710E; `engine.dll` 0x36194530–0x36194590).
+  - El login lleva el número de regalos en el `u16` previo al oro (`AccountInfo+0x5C`); el cliente muestra el aviso y enciende el botón de recibir (`rakion.bin` 0x47E3EB, 0x47C3A7, 0x47355D, **Observed**).
+  - Los GM envían regalos con `/present <pj> <ítem>`; más adelante, la web. Fuera: el regalo aleatorio de las compras en cash (tabla **Unknown**) y los regalos de oro.
+  - Verificado con cliente real: sí.
 - [x] **4.7 Reseteo de Puntos (`SendCharacterStateClear`, `0x001B`):** (#33)
   - Precio en cash por nivel (7000 / 12000 / 19000), resultados 1 (sin cash) y 2 (nada que resetear); el personaje conserva 3 puntos por nivel y el resto vuelve a los puntos PowerUser. **Observed** (`RakionWorldServ.exe` 0x413FD4, 0x41441D; cliente `engine.dll` 0x36195400); reparto **Derived**.
   - La respuesta va por `0x001B`, el mismo número que nuestra confirmación de GameGuard (ver 4.9).
   - Verificado con cliente real: sí.
-- [ ] **4.8 Otras compras y pociones:** (#33, en parte)
-  - Hecho: bolsa (`0x0032`, 8000 de cash, hasta 4 bolsas), slot de poción (`0x006F`, ítems 10008–10010 del catálogo) y cantidad de las pociones compradas (`hit2` del catálogo en `exp`). **Observed**; verificado con cliente real: sí.
-  - Pendiente: slot de personaje (`0x0035`; el login muestra como máximo 3 personajes), apilar pociones (`0x0073`), gastar pociones en partida (`0x006E`) y cupones de descuento (11000–11999, tabla **Unknown**).
+- [x] **4.8 Otras compras y pociones:** (#33, #41)
+  - Bolsa (`0x0032`, 8000 de cash, hasta 4 bolsas), slot de poción (`0x006F`, ítems 10008–10010 del catálogo) y cantidad de las pociones compradas (`hit2` del catálogo en `exp`). **Observed**.
+  - Slot de personaje (`0x0035`): 12 000 de cash, hasta 6; resultado 3 en el máximo o sin cash (0x40B249, 0x415775, **Observed**).
+  - Gastar pociones en partida (`0x006E` `[slot de equipo][ítem]`): baja 1 la cantidad del slot de equipo del personaje (0x428C90, 0x40BE4F, **Observed**).
+  - Apilar pociones (`0x0073`): dos pociones con el mismo `hit4` se suman en el destino y el origen se borra (0x421AC1, 0x40C140, **Observed**).
+  - Verificado con cliente real: sí. Fuera: cupones de descuento (11000–11999, tabla **Unknown**) y la regla de un uso por slot fuera de Stage (**Unknown**).
 - [ ] **4.9 Revisar la confirmación de GameGuard:** respondemos a `0x0010` con `0x001B [0]`, pero el cliente lee `0x001B` como la respuesta del reseteo de puntos (9 bytes). Comprobar qué enviaba el original (`RakionWorldServ.exe` 0x41FC00).
   - Verificado con cliente real: no.
 

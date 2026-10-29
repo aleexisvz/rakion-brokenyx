@@ -42,6 +42,7 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
     private readonly IMatchResultRepository? _matchResults;
     private readonly IChatCommandInterceptor? _chatCommands;
     private readonly IAccountUpgradeRepository? _upgrades;
+    private readonly IPresentRepository? _presents;
     private readonly ILogger<WorldPacketHandler> _logger;
 
     private readonly WorldOpcodeRegistry _registry = new();
@@ -62,9 +63,11 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
         UdpEndpointRegistry? udpEndpoints = null,
         IMatchResultRepository? matchResults = null,
         IChatCommandInterceptor? chatCommands = null,
-        IAccountUpgradeRepository? upgrades = null)
+        IAccountUpgradeRepository? upgrades = null,
+        IPresentRepository? presents = null)
     {
         _upgrades = upgrades;
+        _presents = presents;
         _options = options;
         _udpEndpoints = udpEndpoints ?? new UdpEndpointRegistry();
         _matchResults = matchResults;
@@ -478,7 +481,8 @@ public sealed class WorldPacketHandler : ITcpPacketHandler
             PowerUserExpiry: (uint)Math.Clamp(gameInfo?.PowerTime ?? 0, 0, uint.MaxValue),
             PowerUserPoints: (ushort)Math.Clamp(gameInfo?.PowerLevelPoint ?? 0, 0, ushort.MaxValue),
             UdpIndex: session.UdpIndex,
-            UdpKey: session.UdpKey);
+            UdpKey: session.UdpKey,
+            PendingPresents: _presents is null ? 0 : (uint)await _presents.CountAsync(user.Id, cancellationToken).ConfigureAwait(false));
 
         await SendPacketAsync(session, response, cancellationToken).ConfigureAwait(false);
 

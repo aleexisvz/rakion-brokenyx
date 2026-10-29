@@ -251,3 +251,11 @@ CREATE TABLE `buddies` (
 
 SET FOREIGN_KEY_CHECKS = 1;
 
+-- Present box (roadmap 4.6, legacy pendingpresents). Also created on first use by PresentRepository.
+CREATE TABLE IF NOT EXISTS `pending_presents` (
+    `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `item_id` INT NOT NULL,
+    `user_id` INT NOT NULL,
+    `added_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY `idx_pending_presents_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

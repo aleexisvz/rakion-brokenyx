@@ -313,6 +313,21 @@ public enum ServerOpcode : ushort
     /// </summary>
     FieldGameStagePoint = 0x0053,
 
+    /// <summary>Present box peek answer (see PresentPeekResponsePacket). Evidence: engine.dll jump table 0x6B -> 0x36194530.</summary>
+    PresentPeek = 0x006B,
+
+    /// <summary>Present accept answer (see PresentAcceptResponsePacket). Evidence: engine.dll jump table 0x6C -> 0x36194560.</summary>
+    PresentAccept = 0x006C,
+
+    /// <summary>Present dispose answer (see PresentDisposeResponsePacket). Evidence: engine.dll jump table 0x6D -> 0x36194590.</summary>
+    PresentDispose = 0x006D,
+
+    /// <summary>
+    /// Character slot purchase answer (see AccountUpgradeResponsePacket).
+    /// Evidence: Observed in engine.dll jump table opcode 0x35 (0x361975A1 -> 0x361959C0).
+    /// </summary>
+    InventoryBuyCharacterSlot = 0x0035,
+
     /// <summary>
     /// Bag purchase answer (see AccountUpgradeResponsePacket).
     /// Evidence: Observed in engine.dll jump table opcode 0x32 (0x36197577 -> 0x361957C0).
@@ -361,6 +376,12 @@ public enum ServerOpcode : ushort
     /// Evidence: Observed in engine.dll jump table opcode 0x71 (0x361975CB -> 0x36195CC0).
     /// </summary>
     InventoryBuyStageLevelFree = 0x0071,
+
+    /// <summary>
+    /// Potion stack answer: [u8 result]. On 0 the client merges the two box slots itself.
+    /// Evidence: Observed in engine.dll jump table opcode 0x73 (0x3619771B -> 0x36194080) and rakion.bin 0x4782E0.
+    /// </summary>
+    InventoryStackPotion = 0x0073,
 
     // --- UDP (40708 / 40709) ---
     /// <summary>
